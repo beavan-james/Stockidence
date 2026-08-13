@@ -1,0 +1,70 @@
+:root,
+.radix-themes {
+  --default-font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+  --font-system: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+  /* -- dark gray scale (near-black backgrounds + grays) -- */
+  --slate-1: #1f1f29 !important;
+  --slate-2: #15151f !important;
+  --slate-3: #23232f !important;
+  --slate-4: #2c2c3a !important;
+  --slate-5: #353546 !important;
+  --slate-6: #404054 !important;
+  --slate-7: #4e4e65 !important;
+  --slate-8: #61617b !important;
+  --slate-9: #71718c !important;
+  --slate-10: #87879f !important;
+  --slate-11: #b6b0c6 !important;
+  --slate-12: #ffffff !important;
+
+  /* -- raspberry accent scale -- */
+  --iris-1: #3a1020 !important;
+  --iris-2: #451327 !important;
+  --iris-3: #581936 !important;
+  --iris-4: #6b1e46 !important;
+  --iris-5: #7e2657 !important;
+  --iris-6: #92306b !important;
+  --iris-7: #a83d81 !important;
+  --iris-8: #c14e9a !important;
+  --iris-9: #e30b5c !important;
+  --iris-10: #f01a68 !important;
+  --iris-11: #ff85ad !important;
+  --iris-12: #ffd6e4 !important;
+
+  /* -- raspberry alpha accent scale (used by soft variants, links) -- */
+  --iris-a1: #3a1020 !important;
+  --iris-a2: #451327 !important;
+  --iris-a3: #581936 !important;
+  --iris-a4: #6b1e46 !important;
+  --iris-a5: #7e2657 !important;
+  --iris-a6: #92306b !important;
+  --iris-a7: #a83d81 !important;
+  --iris-a8: #c14e9a !important;
+  --iris-a9: #e30b5c !important;
+  --iris-a10: #f01a68 !important;
+  --iris-a11: #ff85ad !important;
+  --iris-a12: #ffd6e4 !important;
+  --accent-a1: #3a1020 !important;
+  --accent-a2: #451327 !important;
+  --accent-a3: #581936 !important;
+  --accent-a4: #6b1e46 !important;
+  --accent-a5: #7e2657 !important;
+  --accent-a6: #92306b !important;
+  --accent-a7: #a83d81 !important;
+  --accent-a8: #c14e9a !important;
+  --accent-a9: #e30b5c !important;
+  --accent-a10: #f01a68 !important;
+  --accent-a11: #ff85ad !important;
+  --accent-a12: #ffd6e4 !important;
+}
+
+.radix-themes,
+body {
+  --color-page-background: #0d0c1d !important;
+  background-color: #0d0c1d !important;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+}
+
+.radix-themes {
+  --color-panel: #1f1f29 !important;
+  --color-panel-solid: #1f1f29 !important;
+}
