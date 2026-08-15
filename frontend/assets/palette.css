@@ -68,3 +68,35 @@ body {
   --color-panel: #1f1f29 !important;
   --color-panel-solid: #1f1f29 !important;
 }
+
+/* Markdown-rendered GFM tables (re-markdown emits raw <table> elements). */
+.md-table-wrap {
+  overflow-x: auto;
+}
+.md-table-wrap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.md-table-wrap thead th {
+  background: var(--slate-3);
+  color: var(--slate-12);
+  text-align: left;
+  font-weight: 600;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--slate-6);
+}
+.md-table-wrap tbody td {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--slate-6);
+  color: var(--slate-11);
+  vertical-align: top;
+}
+.md-table-wrap tbody tr:nth-child(even) {
+  background: var(--slate-2);
+}
+.md-table-wrap tbody tr:hover {
+  background: var(--slate-3);
+}
