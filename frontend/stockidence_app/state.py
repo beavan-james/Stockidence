@@ -4,7 +4,7 @@ import json
 
 import reflex as rx
 
-from .service import rating_service
+from .service import market, rating_service
 
 LISTS_STORAGE_KEY = "stockidence.lists"
 
@@ -32,10 +32,10 @@ class RatingState(rx.State):
 
     lists_json: str = rx.LocalStorage("[]", name=LISTS_STORAGE_KEY, sync=True)
     active_list: str = ""
-    new_list_name: str = ""
     renaming_list: str = ""
-    rename_value: str = ""
     show_new_list: bool = False
+
+    sidebar_collapsed_str: str = rx.LocalStorage("0", name="stockidence.sidebar_collapsed", sync=True)
 
     @rx.var
     def is_buy(self) -> bool:
@@ -58,6 +58,42 @@ class RatingState(rx.State):
     def has_lists(self) -> bool:
         return len(self.list_names) > 0
 
+    @rx.var
+    def macro_metrics(self) -> list[dict]:
+        return market.get_macro_metrics()
+
+    @rx.var
+    def commodities(self) -> list[dict]:
+        return market.get_commodities()
+
+    @rx.var
+    def market_movers(self) -> dict:
+        return market.get_market_movers()
+
+    @rx.var
+    def top_gainers(self) -> list[dict]:
+        return self.market_movers.get("top_gainers", [])
+
+    @rx.var
+    def top_losers(self) -> list[dict]:
+        return self.market_movers.get("top_losers", [])
+
+    @rx.var
+    def most_active(self) -> list[dict]:
+        return self.market_movers.get("most_actively_traded", [])
+
+    @rx.var
+    def ipo_calendar(self) -> list[dict]:
+        return market.get_ipo_calendar()
+
+    @rx.var
+    def earnings_calendar(self) -> list[dict]:
+        return market.get_earnings_calendar()
+
+    @rx.var
+    def market_news(self) -> list[dict]:
+        return market.get_market_news()
+
     def _parse_lists(self) -> list[dict]:
         try:
             parsed = json.loads(self.lists_json)
@@ -68,13 +104,17 @@ class RatingState(rx.State):
     def _persist_lists(self, lists: list[dict]):
         self.lists_json = json.dumps(lists)
 
+    @rx.var
+    def sidebar_collapsed(self) -> bool:
+        return self.sidebar_collapsed_str == "1"
+
     @rx.event
     def set_ticker(self, value: str):
         self.ticker = value
 
     @rx.event
-    def set_new_list_name(self, value: str):
-        self.new_list_name = value
+    def toggle_sidebar(self):
+        self.sidebar_collapsed_str = "0" if self.sidebar_collapsed_str == "1" else "1"
 
     @rx.event
     def toggle_new_list(self):
@@ -92,7 +132,6 @@ class RatingState(rx.State):
         self._persist_lists(lists)
         self.active_list = name
         self.show_new_list = False
-        self.new_list_name = ""
 
     @rx.event
     def delete_list(self, name: str):
@@ -108,11 +147,6 @@ class RatingState(rx.State):
     @rx.event
     def start_rename(self, name: str):
         self.renaming_list = name
-        self.rename_value = name
-
-    @rx.event
-    def set_rename_value(self, value: str):
-        self.rename_value = value
 
     @rx.event
     def cancel_rename(self):
@@ -136,7 +170,6 @@ class RatingState(rx.State):
         if self.active_list == old_name:
             self.active_list = new_name
         self.renaming_list = ""
-        self.rename_value = ""
 
     @rx.event
     def add_ticker_to_active(self, form_data: dict):

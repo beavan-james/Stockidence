@@ -87,12 +87,20 @@ def _advice_label() -> rx.Var:
     )
 
 
+BODY_CARD_PADDING = "5"
+
+
 def top_nav() -> rx.Component:
     return rx.vstack(
         rx.hstack(
             rx.link(
                 rx.hstack(
-                    rx.icon("snowflake", size=26, color=rx.color("iris", 9)),
+                    rx.image(
+                        src="/bull.svg",
+                        alt="Stockidence bull",
+                        width="26px",
+                        height="26px",
+                    ),
                     rx.heading(
                         "Stockidence",
                         size="4",
@@ -103,6 +111,7 @@ def top_nav() -> rx.Component:
                 ),
                 href="/",
                 underline="none",
+                flex_shrink="0",
             ),
             rx.hstack(
                 rx.link(
@@ -124,6 +133,7 @@ def top_nav() -> rx.Component:
                     _hover={"color": rx.color("iris", 9)},
                 ),
                 spacing="4",
+                flex_shrink="0",
             ),
             search_form(),
             width="100%",
@@ -188,7 +198,7 @@ def hero() -> rx.Component:
                 align="center",
                 spacing="1",
             ),
-            columns="4",
+            columns=rx.breakpoints(initial="2", md="4"),
             spacing="6",
             width="100%",
             padding_y="3",
@@ -235,6 +245,8 @@ def search_form() -> rx.Component:
             spacing="2",
         ),
         on_submit=RatingState.submit,
+        width="auto",
+        flex_shrink="0",
     )
 
 
@@ -402,7 +414,7 @@ def the_big_picture() -> rx.Component:
                 spacing="3",
                 padding="4",
             ),
-            columns="2",
+            columns=rx.breakpoints(initial="1", md="2"),
             spacing="8",
             align="center",
             width="100%",
@@ -462,7 +474,7 @@ def breakdown_card() -> rx.Component:
             spacing="4",
         ),
         width="100%",
-        padding="6",
+        padding=BODY_CARD_PADDING,
     )
 
 
@@ -509,7 +521,7 @@ def buy_plan_card(plan: rx.Var) -> rx.Component:
                     align="start",
                     spacing="1",
                 ),
-                columns="3",
+                columns=rx.breakpoints(initial="1", md="3"),
                 spacing="4",
                 width="100%",
             ),
@@ -517,7 +529,7 @@ def buy_plan_card(plan: rx.Var) -> rx.Component:
             spacing="3",
         ),
         width="100%",
-        padding="6",
+        padding=BODY_CARD_PADDING,
     )
 
 
@@ -542,10 +554,10 @@ def result_section() -> rx.Component:
                         spacing="2",
                     ),
                     width="100%",
-                    padding="6",
+                    padding=BODY_CARD_PADDING,
                 ),
             ),
-            columns="2",
+            columns=rx.breakpoints(initial="1", md="2"),
             spacing="4",
             align="start",
             width="100%",
@@ -727,8 +739,8 @@ def list_item(item: rx.Var) -> rx.Component:
                 size="1",
                 variant="ghost",
                 color_scheme="red",
-on_click=RatingState.delete_list(item),
-                ),
+                on_click=RatingState.delete_list(item),
+            ),
             align="center",
             justify="start",
             width="100%",
@@ -772,19 +784,62 @@ def saved_lists() -> rx.Component:
     )
 
 
-def sidebar() -> rx.Component:
-    return rx.vstack(
-        rx.hstack(
-            rx.icon("bookmark", size=16, color=rx.color("iris", 9)),
-            rx.heading("My Lists", size="3", weight="bold"),
-            spacing="2",
-            width="100%",
+def side_panel() -> rx.Component:
+    return rx.flex(
+        rx.cond(
+            RatingState.sidebar_collapsed,
+            rx.card(
+                rx.vstack(
+                    rx.icon_button(
+                        rx.icon("panel_left_open", size=16),
+                        title="Expand sidebar",
+                        variant="soft",
+                        color_scheme="iris",
+                        size="2",
+                        on_click=RatingState.toggle_sidebar,
+                    ),
+                    align="center",
+                    width="100%",
+                    padding_top="1",
+                ),
+                width="52px",
+                variant="surface",
+                position="sticky",
+                top="6",
+                align_self="start",
+            ),
+            rx.card(
+                rx.vstack(
+                    rx.hstack(
+                        rx.icon("bookmark", size=16, color=rx.color("iris", 9)),
+                        rx.heading("My Lists", size="3", weight="bold"),
+                        rx.spacer(),
+                        rx.icon_button(
+                            rx.icon("panel_left_close", size=16),
+                            title="Collapse sidebar",
+                            variant="ghost",
+                            size="2",
+                            on_click=RatingState.toggle_sidebar,
+                        ),
+                        spacing="2",
+                        align="center",
+                        width="100%",
+                    ),
+                    new_list_form(),
+                    rx.separator(width="100%"),
+                    saved_lists(),
+                    align="stretch",
+                    spacing="3",
+                    width="100%",
+                ),
+                width="300px",
+                padding="4",
+                position="sticky",
+                top="6",
+                max_height="85vh",
+                style={"overflow_y": "auto"},
+            ),
         ),
-        new_list_form(),
-        rx.separator(width="100%"),
-        saved_lists(),
-        align="stretch",
-        spacing="3",
         width="100%",
     )
 
@@ -792,6 +847,7 @@ def sidebar() -> rx.Component:
 def main_panel() -> rx.Component:
     return rx.vstack(
         hero(),
+        macro_metrics_section(),
         rx.cond(
             RatingState.error != "",
             error_callout(),
@@ -821,10 +877,33 @@ def profile_panel() -> rx.Component:
             rx.cond(
                 RatingState.error != "",
                 error_callout(),
-                rx.text(
-                    "Loading rating…",
-                    size="3",
-                    color=rx.color("slate", 10),
+                rx.vstack(
+                    rx.heading(
+                        f"Analyzing {RatingState.ticker}…",
+                        size="6",
+                        weight="bold",
+                        letter_spacing="-0.02em",
+                    ),
+                    rx.text(
+                        "Pulling ratings inputs from the warehouse mart.",
+                        size="2",
+                        color=rx.color("slate", 10),
+                    ),
+                    rx.hstack(
+                        rx.spinner(
+                            size="3",
+                            color=rx.color("iris", 9),
+                        ),
+                        rx.text(
+                            "Scoring valuation, trend, momentum, sentiment",
+                            size="2",
+                            color=rx.color("slate", 9),
+                        ),
+                        spacing="2",
+                        align="center",
+                    ),
+                    align="start",
+                    spacing="3",
                     width="100%",
                 ),
             ),
@@ -832,4 +911,475 @@ def profile_panel() -> rx.Component:
         spacing="4",
         align="start",
         width="100%",
+    )
+
+
+def macro_metric_chart(item: rx.Var) -> rx.Component:
+    return rx.recharts.responsive_container(
+        rx.recharts.line_chart(
+            rx.recharts.line(
+                data_key="value",
+                stroke=rx.color("iris", 8),
+                dot=False,
+                stroke_width=2,
+            ),
+            data=item["series"],
+            margin={"top": 4, "right": 4, "bottom": 4, "left": 4},
+        ),
+        width="100%",
+        height=46,
+    )
+
+
+def macro_metric_card(item: rx.Var) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.text(item["label"], size="2", weight="medium"),
+                rx.text(
+                    item["as_of"],
+                    size="1",
+                    color=rx.color("slate", 9),
+                ),
+                width="100%",
+                justify="between",
+            ),
+            rx.heading(
+                item["value"],
+                size="5",
+                weight="bold",
+                color=rx.color("slate", 12),
+            ),
+            rx.text(
+                f"{item['unit']} · {item['detail']}",
+                size="1",
+                color=rx.color("slate", 10),
+            ),
+            macro_metric_chart(item),
+            align="start",
+            width="100%",
+            spacing="2",
+        ),
+        width="100%",
+        padding="4",
+    )
+
+
+def commodity_card(item: rx.Var) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.box(
+                    width="10px",
+                    height="10px",
+                    border_radius="full",
+                    bg=rx.color("amber", 9),
+                ),
+                rx.text(item["label"], size="2", weight="medium"),
+                spacing="2",
+                align="center",
+            ),
+            rx.hstack(
+                rx.heading(item["price"], size="6", weight="bold"),
+                rx.text(item["unit"], size="1", color=rx.color("slate", 9)),
+                spacing="2",
+                align="end",
+            ),
+            rx.text(
+                f"as of {item['timestamp']}",
+                size="1",
+                color=rx.color("slate", 10),
+            ),
+            align="start",
+            width="100%",
+            spacing="2",
+        ),
+        width="100%",
+        padding="4",
+    )
+
+
+def section_header(icon: str, title: str, subtitle: str | None = None) -> rx.Component:
+    children = [
+        rx.hstack(
+            rx.icon(icon, size=18, color=rx.color("iris", 9)),
+            rx.heading(title, size="5", weight="bold"),
+            spacing="2",
+            align="center",
+        ),
+        rx.text(
+            subtitle,
+            size="1",
+            color=rx.color("slate", 9),
+        ) if subtitle else None,
+    ]
+    return rx.vstack(
+        [child for child in children if child is not None],
+        align="start",
+        width="100%",
+        spacing="1",
+    )
+
+
+def macro_metrics_section() -> rx.Component:
+    return rx.vstack(
+        section_header(
+            "gauge",
+            "Market snapshot",
+            "Headline macro indicators feeding the model context. Data is demo placeholder until the pipeline ingests these endpoints.",
+        ),
+        rx.grid(
+            rx.foreach(RatingState.macro_metrics, macro_metric_card),
+            columns=rx.breakpoints(initial="1", sm="2", md="3"),
+            spacing="4",
+            width="100%",
+        ),
+        rx.grid(
+            rx.foreach(RatingState.commodities, commodity_card),
+            columns=rx.breakpoints(initial="1", sm="2"),
+            spacing="4",
+            width="100%",
+        ),
+        align="stretch",
+        width="100%",
+        spacing="4",
+        padding_y="2",
+    )
+
+
+def mover_row(item: rx.Var) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.text(item["ticker"], size="2", weight="medium"),
+        ),
+        rx.table.cell(
+            rx.text(f"${item['price']}", size="2"),
+        ),
+        rx.table.cell(
+            rx.text(
+                item["change_display"],
+                size="2",
+                color=rx.cond(
+                    item["is_gain"],
+                    rx.color("green", 9),
+                    rx.color("red", 9),
+                ),
+            ),
+        ),
+        rx.table.cell(
+            rx.text(item["volume_display"], size="2", color=rx.color("slate", 10)),
+        ),
+        _hover={"bg": rx.color("slate", 3)},
+    )
+
+
+def movers_table(title: str, data: rx.Var) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.heading(title, size="4", weight="bold"),
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell(
+                            "Ticker",
+                            color=rx.color("slate", 11),
+                            bg=rx.color("slate", 3),
+                        ),
+                        rx.table.column_header_cell(
+                            "Price",
+                            color=rx.color("slate", 11),
+                            bg=rx.color("slate", 3),
+                        ),
+                        rx.table.column_header_cell(
+                            "Change",
+                            color=rx.color("slate", 11),
+                            bg=rx.color("slate", 3),
+                        ),
+                        rx.table.column_header_cell(
+                            "Volume",
+                            color=rx.color("slate", 11),
+                            bg=rx.color("slate", 3),
+                        ),
+                    ),
+                ),
+                rx.table.body(
+                    rx.foreach(data, mover_row),
+                ),
+                width="100%",
+            ),
+            align="stretch",
+            width="100%",
+            spacing="3",
+        ),
+        width="100%",
+        padding=BODY_CARD_PADDING,
+    )
+
+
+def news_sentiment_badge(label: rx.Var) -> rx.Component:
+    return rx.badge(
+        label,
+        variant="soft",
+        radius="full",
+        color_scheme=rx.cond(
+            label == "Bullish",
+            "green",
+            rx.cond(
+                label == "Somewhat-Bullish",
+                "green",
+                rx.cond(
+                    label == "Bearish",
+                    "red",
+                    rx.cond(
+                        label == "Somewhat-Bearish",
+                        "red",
+                        "gray",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def news_card(item: rx.Var) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                news_sentiment_badge(item["overall_sentiment_label"]),
+                rx.text(
+                    item["source"],
+                    size="1",
+                    color=rx.color("slate", 10),
+                ),
+                rx.spacer(),
+                rx.text(
+                    item["time_published"],
+                    size="1",
+                    color=rx.color("slate", 9),
+                ),
+                align="center",
+                width="100%",
+            ),
+            rx.link(
+                item["title"],
+                href=item["url"],
+                weight="bold",
+                size="3",
+                underline="none",
+                target="_blank",
+                _hover={"color": rx.color("iris", 9)},
+            ),
+            rx.text(item["summary"], size="2", color=rx.color("slate", 10)),
+            rx.cond(
+                item["sentiment_tickers"] != "",
+                rx.text(
+                    f"Related: {item['sentiment_tickers']}",
+                    size="1",
+                    color=rx.color("slate", 9),
+                ),
+            ),
+            align="start",
+            width="100%",
+            spacing="3",
+        ),
+        width="100%",
+        padding=BODY_CARD_PADDING,
+    )
+
+
+def ipo_row(item: rx.Var) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(item["symbol"], size="2", weight="medium")),
+        rx.table.cell(rx.text(item["name"], size="2")),
+        rx.table.cell(rx.text(item["exchange"], size="2")),
+        rx.table.cell(rx.text(item["date"], size="2")),
+        rx.table.cell(rx.text(item["price"], size="2")),
+        rx.table.cell(
+            rx.badge(
+                item["status"],
+                variant="soft",
+                radius="full",
+                color_scheme=rx.cond(
+                    item["status"] == "expected",
+                    "iris",
+                    rx.cond(
+                        item["status"] == "priced",
+                        "green",
+                        rx.cond(item["status"] == "withdrawn", "red", "amber"),
+                    ),
+                ),
+            )
+        ),
+        _hover={"bg": rx.color("slate", 3)},
+    )
+
+
+def earnings_row(item: rx.Var) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(item["symbol"], size="2", weight="medium")),
+        rx.table.cell(rx.text(item["date"], size="2")),
+        rx.table.cell(
+            rx.badge(
+                rx.match(
+                    item["hour"],
+                    ("bmo", "BMO"),
+                    ("amc", "AMC"),
+                    ("dmh", "DMH"),
+                    item["hour"],
+                ),
+                variant="soft",
+                radius="full",
+                color_scheme="gray",
+            )
+        ),
+        rx.table.cell(
+            rx.text(
+                f"Q{item['quarter']} {item['year']}",
+                size="2",
+            )
+        ),
+        rx.table.cell(
+            rx.text(
+                item["eps_actual_display"],
+                size="2",
+                color=rx.cond(
+                    item["eps_actual_display"] != None,
+                    rx.color("green", 9),
+                    rx.color("slate", 9),
+                ),
+            )
+        ),
+        rx.table.cell(rx.text(f"${item['eps_estimate']:.2f}", size="2")),
+        rx.table.cell(
+            rx.text(
+                item["revenue_estimate_display"],
+                size="2",
+                color=rx.color("slate", 10),
+            )
+        ),
+        _hover={"bg": rx.color("slate", 3)},
+    )
+
+
+def discover_panel() -> rx.Component:
+    return rx.vstack(
+        rx.vstack(
+            rx.icon("compass", size=28, color=rx.color("iris", 9)),
+            rx.heading(
+                "Discover",
+                size="7",
+                weight="bold",
+                letter_spacing="-0.02em",
+            ),
+            rx.text(
+                "Market movers, earnings, IPOs, and the sentiment driving the headlines.",
+                size="3",
+                color=rx.color("slate", 10),
+            ),
+            spacing="3",
+            align="center",
+            padding_y="4",
+        ),
+        rx.vstack(
+            section_header(
+                "trending_up",
+                "Top gainers / losers",
+                "Biggest movers and most active symbols in the last session.",
+            ),
+            rx.grid(
+                movers_table("Top gainers", RatingState.top_gainers),
+                movers_table("Top losers", RatingState.top_losers),
+                movers_table("Most active", RatingState.most_active),
+                columns=rx.breakpoints(initial="1", md="3"),
+                spacing="4",
+                width="100%",
+            ),
+            align="stretch",
+            width="100%",
+            spacing="4",
+        ),
+        rx.vstack(
+            section_header(
+                "newspaper",
+                "News & sentiment",
+                "Headlines with Finnhub-style sentiment labels.",
+            ),
+            rx.foreach(RatingState.market_news, news_card),
+            align="stretch",
+            width="100%",
+            spacing="3",
+        ),
+        rx.vstack(
+            section_header(
+                "calendar_days",
+                "Market Calendars",
+                "Upcoming IPOs and earnings with consensus estimates.",
+            ),
+            rx.grid(
+                rx.card(
+                    rx.vstack(
+                        rx.heading("IPO calendar", size="4", weight="bold"),
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    rx.table.column_header_cell("Symbol", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Company", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Exchange", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Date", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Price", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Status", bg=rx.color("slate", 3)),
+                            ),
+                        ),
+                        rx.table.body(
+                            rx.foreach(RatingState.ipo_calendar, ipo_row),
+                        ),
+                        width="100%",
+                    ),
+                    align="stretch",
+                    width="100%",
+                    spacing="3",
+                ),
+                width="100%",
+                padding=BODY_CARD_PADDING,
+            ),
+            rx.card(
+                rx.vstack(
+                    rx.heading("Earnings calendar", size="4", weight="bold"),
+                    rx.table.root(
+                        rx.table.header(
+                            rx.table.row(
+                                rx.table.column_header_cell("Symbol", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Date", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Hour", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Period", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("EPS actual", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("EPS est.", bg=rx.color("slate", 3)),
+                                rx.table.column_header_cell("Rev. est.", bg=rx.color("slate", 3)),
+                            ),
+                        ),
+                        rx.table.body(
+                            rx.foreach(RatingState.earnings_calendar, earnings_row),
+                        ),
+                        width="100%",
+                    ),
+                    align="stretch",
+                    width="100%",
+                    spacing="3",
+                ),
+                width="100%",
+                padding=BODY_CARD_PADDING,
+            ),
+            columns=rx.breakpoints(initial="1", md="2"),
+            spacing="4",
+            width="100%",
+            align="start",
+        ),
+        align="stretch",
+        width="100%",
+        spacing="4",
+    ),
+        align="stretch",
+        width="100%",
+        spacing="6",
+        padding_bottom="4",
     )

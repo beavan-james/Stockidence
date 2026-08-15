@@ -5,7 +5,7 @@ import reflex as rx
 from .components import (
     main_panel,
     profile_panel,
-    sidebar,
+    side_panel,
     top_nav,
 )
 from .discover import discover
@@ -18,15 +18,10 @@ def app_shell(content: rx.Component) -> rx.Component:
         rx.vstack(
             top_nav(),
             rx.flex(
-                rx.card(
-                    sidebar(),
-                    width="300px",
-                    padding="4",
-                    position="sticky",
-                    top="6",
-                    max_height="85vh",
-                    style={"overflow_y": "auto"},
-                    display=["none", "none", "block"],
+                rx.box(
+                    side_panel(),
+                    align_self="start",
+                    flex_shrink="0",
                 ),
                 rx.vstack(
                     content,
@@ -62,10 +57,25 @@ def stock_profile() -> rx.Component:
     return app_shell(profile_panel())
 
 
+def discover_page() -> rx.Component:
+    return app_shell(discover())
+
+
+def documentation_page() -> rx.Component:
+    return app_shell(documentation())
+
+
 app = rx.App(
     stylesheets=[
         "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
         "palette.css",
+    ],
+    head_components=[
+        rx.el.link(
+            rel="icon",
+            type="image/svg+xml",
+            href="/bull.svg",
+        ),
     ],
 )
 app.add_page(index, title="Stockidence — Stock Confidence Rating")
@@ -75,5 +85,5 @@ app.add_page(
     title="Stock Profile — Stockidence",
     on_load=RatingState.load_profile,
 )
-app.add_page(discover, route="/discover", title="Discover — Stockidence")
-app.add_page(documentation, route="/documentation", title="Documentation — Stockidence")
+app.add_page(discover_page, route="/discover", title="Discover — Stockidence")
+app.add_page(documentation_page, route="/documentation", title="Documentation — Stockidence")
