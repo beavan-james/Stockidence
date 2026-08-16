@@ -5,3 +5,4 @@ FutureAdditions.md
 .venv
 tests/
 .pytest_cache/
+AGENTS.md
