@@ -37,6 +37,10 @@
 **Cash Flow**
 **Earnings Estimate**
 **EPS Surprises**
+**Basic Financials**
+**Financials As Reported**
+**Time Series**
+**Company Profile 2**
 
 ### Trend API's
 **Company Overview** (use data from valuation call)

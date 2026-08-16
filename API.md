@@ -7,7 +7,34 @@ JSON samples are shown as they come back from the provider.
 
 ## Valuation Metrics
 
-### Daily Time Series (Alpha Vantage)
+### Time Series (Twelve Data)
+
+```json
+{
+    "meta": {
+        "symbol": "AAPL",
+        "interval": "1min",
+        "currency": "USD",
+        "exchange_timezone": "America/New_York",
+        "exchange": "NASDAQ",
+        "mic_code": "XNAS",
+        "type": "Common Stock"
+    },
+    "values": [
+        {
+            "datetime": "2021-09-16 15:59:00",
+            "open": "148.73500",
+            "high": "148.86000",
+            "low": "148.73000",
+            "close": "148.85001",
+            "volume": "624277"
+        }
+    ],
+    "status": "ok"
+}
+```
+
+### Daily Time Series (Alpha Vantage) (Not in use)
 
 - `date`
 - `daily open`
@@ -16,7 +43,7 @@ JSON samples are shown as they come back from the provider.
 - `daily close`
 - `daily volume`
 
-### Weekly Time Series (Alpha Vantage)
+### Weekly Time Series (Alpha Vantage) (Not in use)
 
 - `date`
 - `weekly open`
@@ -25,7 +52,7 @@ JSON samples are shown as they come back from the provider.
 - `weekly close`
 - `weekly volume`
 
-### Monthly Time Series (Alpha Vantage)
+### Monthly Time Series (Alpha Vantage) (Not in use)
 
 - `date`
 - `monthly open`
@@ -34,7 +61,7 @@ JSON samples are shown as they come back from the provider.
 - `monthly close`
 - `monthly volume`
 
-### Company Overview (Alpha Vantage)
+### Company Overview (Alpha Vantage) (Not in use)
 
 ```json
 {
@@ -96,7 +123,26 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
-### Income Statement (Alpha Vantage)
+### Company Profile 2 (Finnhub)
+
+```json
+{
+  "country": "US",
+  "currency": "USD",
+  "exchange": "NASDAQ/NMS (GLOBAL MARKET)",
+  "ipo": "1980-12-12",
+  "marketCapitalization": 1415993,
+  "name": "Apple Inc",
+  "phone": "14089961010",
+  "shareOutstanding": 4375.47998046875,
+  "ticker": "AAPL",
+  "weburl": "https://www.apple.com/",
+  "logo": "https://static.finnhub.io/logo/87cb30d8-80df-11ea-8951-00000000092a.png",
+  "finnhubIndustry": "Technology"
+}
+```
+
+### Income Statement (Alpha Vantage) (Not in use)
 
 ```json
 {
@@ -134,7 +180,7 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
-### Balance Sheet (Alpha Vantage)
+### Balance Sheet (Alpha Vantage) (Not in use)
 
 ```json
 {
@@ -184,7 +230,7 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
-### Cash Flow Statement (Alpha Vantage)
+### Cash Flow Statement (Alpha Vantage) (Not in use)
 
 ```json
 {
@@ -226,7 +272,100 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
-### Earnings Estimate (Alpha Vantage)
+### Basic Financials (Finnhub)
+
+```json
+{
+  "series": {
+    "annual": {
+      "currentRatio": [
+        {
+          "period": "2019-09-28",
+          "v": 1.5401
+        },
+        {
+          "period": "2018-09-29",
+          "v": 1.1329
+        }
+      ],
+      "salesPerShare": [
+        {
+          "period": "2019-09-28",
+          "v": 55.9645
+        },
+        {
+          "period": "2018-09-29",
+          "v": 53.1178
+        }
+      ],
+      "netMargin": [
+        {
+          "period": "2019-09-28",
+          "v": 0.2124
+        },
+        {
+          "period": "2018-09-29",
+          "v": 0.2241
+        }
+      ]
+    }
+  },
+  "metric": {
+    "10DayAverageTradingVolume": 32.50147,
+    "52WeekHigh": 310.43,
+    "52WeekLow": 149.22,
+    "52WeekLowDate": "2019-01-14",
+    "52WeekPriceReturnDaily": 101.96334,
+    "beta": 1.2989
+  },
+  "metricType": "all",
+  "symbol": "AAPL"
+}
+```
+
+### Financials As Reported (Finnhub)
+
+```json
+{
+  "cik": "320193",
+  "data": [
+    {
+      "accessNumber": "0000320193-19-000119",
+      "symbol": "AAPL",
+      "cik": "320193",
+      "year": 2019,
+      "quarter": 0,
+      "form": "10-K",
+      "startDate": "2018-09-30 00:00:00",
+      "endDate": "2019-09-28 00:00:00",
+      "filedDate": "2019-10-31 00:00:00",
+      "acceptedDate": "2019-10-30 18:12:36",
+      "report": {
+        "bs": {
+          "Assets": 338516000000,
+          "Liabilities": 248028000000,
+          "InventoryNet": 4106000000,
+          ...
+        },
+        "cf": {
+          "NetIncomeLoss": 55256000000,
+          "InterestPaidNet": 3423000000,
+          ...
+        },
+        "ic": {
+          "GrossProfit": 98392000000,
+          "NetIncomeLoss": 55256000000,
+          "OperatingExpenses": 34462000000,
+           ...
+        }
+      }
+    }
+  ],
+  "symbol": "AAPL"
+}
+```
+
+### Earnings Estimate (Alpha Vantage) (Not in use)
 
 ```json
 {
@@ -291,7 +430,7 @@ JSON samples are shown as they come back from the provider.
 
 ## Trend Metrics
 
-### Company Overview (Alpha Vantage)
+### Company Overview (Alpha Vantage) (Not in use)
 
 - `52WeekHigh`
 - `52WeekLow`
@@ -307,7 +446,7 @@ JSON samples are shown as they come back from the provider.
 - `symbol` — Symbol.
 - `year` — Year.
 
-### Daily Time Series (Alpha Vantage)
+### Daily Time Series (Alpha Vantage) (Not in use)
 
 - `date`
 - `daily open`
@@ -316,7 +455,7 @@ JSON samples are shown as they come back from the provider.
 - `daily close`
 - `daily volume`
 
-### Weekly Time Series (Alpha Vantage)
+### Weekly Time Series (Alpha Vantage) (Not in use)
 
 - `date`
 - `weekly open`
@@ -325,7 +464,7 @@ JSON samples are shown as they come back from the provider.
 - `weekly close`
 - `weekly volume`
 
-### Monthly Time Series (Alpha Vantage)
+### Monthly Time Series (Alpha Vantage) (Not in use)
 
 - `date`
 - `monthly open`
@@ -334,7 +473,7 @@ JSON samples are shown as they come back from the provider.
 - `monthly close`
 - `monthly volume`
 
-### Technical Indicators (Alpha Vantage)
+### Technical Indicators (Alpha Vantage) (Not in use)
 
 - `SMA` — simple moving average
 - `EMA` — exponential moving average
@@ -349,7 +488,7 @@ JSON samples are shown as they come back from the provider.
 
 ## Sentiment Metrics
 
-### Company Overview (Alpha Vantage)
+### Company Overview (Alpha Vantage) (Not in use)
 
 - `AnalystTargetPrice`
 - `AnalystRatingStrongBuy`
@@ -442,7 +581,7 @@ Get company peers. Returns a list of peers operating in the same country and sec
 
 ## Volatility Metrics
 
-### Advanced Analytics (total return, variance, auto-correlation, etc.) (Alpha Vantage)
+### Advanced Analytics (total return, variance, auto-correlation, etc.) (Alpha Vantage) (Not in use)
 
 - `MIN` — The minimum return (largest negative or smallest positive) for all values in the series.
 - `MAX` — The maximum return for all values in the series.
@@ -457,11 +596,11 @@ Get company peers. Returns a list of peers operating in the same country and sec
 - `COVARIANCE` — Returns a covariance matrix for the input symbols. Optionally `COVARIANCE(annualized=True)` normalizes to an annual value.
 - `CORRELATION` — Returns a correlation matrix for the input symbols, using the PEARSON method by default. You can also specify the KENDALL or SPEARMAN method through `CORRELATION(method=KENDALL)` or `CORRELATION(method=SPEARMAN)`.
 
-### BBANDS (Alpha Vantage)
+### BBANDS (Alpha Vantage) (Not in use)
 
 Bollinger bands.
 
-### ATR (Alpha Vantage)
+### ATR (Alpha Vantage) (Not in use)
 
 Average true range.
 
@@ -631,3 +770,86 @@ Consumer price index adjusted real GDP per capita, quarterly.
 ```
 
 `nominal`: `GOLD` for the gold price, `SILVER` for the silver price. The price is in USD.
+
+## Others
+
+### Quote (Finnhub)
+
+```json
+{
+  "c": 261.74,
+  "h": 263.31,
+  "l": 260.68,
+  "o": 261.07,
+  "pc": 259.45,
+  "t": 1582641000
+}
+```
+
+### Stock Symbol (Finnhub)
+
+```json
+[
+  {
+    "currency": "USD",
+    "description": "UAN POWER CORP",
+    "displaySymbol": "UPOW",
+    "figi": "BBG000BGHYF2",
+    "mic": "OTCM",
+    "symbol": "UPOW",
+    "type": "Common Stock"
+  },
+  {
+    "currency": "USD",
+    "description": "APPLE INC",
+    "displaySymbol": "AAPL",
+    "figi": "BBG000B9Y5X2",
+    "mic": "XNGS",
+    "symbol": "AAPL",
+    "type": "Common Stock"
+  },
+  {
+    "currency": "USD",
+    "description": "EXCO TECHNOLOGIES LTD",
+    "displaySymbol": "EXCOF",
+    "figi": "BBG000JHDDS8",
+    "mic": "OOTC",
+    "symbol": "EXCOF",
+    "type": "Common Stock"
+  }
+]
+```
+
+### Market Status (Finnhub)
+
+```json
+{
+  "exchange": "US",
+  "holiday": null,
+  "isOpen": false,
+  "session": "pre-market",
+  "timezone": "America/New_York",
+  "t": 1697018041
+}
+```
+
+### Market Holiday (Finnhub)
+
+```json
+{
+  "data": [
+    {
+      "eventName": "Christmas",
+      "atDate": "2023-12-25",
+      "tradingHour": ""
+    },
+    {
+      "eventName": "Independence Day",
+      "atDate": "2023-07-03",
+      "tradingHour": "09:30-13:00"
+    }
+  ],
+  "exchange": "US",
+  "timezone": "America/New_York"
+}
+```
