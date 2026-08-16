@@ -1,2 +1,7 @@
 .env
 .python-version
+main.py
+FutureAdditions.md
+.venv
+tests/
+.pytest_cache/

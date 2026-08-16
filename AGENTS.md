@@ -27,10 +27,11 @@ A data engineering portfolio project: a stock confidence rating pipeline. The po
 
 ## 3. Data sources
 
-Two sources, deliberately kept on free tiers — don't suggest paid endpoints as a fix for a limitation, propose a workaround instead.
+Sources deliberately kept on free tiers — don't suggest paid endpoints as a fix for a limitation, propose a workaround instead.
 
-- **Finnhub** — real-time-ish trade data, news sentiment (fairly unique among free tiers), basic fundamentals/earnings calendar, insider transactions, analyst recommendation trends.
-- **Alpha Vantage** — deep historical OHLCV, full fundamental statements (income/balance/cash flow), built-in technical indicators. **Exception: MACD is Premium-tier on Alpha Vantage**, so it must be derived manually in the staging layer from EMA12/EMA26, not pulled from the indicator endpoint.
+- **Finnhub** — real-time-ish quote trade data, company profile, basic & as-reported fundamentals, earnings calendar, insider transactions, analyst recommendation trends, peers, symbol search, market status/holiday.
+- **Twelve Data** — price time series (`interval=1day`, split-adjusted), the pipeline's single source of OHLCV bars. Weekly/monthly are resampled downstream in the warehouse, not fetched. **Exception: technical indicators are Premium-tier on Twelve Data**, so indicators (SMA/EMA/STOCH/RSI/ADX/CCI/AD/OBV/BBANDS/ATR) and advanced analytics are derived in-Dagster from raw 1-day bars as pure derivation, not API calls.
+- **Alpha Vantage** — market news & sentiment, top gainers/losers, earnings call transcripts, macro indicators (inflation/CPI/unemployment/fed funds/natural gas/real GDP), commodities (gold/silver). **Exception: MACD is Premium-tier on Alpha Vantage**, so it must be derived manually in the staging layer from EMA12/EMA26, not pulled from the indicator endpoint.
 
 ## 4. Scoring model
 
