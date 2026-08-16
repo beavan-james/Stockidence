@@ -1,32 +1,42 @@
 # Full API List
+
+Every endpoint this pipeline touches, grouped by the scoring category it feeds.
+JSON samples are shown as they come back from the provider.
+
 ---
+
 ## Valuation Metrics
 
-### Daily
-date
-daily open
-daily high
-daily low
-daily close
-daily volume
+### Daily Time Series (Alpha Vantage)
 
-### Weekly
-date
-weekly open
-weekly high
-weekly low
-weekly close
-weekly volume
+- `date`
+- `daily open`
+- `daily high`
+- `daily low`
+- `daily close`
+- `daily volume`
 
-### Monthly
-date
-monthly open
-monthly high
-monthly low
-monthly close
-monthly volume
+### Weekly Time Series (Alpha Vantage)
 
-### Company Overview
+- `date`
+- `weekly open`
+- `weekly high`
+- `weekly low`
+- `weekly close`
+- `weekly volume`
+
+### Monthly Time Series (Alpha Vantage)
+
+- `date`
+- `monthly open`
+- `monthly high`
+- `monthly low`
+- `monthly close`
+- `monthly volume`
+
+### Company Overview (Alpha Vantage)
+
+```json
 {
     "Symbol": "IBM",
     "AssetType": "Common Stock",
@@ -84,10 +94,14 @@ monthly volume
     "DividendDate": "2026-09-10",
     "ExDividendDate": "2026-08-10"
 }
+```
 
-### Income Statement
-"symbol": "IBM",
-    "annualReports": 
+### Income Statement (Alpha Vantage)
+
+```json
+{
+    "symbol": "IBM",
+    "annualReports": [
         {
             "fiscalDateEnding": "2025-12-31",
             "reportedCurrency": "USD",
@@ -99,27 +113,33 @@ monthly volume
             "sellingGeneralAndAdministrative": "17012000000",
             "researchAndDevelopment": "8316000000",
             "operatingExpenses": "26805000000",
-            "investmentIncomeNet": "None",
+            "investmentIncomeNet": null,
             "netInterestIncome": "-1290000000",
             "interestIncome": "645000000",
             "interestExpense": "1935000000",
-            "nonInterestIncome": "None",
-            "otherNonOperatingIncome": "None",
-            "depreciation": "None",
+            "nonInterestIncome": null,
+            "otherNonOperatingIncome": null,
+            "depreciation": null,
             "depreciationAndAmortization": "5021000000",
             "incomeBeforeTax": "10328000000",
             "incomeTaxExpense": "-242000000",
-            "interestAndDebtExpense": "None",
+            "interestAndDebtExpense": null,
             "netIncomeFromContinuingOperations": "10571000000",
-            "comprehensiveIncomeNetOfTax": "None",
+            "comprehensiveIncomeNetOfTax": null,
             "ebit": "12263000000",
             "ebitda": "17284000000",
             "netIncome": "10593000000"
         }
+    ]
+}
+```
 
-### Balance Sheet
-"symbol": "IBM",
-    "annualReports": 
+### Balance Sheet (Alpha Vantage)
+
+```json
+{
+    "symbol": "IBM",
+    "annualReports": [
         {
             "fiscalDateEnding": "2025-12-31",
             "reportedCurrency": "USD",
@@ -131,430 +151,356 @@ monthly volume
             "currentNetReceivables": "17639000000",
             "totalNonCurrentAssets": "116020000000",
             "propertyPlantEquipment": "9028000000",
-            "accumulatedDepreciationAmortizationPPE": "None",
+            "accumulatedDepreciationAmortizationPPE": null,
             "intangibleAssets": "11391000000",
             "intangibleAssetsExcludingGoodwill": "11391000000",
             "goodwill": "67717000000",
-            "investments": "None",
-            "longTermInvestments": "None",
+            "investments": null,
+            "longTermInvestments": null,
             "shortTermInvestments": "830000000",
             "otherCurrentAssets": "2530000000",
-            "otherNonCurrentAssets": "None",
+            "otherNonCurrentAssets": null,
             "totalLiabilities": "119140000000",
             "totalCurrentLiabilities": "38658000000",
             "currentAccountsPayable": "4756000000",
-            "deferredRevenue": "None",
-            "currentDebt": "None",
+            "deferredRevenue": null,
+            "currentDebt": null,
             "shortTermDebt": "7224000000",
             "totalNonCurrentLiabilities": "80482000000",
             "capitalLeaseObligations": "3347000000",
             "longTermDebt": "54836000000",
             "currentLongTermDebt": "6424000000",
-            "longTermDebtNoncurrent": "None",
+            "longTermDebtNoncurrent": null,
             "shortLongTermDebtTotal": "67154000000",
             "otherCurrentLiabilities": "10577000000",
             "otherNonCurrentLiabilities": "1068000000",
             "totalShareholderEquity": "32648000000",
-            "treasuryStock": "None",
+            "treasuryStock": null,
             "retainedEarnings": "155648000000",
             "commonStock": "63318000000",
             "commonStockSharesOutstanding": "948700000"
         }
+    ]
+}
+```
 
-### Cash Flow
+### Cash Flow Statement (Alpha Vantage)
+
+```json
+{
     "symbol": "IBM",
-    "annualReports": 
+    "annualReports": [
         {
             "fiscalDateEnding": "2025-12-31",
             "reportedCurrency": "USD",
             "operatingCashflow": "13192000000",
-            "paymentsForOperatingActivities": "None",
-            "proceedsFromOperatingActivities": "None",
-            "changeInOperatingLiabilities": "None",
-            "changeInOperatingAssets": "None",
+            "paymentsForOperatingActivities": null,
+            "proceedsFromOperatingActivities": null,
+            "changeInOperatingLiabilities": null,
+            "changeInOperatingAssets": null,
             "depreciationDepletionAndAmortization": "5021000000",
             "capitalExpenditures": "1617000000",
-            "changeInReceivables": "None",
+            "changeInReceivables": null,
             "changeInInventory": "70000000",
-            "profitLoss": "None",
+            "profitLoss": null,
             "cashflowFromInvestment": "-10302000000",
             "cashflowFromFinancing": "-3829000000",
-            "proceedsFromRepaymentsOfShortTermDebt": "None",
-            "paymentsForRepurchaseOfCommonStock": "None",
-            "paymentsForRepurchaseOfEquity": "None",
-            "paymentsForRepurchaseOfPreferredStock": "None",
+            "proceedsFromRepaymentsOfShortTermDebt": null,
+            "paymentsForRepurchaseOfCommonStock": null,
+            "paymentsForRepurchaseOfEquity": null,
+            "paymentsForRepurchaseOfPreferredStock": null,
             "dividendPayout": "6255000000",
             "dividendPayoutCommonStock": "6255000000",
-            "dividendPayoutPreferredStock": "None",
-            "proceedsFromIssuanceOfCommonStock": "None",
-            "proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet": "None",
-            "proceedsFromIssuanceOfPreferredStock": "None",
+            "dividendPayoutPreferredStock": null,
+            "proceedsFromIssuanceOfCommonStock": null,
+            "proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet": null,
+            "proceedsFromIssuanceOfPreferredStock": null,
             "proceedsFromRepurchaseOfEquity": "-1018000000",
-            "proceedsFromSaleOfTreasuryStock": "None",
+            "proceedsFromSaleOfTreasuryStock": null,
             "stockBasedCompensation": "1715000000",
-            "changeInCashAndCashEquivalents": "None",
-            "changeInExchangeRate": "None",
+            "changeInCashAndCashEquivalents": null,
+            "changeInExchangeRate": null,
             "netIncome": "10571000000"
         }
+    ]
+}
+```
 
-### Earnings Estimate
+### Earnings Estimate (Alpha Vantage)
+
+```json
 {
     "symbol": "IBM",
-    "estimates": []
+    "estimates": [
+        {
+            "date": "2027-12-31",
+            "horizon": "fiscal year",
+            "eps_estimate_average": "13.1749",
+            "eps_estimate_high": "13.8600",
+            "eps_estimate_low": "12.3018",
+            "eps_estimate_analyst_count": "24.0000",
+            "eps_estimate_average_7_days_ago": "13.1749",
+            "eps_estimate_average_30_days_ago": "13.4686",
+            "eps_estimate_average_60_days_ago": "13.4227",
+            "eps_estimate_average_90_days_ago": "13.4537",
+            "eps_estimate_revision_up_trailing_7_days": "11.0000",
+            "eps_estimate_revision_down_trailing_7_days": null,
+            "eps_estimate_revision_up_trailing_30_days": "3.0000",
+            "eps_estimate_revision_down_trailing_30_days": "16.0000",
+            "revenue_estimate_average": "73259816370.00",
+            "revenue_estimate_high": "75372200000.00",
+            "revenue_estimate_low": "71325270790.00",
+            "revenue_estimate_analyst_count": "23.00"
+        },
+        {
+            "date": "2026-12-31",
+            "horizon": "fiscal year",
+            "eps_estimate_average": "12.3266",
+            "eps_estimate_high": "12.6300",
+            "eps_estimate_low": "12.0800",
+            "eps_estimate_analyst_count": "24.0000",
+            "eps_estimate_average_7_days_ago": "12.3266",
+            "eps_estimate_average_30_days_ago": "12.4678",
+            "eps_estimate_average_60_days_ago": "12.4254",
+            "eps_estimate_average_90_days_ago": "12.4295",
+            "eps_estimate_revision_up_trailing_7_days": "1.0000",
+            "eps_estimate_revision_down_trailing_7_days": null,
+            "eps_estimate_revision_up_trailing_30_days": "6.0000",
+            "eps_estimate_revision_down_trailing_30_days": "13.0000",
+            "revenue_estimate_average": "70375241150.00",
+            "revenue_estimate_high": "70930000000.00",
+            "revenue_estimate_low": "69869318180.00",
+            "revenue_estimate_analyst_count": "21.00"
+        }
+    ]
 }
+```
 
-### EPS Surprises
-actual
-Actual earning result.
+### EPS Surprises (Finnhub)
 
-estimate
-Estimated earning.
+- `actual` — Actual earnings result.
+- `estimate` — Estimated earnings.
+- `period` — Reported period.
+- `quarter` — Fiscal quarter.
+- `surprise` — Surprise: the difference between actual and estimate.
+- `surprisePercent` — Surprise percent.
+- `symbol` — Company symbol.
+- `year` — Fiscal year.
 
-period
-Reported period.
-
-quarter
-Fiscal quarter.
-
-surprise
-Surprise - The difference between actual and estimate.
-
-surprisePercent
-Surprise percent.
-
-symbol
-Company symbol.
-
-year
-Fiscal year.
+---
 
 ## Trend Metrics
 
-### Company Overview
-**52WeekHigh**
-**52WeekLow**
-**50DayMovingAverage**
-**200DayMovingAverage**
+### Company Overview (Alpha Vantage)
 
-### Insider Sentiment
-data
-Array of sentiment data.
+- `52WeekHigh`
+- `52WeekLow`
+- `50DayMovingAverage`
+- `200DayMovingAverage`
 
-change
-Net buying/selling from all insiders' transactions.
+### Insider Sentiment (Finnhub)
 
-month
-Month.
+- `data` — Array of sentiment data.
+- `change` — Net buying/selling from all insiders' transactions.
+- `month` — Month.
+- `mspr` — Monthly share purchase ratio.
+- `symbol` — Symbol.
+- `year` — Year.
 
-mspr
-Monthly share purchase ratio.
+### Daily Time Series (Alpha Vantage)
 
-symbol
-Symbol.
+- `date`
+- `daily open`
+- `daily high`
+- `daily low`
+- `daily close`
+- `daily volume`
 
-year
-Year.
+### Weekly Time Series (Alpha Vantage)
 
-symbol
-Symbol of the company.
+- `date`
+- `weekly open`
+- `weekly high`
+- `weekly low`
+- `weekly close`
+- `weekly volume`
 
-### Daily
-date
-daily open
-daily high
-daily low
-daily close
-daily volume
+### Monthly Time Series (Alpha Vantage)
 
-### Weekly
-date
-weekly open
-weekly high
-weekly low
-weekly close
-weekly volume
+- `date`
+- `monthly open`
+- `monthly high`
+- `monthly low`
+- `monthly close`
+- `monthly volume`
 
-### Monthly
-date
-monthly open
-monthly high
-monthly low
-monthly close
-monthly volume
+### Technical Indicators (Alpha Vantage)
 
-### SMA
-simple moving average
-
-### EMA
-exponential moving average
-
-### STOCH
-stochastic oscillator
-
-### RSI
-relative strength index 
-
-### ADX
-average directional movement index
-
-### CCI
-commodity channel index
-
-### AD
-Chaikin A/D line
-
-### OBV
-on balance volume
+- `SMA` — simple moving average
+- `EMA` — exponential moving average
+- `STOCH` — stochastic oscillator
+- `RSI` — relative strength index
+- `ADX` — average directional movement index
+- `CCI` — commodity channel index
+- `AD` — Chaikin A/D line
+- `OBV` — on balance volume
 
 ---
+
 ## Sentiment Metrics
 
-### Company Overview
-**AnalystTargetPrice**
-**AnalystRatingStrongBuy**
-**AnalystRatingBuy**
-**AnalystRatingHold**
-**AnalystRatingSell**
-**AnalystRatingStrongSell**
+### Company Overview (Alpha Vantage)
 
-### News & Sentiments
+- `AnalystTargetPrice`
+- `AnalystRatingStrongBuy`
+- `AnalystRatingBuy`
+- `AnalystRatingHold`
+- `AnalystRatingSell`
+- `AnalystRatingStrongSell`
+
+### News & Sentiments (Alpha Vantage)
+
+```json
 {
-            "title": "STATE STREET CORP Adds to Allegion PLC (ALLE) Stake -- Shares Look Fairly Valued on GF Value",
-            "url": "https://www.gurufocus.com/news/9033452/state-street-corp-adds-to-allegion-plc-alle-stake-shares-look-fairly-valued-on-gf-value",
-            "time_published": "20260814T004908",
-            "authors": [
-                "GuruFocus News"
-            ],
-            "summary": "STATE STREET CORP increased its stake in Allegion PLC (ALLE) by 77,816 shares on June 30, 2026, investing approximately $10.93 million. Allegion's stock has since appreciated by 18.47%, trading at $166.44, and is considered fairly valued with a price-to-GF Value ratio of 1.06. The company exhibits strong fundamentals, including high profitability and growth ranks, and a solid financial health, despite some recent negative short-term momentum.",
-            "banner_image": "https://userupload.gurufocus.com/cdn-cgi/image/width=600,quality=100/2088064036422983680.png",
-            "source": "GuruFocus",
-            "category_within_source": "General",
-            "source_domain": "GuruFocus",
-            "topics": [
-                {
-                    "topic": "financial_markets",
-                    "relevance_score": "0.925803"
-                },
-                {
-                    "topic": "finance",
-                    "relevance_score": "0.849469"
-                },
-                {
-                    "topic": "economy_macro",
-                    "relevance_score": "0.632893"
-                }
-            ],
-            "overall_sentiment_score": 0.177738,
-            "overall_sentiment_label": "Somewhat-Bullish",
-            "ticker_sentiment": [
-                {
-                    "ticker": "ALLE",
-                    "relevance_score": "1.000000",
-                    "ticker_sentiment_score": "0.423228",
-                    "ticker_sentiment_label": "Bullish"
-                },
-                {
-                    "ticker": "STT",
-                    "relevance_score": "0.701573",
-                    "ticker_sentiment_score": "0.204549",
-                    "ticker_sentiment_label": "Somewhat-Bullish"
-                },
-                {
-                    "ticker": "AAPL",
-                    "relevance_score": "0.625000",
-                    "ticker_sentiment_score": "0.108222",
-                    "ticker_sentiment_label": "Neutral"
-                },
-                {
-                    "ticker": "AMZN",
-                    "relevance_score": "0.604103",
-                    "ticker_sentiment_score": "0.136414",
-                    "ticker_sentiment_label": "Neutral"
-                },
-                {
-                    "ticker": "GOOGL",
-                    "relevance_score": "0.637138",
-                    "ticker_sentiment_score": "0.122344",
-                    "ticker_sentiment_label": "Neutral"
-                }
-            ]
-        }
+    "title": "STATE STREET CORP Adds to Allegion PLC (ALLE) Stake -- Shares Look Fairly Valued on GF Value",
+    "url": "https://www.gurufocus.com/news/9033452/state-street-corp-adds-to-allegion-plc-alle-stake-shares-look-fairly-valued-on-gf-value",
+    "time_published": "20260814T004908",
+    "authors": ["GuruFocus News"],
+    "summary": "STATE STREET CORP increased its stake in Allegion PLC (ALLE) by 77,816 shares on June 30, 2026, investing approximately $10.93 million. Allegion's stock has since appreciated by 18.47%, trading at $166.44, and is considered fairly valued with a price-to-GF Value ratio of 1.06. The company exhibits strong fundamentals, including high profitability and growth ranks, and a solid financial health, despite some recent negative short-term momentum.",
+    "banner_image": "https://userupload.gurufocus.com/cdn-cgi/image/width=600,quality=100/2088064036422983680.png",
+    "source": "GuruFocus",
+    "category_within_source": "General",
+    "source_domain": "GuruFocus",
+    "topics": [
+        {"topic": "financial_markets", "relevance_score": "0.925803"},
+        {"topic": "finance", "relevance_score": "0.849469"},
+        {"topic": "economy_macro", "relevance_score": "0.632893"}
+    ],
+    "overall_sentiment_score": 0.177738,
+    "overall_sentiment_label": "Somewhat-Bullish",
+    "ticker_sentiment": [
+        {"ticker": "ALLE", "relevance_score": "1.000000", "ticker_sentiment_score": "0.423228", "ticker_sentiment_label": "Bullish"},
+        {"ticker": "STT", "relevance_score": "0.701573", "ticker_sentiment_score": "0.204549", "ticker_sentiment_label": "Somewhat-Bullish"},
+        {"ticker": "AAPL", "relevance_score": "0.625000", "ticker_sentiment_score": "0.108222", "ticker_sentiment_label": "Neutral"},
+        {"ticker": "AMZN", "relevance_score": "0.604103", "ticker_sentiment_score": "0.136414", "ticker_sentiment_label": "Neutral"},
+        {"ticker": "GOOGL", "relevance_score": "0.637138", "ticker_sentiment_score": "0.122344", "ticker_sentiment_label": "Neutral"}
+    ]
+}
+```
 
-### Company News
-category
-News category.
+### Company News (Finnhub)
 
-datetime
-Published time in UNIX timestamp.
+- `category` — News category.
+- `datetime` — Published time in UNIX timestamp.
+- `headline` — News headline.
+- `id` — News ID. This value can be used for `minId` params to get the latest news only.
+- `image` — Thumbnail image URL.
+- `related` — Related stocks and companies mentioned in the article.
+- `source` — News source.
+- `summary` — News summary.
+- `url` — URL of the original article.
 
-headline
-News headline.
+### Insider Sentiment (Finnhub)
 
-id
-News ID. This value can be used for minId params to get the latest news only.
+- `data` — Array of sentiment data.
+- `change` — Net buying/selling from all insiders' transactions.
+- `month` — Month.
+- `mspr` — Monthly share purchase ratio.
+- `symbol` — Symbol.
+- `year` — Year.
 
-image
-Thumbnail image URL.
+### Recommendation Trends (Finnhub)
 
-related
-Related stocks and companies mentioned in the article.
+- `buy` — Number of recommendations that fall into the Buy category.
+- `hold` — Number of recommendations that fall into the Hold category.
+- `period` — Updated period.
+- `sell` — Number of recommendations that fall into the Sell category.
+- `strongBuy` — Number of recommendations that fall into the Strong Buy category.
+- `strongSell` — Number of recommendations that fall into the Strong Sell category.
+- `symbol` — Company symbol.
 
-source
-News source.
+### Earnings Call Transcript (Alpha Vantage)
 
-summary
-News summary.
-
-url
-URL of the original article.
-
-### Insider Sentiment
-data
-Array of sentiment data.
-
-change
-Net buying/selling from all insiders' transactions.
-
-month
-Month.
-
-mspr
-Monthly share purchase ratio.
-
-symbol
-Symbol.
-
-year
-Year.
-
-symbol
-Symbol of the company.
-
-### Recommendation Trends
-buy
-Number of recommendations that fall into the Buy category
-
-hold
-Number of recommendations that fall into the Hold category
-
-period
-Updated period
-
-sell
-Number of recommendations that fall into the Sell category
-
-strongBuy
-Number of recommendations that fall into the Strong Buy category
-
-strongSell
-Number of recommendations that fall into the Strong Sell category
-
-symbol
-Company symbol
-
-### Earnings Call Transcript
+```json
 {
-            "speaker": "Olympia McNerney",
-            "title": "Global Head of Investor Relations",
-            "content": "Thank you. I'd like to welcome you to IBM's First Quarter 2024 Earnings Presentation. I'm Olympia McNerney, and I'm here today with Arvind Krishna, IBM's Chairman and Chief Executive Officer; and Jim Kavanaugh, IBM's Senior Vice President and Chief Financial Officer. We'll post today's prepared remarks on the IBM investor website within a couple of hours, and a replay will be available by this time tomorrow. To provide additional information to our investors, our presentation includes certain non-GAAP measures. For example, all of our references to revenue and signings growth are at constant currency. We provided reconciliation charts for these and other non-GAAP financial measures at the end of the presentation, which is posted to our investor website. Finally, some comments made in this presentation may be considered forward-looking under the Private Securities Litigation Reform Act of 1995. These statements involve factors that could cause our actual results to differ materially. Additional information about these factors is included in the company's SEC filings. So with that, I'll turn the call over to Arvind.",
-            "sentiment": "0.6"
-        }
+    "speaker": "Olympia McNerney",
+    "title": "Global Head of Investor Relations",
+    "content": "Thank you. I'd like to welcome you to IBM's First Quarter 2024 Earnings Presentation. I'm Olympia McNerney, and I'm here today with Arvind Krishna, IBM's Chairman and Chief Executive Officer; and Jim Kavanaugh, IBM's Senior Vice President and Chief Financial Officer. We'll post today's prepared remarks on the IBM investor website within a couple of hours, and a replay will be available by this time tomorrow. To provide additional information to our investors, our presentation includes certain non-GAAP measures. For example, all of our references to revenue and signings growth are at constant currency. We provided reconciliation charts for these and other non-GAAP financial measures at the end of the presentation, which is posted to our investor website. Finally, some comments made in this presentation may be considered forward-looking under the Private Securities Litigation Reform Act of 1995. These statements involve factors that could cause our actual results to differ materially. Additional information about these factors is included in the company's SEC filings. So with that, I'll turn the call over to Arvind.",
+    "sentiment": "0.6"
+}
+```
 
 ---
+
 ## Moat Metrics
 
-### Peers
-Get company peers. Return a list of peers operating in the same country and sector/industry.
+### Peers (Finnhub)
+
+Get company peers. Returns a list of peers operating in the same country and sector/industry.
 
 ---
+
 ## Volatility Metrics
 
-### Advanced Analytics (e.g., total return, variance, auto-correlation, etc.)
-MIN: The minimum return (largest negative or smallest positive) for all values in the series
-MAX: The maximum return for all values in the series
-MEAN: The mean of all returns in the series
-MEDIAN: The median of all returns in the series
-CUMULATIVE_RETURN: The total return from the beginning to the end of the series range
-VARIANCE: The population variance of returns in the series range. Optionally, you can use VARIANCE(annualized=True)to normalize the output to an annual value. By default, the variance is not annualized.
-STDDEV: The population standard deviation of returns in the series range for each symbol. Optionally, you can use STDDEV(annualized=True)to normalize the output to an annual value. By default, the standard deviation is not annualized.
-MAX_DRAWDOWN: Largest peak to trough interval for each symbol in the series range
-HISTOGRAM: For each symbol, place the observed total returns in bins. By default, bins=10. Use HISTOGRAM(bins=20) to specify a custom bin value (e.g., 20).
-AUTOCORRELATION: For each symbol place, calculate the autocorrelation for the given lag (e.g., the lag in neighboring points for the autocorrelation calculation). By default, lag=1. Use AUTOCORRELATION(lag=2) to specify a custom lag value (e.g., 2).
-COVARIANCE: Returns a covariance matrix for the input symbols. Optionally, you can use COVARIANCE(annualized=True)to normalize the output to an annual value. By default, the covariance is not annualized.
-CORRELATION: Returns a correlation matrix for the input symbols, using the PEARSON method as default. You can also specify the KENDALL or SPEARMAN method through CORRELATION(method=KENDALL) or CORRELATION(method=SPEARMAN), respectively.
+### Advanced Analytics (total return, variance, auto-correlation, etc.) (Alpha Vantage)
 
-### BBANDS
-Bollinger bands
+- `MIN` — The minimum return (largest negative or smallest positive) for all values in the series.
+- `MAX` — The maximum return for all values in the series.
+- `MEAN` — The mean of all returns in the series.
+- `MEDIAN` — The median of all returns in the series.
+- `CUMULATIVE_RETURN` — The total return from the beginning to the end of the series range.
+- `VARIANCE` — The population variance of returns in the series range. Optionally `VARIANCE(annualized=True)` normalizes to an annual value. By default the variance is not annualized.
+- `STDDEV` — The population standard deviation of returns in the series range for each symbol. Optionally `STDDEV(annualized=True)` normalizes to an annual value. By default the standard deviation is not annualized.
+- `MAX_DRAWDOWN` — Largest peak to trough interval for each symbol in the series range.
+- `HISTOGRAM` — For each symbol, place the observed total returns in bins. By default `bins=10`; use `HISTOGRAM(bins=20)` to specify a custom bin value.
+- `AUTOCORRELATION` — For each symbol, calculate the autocorrelation for the given lag (e.g. the lag in neighboring points). By default `lag=1`; use `AUTOCORRELATION(lag=2)` for a custom lag.
+- `COVARIANCE` — Returns a covariance matrix for the input symbols. Optionally `COVARIANCE(annualized=True)` normalizes to an annual value.
+- `CORRELATION` — Returns a correlation matrix for the input symbols, using the PEARSON method by default. You can also specify the KENDALL or SPEARMAN method through `CORRELATION(method=KENDALL)` or `CORRELATION(method=SPEARMAN)`.
 
-### ATR
-average true range
+### BBANDS (Alpha Vantage)
+
+Bollinger bands.
+
+### ATR (Alpha Vantage)
+
+Average true range.
 
 ---
+
 ## Persistent Data
 
-### IPO Calendar (Discover Page Metrics)
-ipoCalendar
-Array of IPO events.
+### IPO Calendar (Discover page) (Finnhub)
 
-date
-IPO date.
+- `ipoCalendar` — Array of IPO events.
+- `date` — IPO date.
+- `exchange` — Exchange.
+- `name` — Company's name.
+- `numberOfShares` — Number of shares offered during the IPO.
+- `price` — Projected price or price range.
+- `status` — IPO status. One of: `expected`, `priced`, `withdrawn`, `filed`.
+- `symbol` — Symbol.
+- `totalSharesValue` — Total shares value.
 
-exchange
-Exchange.
+### Earnings Calendar (Finnhub)
 
-name
-Company's name.
+- `earningsCalendar` — Array of earnings releases.
+- `date` — Date.
+- `epsActual` — EPS actual.
+- `epsEstimate` — EPS estimate.
+- `hour` — Whether the earnings is announced before market open (`bmo`), after market close (`amc`), or during market hours (`dmh`).
+- `quarter` — Earnings quarter.
+- `revenueActual` — Revenue actual.
+- `revenueEstimate` — Revenue estimate including Finnhub's proprietary estimates.
+- `symbol` — Symbol.
+- `year` — Earnings year.
 
-numberOfShares
-Number of shares offered during the IPO.
+### Top Gainers / Losers (Alpha Vantage)
 
-price
-Projected price or price range.
-
-status
-IPO status. Can take 1 of the following values: expected,priced,withdrawn,filed
-
-symbol
-Symbol.
-
-totalSharesValue
-Total shares value.
-
-### Earnings Calendar
-earningsCalendar
-Array of earnings release.
-
-date
-Date.
-
-epsActual
-EPS actual.
-
-epsEstimate
-EPS estimate.
-
-hour
-Indicates whether the earnings is announced before market open(bmo), after market close(amc), or during market hour(dmh).
-
-quarter
-Earnings quarter.
-
-revenueActual
-Revenue actual.
-
-revenueEstimate
-Revenue estimate including Finnhub's proprietary estimates.
-
-symbol
-Symbol.
-
-year
-Earnings year.
-
-### Top Gainers/Losers
+```json
+{
     "metadata": "Top gainers, losers, and most actively traded US tickers",
     "last_updated": "2026-08-14 16:15:59 US/Eastern",
-    "top_gainers": 
+    "top_gainers": [
         {
             "ticker": "AACBR",
             "price": "0.0125",
@@ -576,115 +522,112 @@ Earnings year.
             "change_percentage": "87.5%",
             "volume": "45772"
         }
+    ]
+}
+```
 
-### News & Sentiments
-{
-            "title": "STATE STREET CORP Adds to Allegion PLC (ALLE) Stake -- Shares Look Fairly Valued on GF Value",
-            "url": "https://www.gurufocus.com/news/9033452/state-street-corp-adds-to-allegion-plc-alle-stake-shares-look-fairly-valued-on-gf-value",
-            "time_published": "20260814T004908",
-            "authors": [
-                "GuruFocus News"
-            ],
-            "summary": "STATE STREET CORP increased its stake in Allegion PLC (ALLE) by 77,816 shares on June 30, 2026, investing approximately $10.93 million. Allegion's stock has since appreciated by 18.47%, trading at $166.44, and is considered fairly valued with a price-to-GF Value ratio of 1.06. The company exhibits strong fundamentals, including high profitability and growth ranks, and a solid financial health, despite some recent negative short-term momentum.",
-            "banner_image": "https://userupload.gurufocus.com/cdn-cgi/image/width=600,quality=100/2088064036422983680.png",
-            "source": "GuruFocus",
-            "category_within_source": "General",
-            "source_domain": "GuruFocus",
-            "topics": [
-                {
-                    "topic": "financial_markets",
-                    "relevance_score": "0.925803"
-                },
-                {
-                    "topic": "finance",
-                    "relevance_score": "0.849469"
-                },
-                {
-                    "topic": "economy_macro",
-                    "relevance_score": "0.632893"
-                }
-            ],
-            "overall_sentiment_score": 0.177738,
-            "overall_sentiment_label": "Somewhat-Bullish",
-            "ticker_sentiment": [
-                {
-                    "ticker": "ALLE",
-                    "relevance_score": "1.000000",
-                    "ticker_sentiment_score": "0.423228",
-                    "ticker_sentiment_label": "Bullish"
-                },
-                {
-                    "ticker": "STT",
-                    "relevance_score": "0.701573",
-                    "ticker_sentiment_score": "0.204549",
-                    "ticker_sentiment_label": "Somewhat-Bullish"
-                },
-                {
-                    "ticker": "AAPL",
-                    "relevance_score": "0.625000",
-                    "ticker_sentiment_score": "0.108222",
-                    "ticker_sentiment_label": "Neutral"
-                },
-                {
-                    "ticker": "AMZN",
-                    "relevance_score": "0.604103",
-                    "ticker_sentiment_score": "0.136414",
-                    "ticker_sentiment_label": "Neutral"
-                },
-                {
-                    "ticker": "GOOGL",
-                    "relevance_score": "0.637138",
-                    "ticker_sentiment_score": "0.122344",
-                    "ticker_sentiment_label": "Neutral"
-                }
-            ]
-        }
-        
-### Inflation (Start of Stockidence Main Page Metrics)
-{
-            "date": "2024-01-01",
-            "value": "2.94952520485207"
-        }
-percent value annual
+### News & Sentiments (Alpha Vantage)
 
-### Natural Gas
-"name": "Henry Hub Natural Gas Spot Price",
+```json
+{
+    "title": "STATE STREET CORP Adds to Allegion PLC (ALLE) Stake -- Shares Look Fairly Valued on GF Value",
+    "url": "https://www.gurufocus.com/news/9033452/state-street-corp-adds-to-allegion-plc-alle-stake-shares-look-fairly-valued-on-gf-value",
+    "time_published": "20260814T004908",
+    "authors": ["GuruFocus News"],
+    "summary": "STATE STREET CORP increased its stake in Allegion PLC (ALLE) by 77,816 shares on June 30, 2026, investing approximately $10.93 million. Allegion's stock has since appreciated by 18.47%, trading at $166.44, and is considered fairly valued with a price-to-GF Value ratio of 1.06. The company exhibits strong fundamentals, including high profitability and growth ranks, and a solid financial health, despite some recent negative short-term momentum.",
+    "banner_image": "https://userupload.gurufocus.com/cdn-cgi/image/width=600,quality=100/2088064036422983680.png",
+    "source": "GuruFocus",
+    "category_within_source": "General",
+    "source_domain": "GuruFocus",
+    "topics": [
+        {"topic": "financial_markets", "relevance_score": "0.925803"},
+        {"topic": "finance", "relevance_score": "0.849469"},
+        {"topic": "economy_macro", "relevance_score": "0.632893"}
+    ],
+    "overall_sentiment_score": 0.177738,
+    "overall_sentiment_label": "Somewhat-Bullish",
+    "ticker_sentiment": [
+        {"ticker": "ALLE", "relevance_score": "1.000000", "ticker_sentiment_score": "0.423228", "ticker_sentiment_label": "Bullish"},
+        {"ticker": "STT", "relevance_score": "0.701573", "ticker_sentiment_score": "0.204549", "ticker_sentiment_label": "Somewhat-Bullish"},
+        {"ticker": "AAPL", "relevance_score": "0.625000", "ticker_sentiment_score": "0.108222", "ticker_sentiment_label": "Neutral"},
+        {"ticker": "AMZN", "relevance_score": "0.604103", "ticker_sentiment_score": "0.136414", "ticker_sentiment_label": "Neutral"},
+        {"ticker": "GOOGL", "relevance_score": "0.637138", "ticker_sentiment_score": "0.122344", "ticker_sentiment_label": "Neutral"}
+    ]
+}
+```
+
+---
+
+## Main Page Metrics (Stockidence homepage)
+
+### Inflation (Alpha Vantage)
+
+```json
+{
+    "date": "2024-01-01",
+    "value": "2.94952520485207"
+}
+```
+
+Percent value, annual.
+
+### Natural Gas (Henry Hub) (Alpha Vantage)
+
+```json
+{
+    "name": "Henry Hub Natural Gas Spot Price",
     "interval": "monthly",
     "unit": "dollars per million BTU",
-    "data": 
-        {
-            "date": "2026-07-01",
-            "value": "2.89"
-        }
+    "data": {
+        "date": "2026-07-01",
+        "value": "2.89"
+    }
+}
+```
 
-### CPI
+### CPI (Alpha Vantage)
+
+```json
 {
-            "date": "2026-07-01",
-            "value": "333.918"
-        }
+    "date": "2026-07-01",
+    "value": "333.918"
+}
+```
 
-### Unemployment Rate
+### Unemployment Rate (Alpha Vantage)
+
+```json
 {
-            "date": "2026-07-01",
-            "value": "4.1"
-        }
-percent value
-### Federal Funds (Interest) Rate
+    "date": "2026-07-01",
+    "value": "4.1"
+}
+```
+
+Percent value.
+
+### Federal Funds (Interest) Rate (Alpha Vantage)
+
+```json
 {
-            "date": "2026-07-01",
-            "value": "3.6300000000"
-        } 
-Can return daily weekly or monthly data
-percent value
+    "date": "2026-07-01",
+    "value": "3.6300000000"
+}
+```
 
-### Real GDP per Capita
-consumer price index
+Can return daily, weekly, or monthly data. Percent value.
 
-### Commodities (Gold & Silver)
+### Real GDP per Capita (Alpha Vantage)
+
+Consumer price index adjusted real GDP per capita, quarterly.
+
+### Commodities (Gold & Silver) (Alpha Vantage)
+
+```json
 {
     "nominal": "XAGUSD",
     "timestamp": "2026-08-15 01:27:49",
     "price": "64.6941991895"
 }
+```
 
-nominal: GOLD for gold price AND SILVER for silver price. The price is in USD.
+`nominal`: `GOLD` for the gold price, `SILVER` for the silver price. The price is in USD.
