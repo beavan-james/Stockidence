@@ -2,18 +2,16 @@
 
 ## What this is
 
-A data engineering portfolio project: a **stock confidence rating pipeline**.
-The point is the pipeline — ingestion, orchestration, incremental loads,
-staleness handling, warehouse layering — not the model. The scoring logic is a
-simple, deterministic rule set kept deliberately transparent (never a black
-box).
+A **stock confidence rating pipeline**. The scoring logic is a
+relatively determinstic as I wanted to focus more on the data ingestion and app it self rather than the algorithm.
+Though once I finish a MVP, I will revist the scoring logic and run backtests.
 
 **The problem it answers:** *"I want to buy this stock but don't know if it's a
 good time, and I don't have time to research it."* The app outputs, for any
 ticker:
 
 - a **confidence rating** + advice (`strong buy / buy / hold / sell / strong sell`)
-- a **separate volatility score** (never blended into the confidence rating)
+- a **separate volatility score**
 - for buy-rated tickers: an **advised buy price**, **stop-loss price**, and
   **holding-style advice** (long-term hold / swing trade / day trade)
 
@@ -68,9 +66,7 @@ narrative analysis — it will never replace or obscure the deterministic core.
 - **Monthly:** commodities, macro indicators
 - **Quarterly/irregular:** fundamentals, earnings, transcripts
 
-This mix of cadences is the core data-engineering signal of the project: it
-forces real thinking about scheduling, staleness, and orchestration — not a
-"call three APIs in a for loop" script.
+Cadence is heterogeneous primarily to avoid hitting API rate limits specifically with Alpha Vantage, which has a very limited free tier API limit.
 
 ## Docs
 
@@ -79,5 +75,3 @@ forces real thinking about scheduling, staleness, and orchestration — not a
 | `ARCHITECTURE.md` | Warehouse layers, watermark/staleness design, data flow diagram |
 | `API.md`          | Every endpoint used, grouped by scoring category, with JSON samples |
 | `MODEL.md`        | Scoring weights, sub-scores, fair-value & target-price methodology, thresholds |
-| `AGENTS.md`       | Repo conventions + guardrails for AI agents and contributors |
-| `FutureAdditions.md` | Ideas explicitly out of scope for now              |
