@@ -96,7 +96,7 @@ def top_nav() -> rx.Component:
             rx.link(
                 rx.hstack(
                     rx.image(
-                        src="/bull.svg",
+                        src="/bull_logo.svg",
                         alt="Stockidence bull",
                         width="26px",
                         height="26px",

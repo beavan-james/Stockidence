@@ -74,7 +74,7 @@ app = rx.App(
         rx.el.link(
             rel="icon",
             type="image/svg+xml",
-            href="/bull.svg",
+            href="/bull_logo.svg",
         ),
     ],
 )
