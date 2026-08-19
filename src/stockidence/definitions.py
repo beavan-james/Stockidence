@@ -11,8 +11,6 @@ Exposes:
   - ticker_data asset with a dynamic ticker partition per lookup
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
 
 from dagster import (
@@ -51,14 +49,18 @@ def _make_cadence_job(cadence: Cadence):
     if not names:
         return None
 
-    @op(required_resource_keys={"engine"})
-    def ingest_cadence(context) -> None:
-        engine = context.resources.engine
+    @op(name=f"ingest_{cadence.value}_op", required_resource_keys={"engine"})
+    def ingest_cadence(ctx) -> None:
+        engine = ctx.resources.engine
         for name in names:
             result = engine.ingest_scheduled(name, now=_now())
-            context.log.info(f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
+            ctx.log.info(f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
 
-    return job(ingest_cadence, name=f"{cadence.value}_ingest")
+    @job(name=f"{cadence.value}_ingest")
+    def cadence_job():
+        ingest_cadence()
+
+    return cadence_job
 
 
 monthly_job = _make_cadence_job(Cadence.MONTHLY)
@@ -84,7 +86,7 @@ def daily_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
-@asset(partitions_def=ticker_partitions)
+@asset(partitions_def=ticker_partitions, required_resource_keys={"engine"})
 def ticker_data(context: AssetExecutionContext) -> None:
     """On-demand per-ticker fetch: the frontend adds a ticker partition,
     then the engine's staleness gate decides which endpoints need a call."""
@@ -96,7 +98,8 @@ def ticker_data(context: AssetExecutionContext) -> None:
             latest = engine.warehouse.connect(read_only=True).execute(
                 """
                 SELECT year, quarter FROM raw.raw_earnings_calendar
-                WHERE symbol = ? AND date <= date('now')
+                WHERE symbol = ?
+                  AND CAST(json_extract_string(payload, '$.date') AS DATE) <= current_date
                 ORDER BY year DESC, quarter DESC LIMIT 1
                 """,
                 [ticker],
