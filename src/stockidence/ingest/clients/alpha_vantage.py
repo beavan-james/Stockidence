@@ -14,7 +14,7 @@ from .base import APIError, BaseClient, InvalidResponseError, RateLimitError, bu
 
 class AlphaVantageClient(BaseClient):
     def __init__(self, *, api_key: str | None = None, timeout: float = 30.0, **kwargs: Any) -> None:
-        from ..config import load_settings
+        from ...config import load_settings
 
         key: str = api_key or load_settings().alpha_vantage_api_key
         if not key:

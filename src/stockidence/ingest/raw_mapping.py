@@ -17,7 +17,7 @@ import hashlib
 from datetime import date, datetime
 from typing import Any, Callable
 
-from .storage import RAW_SCHEMA
+from ..storage import RAW_SCHEMA
 
 
 def _as_date(value: str) -> date:

@@ -25,9 +25,9 @@ from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
 from .clients.twelve_data import TwelveDataClient
 from .endpoints import EndpointSpec, Provider, get_endpoint
-from .normalizers import normalize_for
+from .raw_mapping import normalize_for
 from .staleness import FetchDecision, StalenessGate
-from .storage import Warehouse
+from ..storage import Warehouse
 
 _PROVIDER_CLIENTS = {
     Provider.FINNHUB: FinnhubClient,

@@ -1,65 +1,32 @@
-"""Staging & mart derivations, rebuilt per ticker.
+"""Mart aggregates & indicators, rebuilt per ticker from the staged bars.
 
-Pure derivation, no API calls (registry cadence DERIVED). Every rebuild is a
-full per-ticker recompute: delete the ticker's rows, rebuild from the layer
-below. That keeps the layers idempotent by construction and immune to Twelve
-Data's occasional historical-bar revisions (a backfill or split adjustment
-simply flows through next run).
+Mart holds everything that aggregates over bars — the scoring layer reads
+only this layer. Built from staging.stg_prices_daily, never from raw.
 
 Layer rule — staging cleans, mart aggregates:
-  - staging: stg_prices_daily — typing/cleaning/dedup + grain-preserving
-    transforms (return_1d), built from raw JSON payloads.
-  - mart: resamples (weekly/monthly), rolling stats + max drawdown, and
-    the indicator series — everything an aggregation over bars, built from
-    stg_prices_daily for the scoring layer to read.
-    - SQL: resample + rolling stats (window functions).
-    - Python (pure per-bar series math): SMA/EMA/MACD, RSI, ATR, ADX, CCI,
-      BBANDS, AD, OBV — Wilder-style recursive smoothing that window
-      functions can't express cleanly.
+  - resamples (weekly/monthly OHLCV)
+  - rolling 252-bar stats + max drawdown (m_advanced_analytics)
+  - indicator series (m_technical_indicators)
+
+None of this hits an API (registry cadence DERIVED). Every rebuild is a full
+per-ticker recompute: delete the ticker's rows, rebuild from staged bars.
+That keeps the layer idempotent by construction and immune to Twelve Data's
+occasional historical-bar revisions (a backfill or split adjustment simply
+flows through next run).
+
+Split of labor:
+  - SQL: resample + rolling stats (window functions).
+  - Python (pure per-bar series math): SMA/EMA/MACD, RSI, ATR, ADX, CCI,
+    BBANDS, AD, OBV — Wilder-style recursive smoothing that window
+    functions can't express cleanly.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .storage import Warehouse
-
-
-# ---------------------------------------------------------------- SQL layers
-
-def rebuild_prices_daily(warehouse: Warehouse, ticker: str) -> int:
-    """Typed daily bars with 1-day simple returns. Rows whose payload lacks a
-    valid O/H/L/C (holes in the API feed) don't make it to staging."""
-    with warehouse.connect() as con:
-        con.execute("DELETE FROM staging.stg_prices_daily WHERE ticker = ?", [ticker])
-        con.execute(
-            """
-            INSERT INTO staging.stg_prices_daily
-                (ticker, date, open, high, low, close, volume, return_1d)
-            SELECT
-                ticker,
-                date,
-                CAST(json_extract_string(payload, '$.open')  AS DOUBLE),
-                CAST(json_extract_string(payload, '$.high')  AS DOUBLE),
-                CAST(json_extract_string(payload, '$.low')   AS DOUBLE),
-                CAST(json_extract_string(payload, '$.close') AS DOUBLE),
-                GREATEST(CAST(json_extract_string(payload, '$.volume') AS DOUBLE), 0),
-                CAST(json_extract_string(payload, '$.close') AS DOUBLE) /
-                    LAG(CAST(json_extract_string(payload, '$.close') AS DOUBLE))
-                        OVER (PARTITION BY ticker ORDER BY date) - 1
-            FROM raw.raw_prices_daily
-            WHERE ticker = ?
-              AND json_extract_string(payload, '$.open')  IS NOT NULL
-              AND json_extract_string(payload, '$.high')  IS NOT NULL
-              AND json_extract_string(payload, '$.low')   IS NOT NULL
-              AND json_extract_string(payload, '$.close') IS NOT NULL
-            ORDER BY date
-            """,
-            [ticker],
-        )
-        return con.execute(
-            "SELECT COUNT(*) FROM staging.stg_prices_daily WHERE ticker = ?", [ticker]
-        ).fetchone()[0]
+from ..staging.staging import rebuild_prices_daily
+from ..storage import Warehouse
 
 
 def _rebuild_resample(warehouse: Warehouse, table: str, bucket: str, ticker: str) -> int:

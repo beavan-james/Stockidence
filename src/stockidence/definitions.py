@@ -28,15 +28,15 @@ from dagster import (
     asset,
 )
 
-from .derivations import (
+from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
+from .ingest.engine import IngestEngine
+from .mart.mart import (
     rebuild_advanced_analytics,
-    rebuild_prices_daily,
     rebuild_prices_monthly,
     rebuild_prices_weekly,
     rebuild_technical_indicators,
 )
-from .endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
-from .ingest import IngestEngine
+from .staging.staging import rebuild_prices_daily
 from .storage import Warehouse
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")

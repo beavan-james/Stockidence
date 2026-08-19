@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
-from stockidence.endpoints import (
+from .endpoints import (
     Cadence,
     EndpointSpec,
     Provider,
@@ -31,7 +31,7 @@ from stockidence.endpoints import (
     Trigger,
     get_endpoint,
 )
-from stockidence.storage import RAW_SCHEMA, Warehouse, Watermark
+from ..storage import RAW_SCHEMA, Warehouse, Watermark
 
 # Filing-report grace: how long after a fiscal period ends we expect the
 # report to exist before we consider our copy behind. 10-Ks are due ~60-75
