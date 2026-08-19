@@ -15,12 +15,15 @@ from datetime import datetime, timezone
 
 from dagster import (
     AssetExecutionContext,
+    AssetSelection,
     Definitions,
     DynamicPartitionsDefinition,
+    RunRequest,
     job,
     op,
     resource,
     schedule,
+    sensor,
     asset,
 )
 
@@ -112,9 +115,40 @@ def ticker_data(context: AssetExecutionContext) -> None:
         context.log.info(f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
 
 
+def stage_ticker_runs(warehouse: Warehouse, instance) -> list[str]:
+    """Consume the request queue: add a dynamic ticker partition per pending
+    request and mark them launched. Returns the staged tickers so the sensor
+    can emit one RunRequest each. Requests whose runs fail are picked up again
+    on the next frontend re-request."""
+    pending = warehouse.pending_ticker_requests()
+    for ticker in pending:
+        instance.add_dynamic_partitions("ticker", [ticker])
+    if pending:
+        warehouse.mark_ticker_requests_launched(pending)
+    return pending
+
+
+@sensor(
+    target=AssetSelection.keys("ticker_data"),
+    minimum_interval_seconds=30,
+    description=(
+        "Polls control.ticker_requests (written by the frontend), adds a dynamic "
+        "ticker partition, and materializes ticker_data so the staleness gate can "
+        "decide which endpoints need a fresh call."
+    ),
+)
+def ticker_request_sensor(context) -> None:
+    """Event-driven on-demand ingestion: request queue -> partition -> run."""
+    warehouse = context.resources.engine.warehouse
+    for ticker in stage_ticker_runs(warehouse, context.instance):
+        context.log.info(f"[request:{ticker}] launching ticker_data materialization")
+        yield RunRequest(run_key=f"ticker_request_{ticker}", partition_key=ticker)
+
+
 defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data],
     jobs=[monthly_job, weekdays_job, daily_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
+    sensors=[ticker_request_sensor],
 )

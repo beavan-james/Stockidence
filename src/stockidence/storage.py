@@ -109,6 +109,16 @@ class Warehouse:
                 )
                 """
             )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS control.ticker_requests (
+                    ticker       VARCHAR NOT NULL,
+                    requested_at TIMESTAMPTZ NOT NULL,
+                    status       VARCHAR NOT NULL DEFAULT 'pending',
+                    PRIMARY KEY (ticker)
+                )
+                """
+            )
             for table, keys in RAW_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 pk = ", ".join(f'"{name}"' for name, _ in keys)
@@ -227,4 +237,49 @@ class Warehouse:
                               high_watermark = COALESCE(excluded.high_watermark, control.watermarks.high_watermark)
                 """,
                 [endpoint, dimension_key, fetched_at, high_watermark],
+            )
+
+    # --- ticker request queue (frontend -> Dagster sensor) ---
+
+    def request_ticker(self, ticker: str, *, requested_at: datetime | None = None) -> None:
+        """Queue a ticker lookup request; re-requesting resets it to pending.
+
+        The frontend writes here (control metadata, exempt from the
+        single-writer rule); the Dagster sensor consumes the queue.
+        """
+        requested_at = requested_at or datetime.now(timezone.utc)
+        with self.connect() as con:
+            con.execute(
+                """
+                INSERT INTO control.ticker_requests (ticker, requested_at, status)
+                VALUES (?, ?, 'pending')
+                ON CONFLICT (ticker)
+                DO UPDATE SET requested_at = excluded.requested_at,
+                              status = 'pending'
+                """,
+                [ticker, requested_at],
+            )
+
+    def pending_ticker_requests(self) -> list[str]:
+        with self.connect(read_only=True) as con:
+            rows = con.execute(
+                """
+                SELECT ticker FROM control.ticker_requests
+                WHERE status = 'pending'
+                ORDER BY requested_at
+                """
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def mark_ticker_requests_launched(self, tickers: list[str]) -> None:
+        if not tickers:
+            return
+        with self.connect() as con:
+            con.execute(
+                """
+                UPDATE control.ticker_requests
+                SET status = 'launched'
+                WHERE ticker = ANY(?)
+                """,
+                [tickers],
             )
