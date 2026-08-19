@@ -24,8 +24,8 @@
 - **Insider Sentiment** — own table, key `(ticker, year, month)` with `last_updated`. TTL: refetch only if current month has no row.
 - **Recommendation Trends** — own table, key `(ticker, period)` with `last_updated`. TTL: 30 days.
 - **Peers** — own table, key `(ticker)` with `last_updated`. TTL: 60 days.
-- **Technical Indicators** (SMA, EMA, STOCH, RSI, ADX, CCI, AD, OBV, BBANDS, ATR) — own table, key `(ticker, date)`, computed from `raw_prices_daily` via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock.
-- **Advanced Analytics** — Scalar stats (MIN, MAX, MEAN, VARIANCE, STDDEV, MAX_DRAWDOWN), own table, key `(ticker, date)`, computed from `raw_prices_daily` via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock.
+- **Technical Indicators** (SMA, EMA, MACD, RSI, ADX, CCI, AD, OBV, BBANDS, ATR) — table `m_technical_indicators`, key `(ticker, date)`, computed from the cleaned daily bars via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock. Aggregations live in the mart layer, not staging.
+- **Advanced Analytics** — Scalar stats (MIN, MAX, MEAN, VARIANCE, STDDEV, MAX_DRAWDOWN), table `m_advanced_analytics`, key `(ticker, date)`, computed from the cleaned daily bars via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock.
 ---
 ### API Calling
 `Push Advanced Analytics and Technical Indicators to be pipelined derivations rather than API calls.`
@@ -50,7 +50,7 @@ flowchart TD
         SCHED["Scheduled daily jobs<br/>market-wide persistent data"]
         ONDM["On-demand per-ticker jobs<br/>dynamic partitions"]
         GATE{{"Staleness gate<br/>watermarks / last_updated + TTL"}}
-        TI["Derivation asset<br/>technical indicators + advanced analytics"]
+        TI["Derivation asset<br/>staging clean → mart aggregates"]
     end
 
     subgraph RAW["raw layer — landed API responses · doubles as staleness-aware cache"]
@@ -59,13 +59,15 @@ flowchart TD
     end
 
     subgraph STG["staging layer — typed · cleaned · deduped"]
-        S_PRC["Exhaustive OHLCV"]
+        S_PRC["Exhaustive OHLCV<br/>(one table: stg_prices_daily)"]
         S_FUND["Fundamentals + earnings"]
         S_NEWS["Ticker-level news sentiment"]
-        S_TECH["SMA · EMA · MACD · RSI · ADX · CCI · AD · OBV · BBANDS · ATR"]
     end
 
-    subgraph MART["mart layer — scored output for the app"]
+    subgraph MART["mart layer — aggregated & derived tables the scoring layer reads"]
+        M_TECH["m_technical_indicators<br/>SMA · EMA · MACD · RSI · ADX · CCI · AD · OBV · BBANDS · ATR"]
+        M_ADV["m_advanced_analytics<br/>rolling stats · max drawdown"]
+        M_RESH["m_prices_weekly · m_prices_monthly"]
         M_SCORE["Category scores<br/>valuation · trend · sentiment · moat"]
         M_RATING["confidence_ratings<br/>rating_components · buy_plans"]
         M_FV["Fair value · target price<br/>buy price · stop-loss · holding style"]
@@ -83,7 +85,9 @@ flowchart TD
 
     RAW -->|"load / unnest / type"| STG
     S_PRC --> TI
-    TI -->|"pure derivation, no API call"| S_TECH
+    TI -->|"pure derivation, no API call"| M_TECH
+    TI -->|"resample / window agg"| M_RESH
+    TI -->|"rolling stats"| M_ADV
     STG -->|"aggregate / score"| MART
     MART --> UI
 ```

@@ -76,6 +76,53 @@ def make_dimension_key(values: dict[str, Any], order: tuple[str, ...]) -> str:
     return "|".join(str(values[k]) for k in order)
 
 
+# staging-derived tables: registry derivations land here (stg_*). Staging is
+# cleaning only — typed, deduped, validated. Unlike raw tables (whose dicts
+# ARE the natural keys), STAGING_SCHEMA lists the full column layout — the PK
+# is the (ticker, date) grain, kept separate below so rebuilds can legally
+# write NULLs (first-bar returns).
+STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
+    "stg_prices_daily": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("volume", "DOUBLE"), ("return_1d", "DOUBLE"),
+    ],
+}
+
+
+# mart tables: aggregations and derivations the scoring layer reads — resampled
+# OHLCV, technical indicators, rolling/advanced analytics. Keyed (ticker, date);
+# rebuilt per ticker, never appended.
+MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
+    "m_prices_weekly": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("volume", "DOUBLE"),
+    ],
+    "m_prices_monthly": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("volume", "DOUBLE"),
+    ],
+    "m_technical_indicators": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("sma_20", "DOUBLE"), ("sma_50", "DOUBLE"),
+        ("ema_12", "DOUBLE"), ("ema_26", "DOUBLE"),
+        ("macd", "DOUBLE"), ("macd_signal", "DOUBLE"), ("macd_hist", "DOUBLE"),
+        ("rsi_14", "DOUBLE"), ("atr_14", "DOUBLE"), ("adx_14", "DOUBLE"), ("cci_20", "DOUBLE"),
+        ("ad", "DOUBLE"), ("obv", "DOUBLE"),
+        ("bb_upper_20", "DOUBLE"), ("bb_mid_20", "DOUBLE"), ("bb_lower_20", "DOUBLE"),
+    ],
+    "m_advanced_analytics": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("close", "DOUBLE"),
+        ("min_252", "DOUBLE"), ("max_252", "DOUBLE"), ("mean_252", "DOUBLE"),
+        ("stddev_252", "DOUBLE"), ("variance_252", "DOUBLE"), ("max_drawdown_252", "DOUBLE"),
+        ("min_all", "DOUBLE"), ("max_all", "DOUBLE"), ("mean_all", "DOUBLE"),
+    ],
+}
+
+
 def _json_default(value: Any) -> str:
         if isinstance(value, (datetime, date)):
             return value.isoformat()
@@ -128,6 +175,28 @@ class Warehouse:
                         {cols},
                         payload    JSON NOT NULL,
                         fetched_at TIMESTAMPTZ NOT NULL,
+                        PRIMARY KEY ({pk})
+                    )
+                    """
+                )
+            for table, keys in STAGING_SCHEMA.items():
+                cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
+                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                con.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS staging."{table}" (
+                        {cols},
+                        PRIMARY KEY ({pk})
+                    )
+                    """
+                )
+            for table, keys in MART_SCHEMA.items():
+                cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
+                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                con.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS mart."{table}" (
+                        {cols},
                         PRIMARY KEY ({pk})
                     )
                     """

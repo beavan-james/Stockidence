@@ -12,6 +12,7 @@ Exposes:
 """
 
 from datetime import datetime, timezone
+from typing import Any
 
 from dagster import (
     AssetExecutionContext,
@@ -27,7 +28,14 @@ from dagster import (
     asset,
 )
 
-from .endpoints import Cadence, Trigger, on_demand_endpoints, scheduled_endpoints
+from .derivations import (
+    rebuild_advanced_analytics,
+    rebuild_prices_daily,
+    rebuild_prices_monthly,
+    rebuild_prices_weekly,
+    rebuild_technical_indicators,
+)
+from .endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest import IngestEngine
 from .storage import Warehouse
 
@@ -128,8 +136,40 @@ def stage_ticker_runs(warehouse: Warehouse, instance) -> list[str]:
     return pending
 
 
+def _derived_asset(name: str, rebuild: Any, deps: AssetSelection | list | object) -> object:
+    """Declare one per-ticker derived asset (staging cleaning or mart aggregate).
+
+    `name` is the asset key AND the table name it rebuilds (stg_*/m_*), so
+    the Dagster key stays aligned with the warehouse table.
+    """
+
+    @asset(
+        name=name,
+        partitions_def=ticker_partitions,
+        required_resource_keys={"engine"},
+        deps=deps,
+    )
+    def _asset(context: AssetExecutionContext) -> None:
+        rows = rebuild(context.resources.engine.warehouse, context.partition_key)
+        context.log.info(f"[derived:{name}:{context.partition_key}] rebuilt {rows} rows")
+
+    return _asset
+
+
+stg_prices_daily = _derived_asset("stg_prices_daily", rebuild_prices_daily, deps=[ticker_data])
+m_prices_weekly = _derived_asset("m_prices_weekly", rebuild_prices_weekly, deps=[stg_prices_daily])
+m_prices_monthly = _derived_asset("m_prices_monthly", rebuild_prices_monthly, deps=[stg_prices_daily])
+m_advanced_analytics = _derived_asset("m_advanced_analytics", rebuild_advanced_analytics, deps=[stg_prices_daily])
+m_technical_indicators = _derived_asset(
+    "m_technical_indicators", rebuild_technical_indicators, deps=[stg_prices_daily]
+)
+
+
 @sensor(
-    target=AssetSelection.keys("ticker_data"),
+    target=AssetSelection.keys(
+        "ticker_data", "stg_prices_daily", "m_prices_weekly", "m_prices_monthly",
+        "m_advanced_analytics", "m_technical_indicators",
+    ),
     minimum_interval_seconds=30,
     description=(
         "Polls control.ticker_requests (written by the frontend), adds a dynamic "
@@ -147,7 +187,8 @@ def ticker_request_sensor(context) -> None:
 
 defs = Definitions(
     resources={"engine": engine_resource},
-    assets=[ticker_data],
+    assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
+            m_advanced_analytics, m_technical_indicators],
     jobs=[monthly_job, weekdays_job, daily_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
     sensors=[ticker_request_sensor],

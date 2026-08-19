@@ -8,3 +8,4 @@ tests/
 AGENTS.md
 __pycache__/
 *.pyc
+.tmp_dagster_home_4brykzw1/
