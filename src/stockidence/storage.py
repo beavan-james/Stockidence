@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +74,12 @@ class Watermark:
 def make_dimension_key(values: dict[str, Any], order: tuple[str, ...]) -> str:
     """Join watermark fields into a stable string key, e.g. ('AAPL',)."""
     return "|".join(str(values[k]) for k in order)
+
+
+def _json_default(value: Any) -> str:
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 class Warehouse:
@@ -150,7 +156,7 @@ class Warehouse:
                     VALUES ({', '.join('?' for _ in keys)}, CAST(? AS JSON), ?)
                     ON CONFLICT ({pk}) DO UPDATE SET {set_cols}
                     """,
-                    [*values, json.dumps(row), fetched_at],
+                    [*values, json.dumps(row, default=_json_default), fetched_at],
                 )
                 written += 1
 
