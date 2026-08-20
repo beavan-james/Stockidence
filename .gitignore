@@ -5,6 +5,7 @@ FutureAdditions.md
 .venv
 tests/
 .pytest_cache/
+data/
 AGENTS.md
 __pycache__/
 *.pyc
