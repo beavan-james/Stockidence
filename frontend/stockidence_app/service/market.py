@@ -63,6 +63,45 @@ def _num(value) -> float | None:
         return None
 
 
+def get_quote(ticker: str) -> dict | None:
+    """Latest Finnhub quote for a ticker from the raw cache (TTL ~1 min).
+
+    Returns None when the warehouse is absent or the ticker has no quote row.
+    The raw key is the ticker only, so every landing replaces the previous
+    quote — no history is kept in the raw layer.
+    """
+    rows = _read(
+        """
+        SELECT json_extract_string(payload, '$.c'),
+               json_extract_string(payload, '$.h'),
+               json_extract_string(payload, '$.l'),
+               json_extract_string(payload, '$.o'),
+               json_extract_string(payload, '$.pc'),
+               json_extract_string(payload, '$.t')
+        FROM raw.raw_quotes
+        WHERE ticker = ?
+        """,
+        [ticker.upper()],
+    )
+    if not rows or not rows[0][0]:
+        return None
+    c, h, l, o, pc, t = rows[0]
+    ts = None
+    if t:
+        try:
+            ts = datetime.fromtimestamp(int(t), tz=timezone.utc).isoformat()
+        except (ValueError, OSError):
+            ts = None
+    return {
+        "price": _num(c),
+        "high": _num(h),
+        "low": _num(l),
+        "open": _num(o),
+        "prev_close": _num(pc),
+        "as_of": ts,
+    }
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -117,8 +156,10 @@ def get_commodities() -> list[dict]:
     """Spot prices for gold and silver, in USD, from the raw cache."""
     rows = _read(
         """
-        SELECT nominal, json_extract_string(payload, '$.date'),
-               json_extract_string(payload, '$.price')
+        SELECT nominal,
+               json_extract_string(payload, '$.date'),
+               COALESCE(json_extract_string(payload, '$.price'),
+                        json_extract_string(payload, '$.value'))
         FROM (SELECT nominal, payload, ROW_NUMBER() OVER (PARTITION BY nominal ORDER BY date DESC) rn
               FROM raw.raw_commodities) WHERE rn = 1
         """
@@ -183,23 +224,30 @@ def _decorate(rows: list[dict]) -> list[dict]:
     for row in rows:
         signed = str(row["change_percentage"]).rstrip("%").replace("−", "-")
         volume = row.get("volume")
+        amount = _num(row["change_amount"])
+        pct = _num(signed)
         out.append({
             **row,
-            "is_gain": "-" not in signed,
+            "is_gain": signed != "" and "-" not in signed,
             "volume_display": f"{int(float(volume)):,}" if volume else None,
-            "change_display": f"{row['change_amount']} ({row['change_percentage']})",
+            "change_display": (
+                f"{amount:+.2f} ({pct:+.2f}%)"
+                if amount is not None and pct is not None
+                else f"{row['change_amount']} ({row['change_percentage']})"
+            ),
         })
     return out
 
 
-def get_ipo_calendar() -> list[dict]:
-    """Upcoming and recently priced IPOs on US exchanges."""
+def get_ipo_calendar(limit: int = 10) -> list[dict]:
+    """Upcoming and recently priced IPOs on US exchanges (up to `limit` rows)."""
     rows = _read(
         """
         SELECT payload FROM raw.raw_ipo_calendar
         WHERE date >= current_date - INTERVAL 7 DAY
-        ORDER BY date ASC LIMIT 10
-        """
+        ORDER BY date ASC LIMIT ?
+        """,
+        [limit],
     )
     if not rows:
         return _DEMO_IPO
@@ -231,14 +279,15 @@ def _fmt_int(v) -> str | None:
         return str(v) if v else None
 
 
-def get_earnings_calendar() -> list[dict]:
-    """Upcoming earnings releases with consensus estimates."""
+def get_earnings_calendar(limit: int = 10) -> list[dict]:
+    """Upcoming earnings releases with consensus estimates (up to `limit` rows)."""
     rows = _read(
         """
         SELECT payload FROM raw.raw_earnings_calendar
         WHERE CAST(json_extract_string(payload, '$.date') AS DATE) >= current_date
-        ORDER BY json_extract_string(payload, '$.date') ASC LIMIT 10
-        """
+        ORDER BY json_extract_string(payload, '$.date') ASC LIMIT ?
+        """,
+        [limit],
     )
     if not rows:
         return _DEMO_EARNINGS
@@ -275,11 +324,15 @@ def _fmt_money(v) -> str | None:
 
 
 def get_market_news() -> list[dict]:
-    """Market-wide news items with sentiment labels."""
+    """Market-wide news items with sentiment labels.
+
+    Capped at 1000 — the daily pipeline fetch size — so on-demand paging in
+    the UI has a real window to move through without re-hitting the API.
+    """
     rows = _read(
         """
         SELECT payload FROM raw.raw_news_articles
-        ORDER BY (payload->>'time_published') DESC LIMIT 12
+        ORDER BY (payload->>'time_published') DESC LIMIT 1000
         """
     )
     if not rows:

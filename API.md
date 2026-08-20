@@ -13,7 +13,7 @@ JSON samples are shown as they come back from the provider.
 {
     "meta": {
         "symbol": "AAPL",
-        "interval": "1min",
+        "interval": "1day",
         "currency": "USD",
         "exchange_timezone": "America/New_York",
         "exchange": "NASDAQ",
@@ -22,7 +22,7 @@ JSON samples are shown as they come back from the provider.
     },
     "values": [
         {
-            "datetime": "2021-09-16 15:59:00",
+            "datetime": "2026-08-14 15:59:00",
             "open": "148.73500",
             "high": "148.86000",
             "low": "148.73000",
@@ -527,7 +527,11 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
-### Company News (Finnhub)
+### Company News (Finnhub) (Not in use)
+
+Samples below are the provider shape. No ingestion path exists for company
+news — ticker-level sentiment is built from `News & Sentiments` ticker links
+plus earnings-call transcript tone.
 
 - `category` — News category.
 - `datetime` — Published time in UNIX timestamp.
@@ -560,12 +564,22 @@ JSON samples are shown as they come back from the provider.
 
 ### Earnings Call Transcript (Alpha Vantage)
 
+The client parses the `transcript` array — one row per speaker segment is
+persisted (`raw_transcript_segments`), keyed by `speaker_sequence`.
+
 ```json
 {
-    "speaker": "Olympia McNerney",
-    "title": "Global Head of Investor Relations",
-    "content": "Thank you. I'd like to welcome you to IBM's First Quarter 2024 Earnings Presentation. I'm Olympia McNerney, and I'm here today with Arvind Krishna, IBM's Chairman and Chief Executive Officer; and Jim Kavanaugh, IBM's Senior Vice President and Chief Financial Officer. We'll post today's prepared remarks on the IBM investor website within a couple of hours, and a replay will be available by this time tomorrow. To provide additional information to our investors, our presentation includes certain non-GAAP measures. For example, all of our references to revenue and signings growth are at constant currency. We provided reconciliation charts for these and other non-GAAP financial measures at the end of the presentation, which is posted to our investor website. Finally, some comments made in this presentation may be considered forward-looking under the Private Securities Litigation Reform Act of 1995. These statements involve factors that could cause our actual results to differ materially. Additional information about these factors is included in the company's SEC filings. So with that, I'll turn the call over to Arvind.",
-    "sentiment": "0.6"
+    "symbol": "IBM",
+    "fiscalQuarter": 1,
+    "fiscalYear": 2024,
+    "transcript": [
+        {
+            "speaker": "Olympia McNerney",
+            "title": "Global Head of Investor Relations",
+            "content": "Thank you. I'd like to welcome you to IBM's First Quarter 2024 Earnings Presentation.",
+            "sentiment": "0.6"
+        }
+    ]
 }
 ```
 
@@ -634,6 +648,10 @@ Average true range.
 - `year` — Earnings year.
 
 ### Top Gainers / Losers (Alpha Vantage)
+
+One response per bucket: `top_gainers`, `top_losers`, and `top_most_active`
+(each a list of `{ticker, price, change_amount, change_percentage, volume}`),
+persisted to `raw_gainers_losers` keyed `(ticker, date)`.
 
 ```json
 {
@@ -763,13 +781,20 @@ Consumer price index adjusted real GDP per capita, quarterly.
 
 ```json
 {
-    "nominal": "XAGUSD",
-    "timestamp": "2026-08-15 01:27:49",
-    "price": "64.6941991895"
+    "name": "Silver",
+    "interval": "monthly",
+    "unit": "USD per troy ounce",
+    "data": [
+        {
+            "date": "2026-07-01",
+            "value": "29.15"
+        }
+    ]
 }
 ```
 
-`nominal`: `GOLD` for the gold price, `SILVER` for the silver price. The price is in USD.
+`nominal` is derived from the requested series (`GOLD`/`SILVER`); the pipeline
+normalizes `data` rows into `raw_commodities` keyed `(nominal, date)`.
 
 ## Others
 
@@ -820,7 +845,9 @@ Consumer price index adjusted real GDP per capita, quarterly.
 ]
 ```
 
-### Market Status (Finnhub)
+### Market Status (Finnhub) (Not in use)
+
+Kept as reference; no ingestion path exists yet.
 
 ```json
 {
@@ -833,7 +860,9 @@ Consumer price index adjusted real GDP per capita, quarterly.
 }
 ```
 
-### Market Holiday (Finnhub)
+### Market Holiday (Finnhub) (Not in use)
+
+Kept as reference; no ingestion path exists yet.
 
 ```json
 {

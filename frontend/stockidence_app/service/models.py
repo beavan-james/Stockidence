@@ -22,10 +22,9 @@ class HoldingStyle(StrEnum):
 class ScoreCategory(StrEnum):
     VALUATION = "valuation"
     TREND = "trend"
-    MOMENTUM = "momentum"
-    VOLATILITY = "volatility"
     MOAT = "moat"
     SENTIMENT = "sentiment"
+    VOLATILITY = "volatility"
 
 
 @dataclass(frozen=True)
@@ -36,6 +35,24 @@ class CategoryScore:
 
     def to_dict(self) -> dict:
         return {"category": self.category.value, "score": round(self.score, 1), "weight": round(self.weight, 3)}
+
+
+@dataclass(frozen=True)
+class ComponentScore:
+    category: ScoreCategory
+    component: str
+    score: float
+    weight: float
+    source: str
+
+    def to_dict(self) -> dict:
+        return {
+            "category": self.category.value,
+            "component": self.component,
+            "score": round(self.score, 1),
+            "weight": round(self.weight, 3),
+            "source": self.source,
+        }
 
 
 @dataclass(frozen=True)
@@ -61,7 +78,11 @@ class Rating:
     advice: Advice
     volatility_score: float
     categories: tuple[CategoryScore, ...] = field(default_factory=tuple)
+    components: tuple[ComponentScore, ...] = field(default_factory=tuple)
     buy_plan: BuyPlan | None = None
+    logo_url: str | None = None
+    fair_value: float | None = None
+    target_price: float | None = None
     source: str = "demo"
 
     def to_dict(self) -> dict:
@@ -73,6 +94,10 @@ class Rating:
             "advice": self.advice.value,
             "volatility_score": round(self.volatility_score, 1),
             "categories": [c.to_dict() for c in self.categories],
+            "components": [c.to_dict() for c in self.components],
             "buy_plan": self.buy_plan.to_dict() if self.buy_plan else None,
+            "logo_url": self.logo_url,
+            "fair_value": round(self.fair_value, 2) if self.fair_value else None,
+            "target_price": round(self.target_price, 2) if self.target_price else None,
             "source": self.source,
         }

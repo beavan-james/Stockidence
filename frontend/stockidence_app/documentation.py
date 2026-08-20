@@ -1,8 +1,10 @@
-"""Documentation — README, MODEL, and API reference rendered as markdown tabs."""
+"""Documentation — README, MODEL, API, and architecture rendered as markdown tabs."""
 
 from pathlib import Path
 
 import reflex as rx
+
+from .components import section_header
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -12,6 +14,12 @@ DOCS = [
         "value": "readme",
         "file": "README.md",
         "description": "Project overview, data sources, and architecture decisions.",
+    },
+    {
+        "label": "ARCHITECTURE",
+        "value": "architecture",
+        "file": "ARCHITECTURE.md",
+        "description": "Layered warehouse design, incremental loads, and orchestration.",
     },
     {
         "label": "MODEL",
@@ -39,19 +47,10 @@ def _load_markdown(filename: str) -> str:
 def documentation() -> rx.Component:
     return rx.vstack(
         rx.vstack(
-            rx.icon("book_open", size=28, color=rx.color("iris", 9)),
-            rx.heading(
+            section_header(
+                "book_open",
                 "Documentation",
-                size="7",
-                weight="bold",
-                letter_spacing="-0.02em",
-            ),
-            rx.text(
-                "Everything behind the rating — how the pipeline works, how the model scores, and what data feeds it.",
-                size="3",
-                color=rx.color("slate", 10),
-                text_align="center",
-                max_width="36em",
+                "How the pipeline works, how the model scores, and what data feeds it.",
             ),
             rx.tabs.root(
                 rx.tabs.list(

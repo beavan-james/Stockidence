@@ -38,6 +38,7 @@ def test_valid_ticker_returns_rating(monkeypatch):
     assert 0 <= rating["confidence_score"] <= 100
     assert 0 <= rating["volatility_score"] <= 100
     assert len(rating["categories"]) == 4
+    assert len(rating["components"]) > 0
     assert rating["source"] == "demo"
 
 
@@ -97,3 +98,79 @@ def test_warehouse_fallback_when_db_missing(monkeypatch):
     monkeypatch.setenv("STOCKIDENCE_DB", "/nonexistent/path/to.duckdb")
     rating = rating_service.get_rating("META")
     assert rating["source"] == "demo"
+
+
+def _build_stale_db(tmp_path, as_of) -> str:
+    """Warehouse with one AAPL snapshot at a given age."""
+    import duckdb
+
+    db = tmp_path / "stale.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute("CREATE SCHEMA mart")
+    con.execute("CREATE SCHEMA control")
+    con.execute(
+        "CREATE TABLE mart.confidence_ratings "
+        "(ticker VARCHAR, company_name VARCHAR, logo VARCHAR, as_of TIMESTAMPTZ, "
+        " confidence_score DOUBLE, advice VARCHAR, volatility_score DOUBLE, "
+        " fair_value DOUBLE, target_price DOUBLE)"
+    )
+    con.execute(
+        "CREATE TABLE mart.category_scores "
+        "(ticker VARCHAR, as_of TIMESTAMPTZ, category VARCHAR, score DOUBLE, weight DOUBLE)"
+    )
+    con.execute(
+        "CREATE TABLE mart.buy_plans "
+        "(ticker VARCHAR, as_of TIMESTAMPTZ, advised_buy_price DOUBLE, stop_loss_price DOUBLE, holding_style VARCHAR)"
+    )
+    con.execute(
+        "CREATE TABLE mart.rating_components "
+        "(ticker VARCHAR, as_of TIMESTAMPTZ, category VARCHAR, component VARCHAR, score DOUBLE, weight DOUBLE, source VARCHAR)"
+    )
+    con.execute(
+        "CREATE TABLE control.ticker_requests "
+        "(ticker VARCHAR NOT NULL, requested_at TIMESTAMPTZ NOT NULL, "
+        " status VARCHAR NOT NULL DEFAULT 'pending', PRIMARY KEY (ticker))"
+    )
+    con.execute(
+        "INSERT INTO mart.confidence_ratings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ["AAPL", "Apple Inc.", None, as_of, 82.0, "STRONG_BUY", 22.0, 245.0, 269.5],
+    )
+    con.execute(
+        "INSERT INTO mart.category_scores VALUES (?, ?, ?, ?, ?)",
+        ["AAPL", as_of, "valuation", 85.0, 0.52],
+    )
+    con.close()
+    return str(db)
+
+
+def test_stale_snapshot_served_and_requeued(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    old = datetime.now(timezone.utc) - timedelta(days=2)
+    monkeypatch.setenv("STOCKIDENCE_DB", _build_stale_db(tmp_path, old))
+    rating = rating_service.get_rating("AAPL")
+    assert rating["source"] == "refreshing"
+    assert rating["confidence_score"] == 82.0  # stale numbers still shown
+
+    import duckdb
+
+    con = duckdb.connect(str(tmp_path / "stale.duckdb"), read_only=True)
+    row = con.execute("SELECT ticker, status FROM control.ticker_requests").fetchone()
+    con.close()
+    assert row == ("AAPL", "pending")
+
+
+def test_fresh_snapshot_not_requeued(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    recent = datetime.now(timezone.utc) - timedelta(hours=2)
+    monkeypatch.setenv("STOCKIDENCE_DB", _build_stale_db(tmp_path, recent))
+    rating = rating_service.get_rating("AAPL")
+    assert rating["source"] == "warehouse"
+
+    import duckdb
+
+    con = duckdb.connect(str(tmp_path / "stale.duckdb"), read_only=True)
+    count = con.execute("SELECT count(*) FROM control.ticker_requests").fetchone()[0]
+    con.close()
+    assert count == 0

@@ -27,51 +27,47 @@
 | Moat      | 6%     |
 ---
 ## API's
+_(Marked "(not used)" when the endpoint has no ingestion path; see API.md for samples.)_
+
 ### Valuation API's
-**Daily**
-**Weekly**
-**Monthly**
-**Company Overview**
-**Income Statement**
-**Balance Sheet**
-**Cash Flow**
-**Earnings Estimate**
 **EPS Surprises**
 **Basic Financials**
 **Financials As Reported**
-**Time Series**
-**Company Profile 2**
+**Earnings Calendar** (forward EPS estimates)
+**Time Series** (Twelve Data, daily bars → P/E history)
+**Company Profile 2** (share count)
+**Company Overview** (not used — AV premium/free tier, replaced by Finnhub basic financials)
+**Daily** (not used)
+**Weekly** (not used)
+**Monthly** (not used)
+**Income Statement** (not used — replaced by Financials As Reported XBRL)
+**Balance Sheet** (not used — replaced by Financials As Reported XBRL)
+**Cash Flow** (not used — replaced by Financials As Reported XBRL)
+**Earnings Estimate** (not used — forward EPS read from the earnings calendar)
 
 ### Trend API's
-**Company Overview** (use data from valuation call)
 **Insider Sentiment**
-**Daily**
-**Weekly**
-**Monthly**
-**SMA**
-**EMA**
-**STOCH**
-**RSI**
-**ADX**
-**CCI**
-**AD**
-**OBV**
+**Technical indicators (SMA, EMA, STOCH, RSI, ADX, CCI, AD, OBV)** (derived in mart from daily bars, not API calls)
+**Daily** (not used)
+**Weekly** (not used)
+**Monthly** (not used)
+**Company Overview** (not used)
 
 ### Sentiment API's
-**Company Overview** (use data from valuation call)
 **News & Sentiments**
-**Company News** (Currently unused in purely deterministic model, but could be used for LLM layer)
-**Insider Sentiment** (Use data from trend call)
+**Insider Sentiment** (use data from trend call)
 **Recommendation Trends**
 **Earnings Call Transcript**
+**Company News** (not used in purely deterministic model, but could be used for LLM layer)
+**Company Overview** (not used)
 
 ### Moat API's
 **Peers**
+**Basic Financials** (margins, ROE/ROA from the valuation call)
 
 ### Volatility API's
-**Advanced Analytics (e.g., total return, variance, auto-correlation, etc.)**
-**BBANDS**
-**ATR**
+**Beta** (Basic Financials)
+**Advanced Analytics / BBANDS / ATR** (derived in mart from daily bars, not API calls)
 
 ---
 ## Scoring
@@ -164,22 +160,22 @@ Volatility bands → holding-style advice (provisional):
 
 ### Fair Value Methodology
 
-Fair value = blended DCF + comparables. Shown to the user; feeds the Valuation score and the target price. All inputs deterministic, from fields in API.md Valuation Metrics. Assumptions are config-driven, never hardcoded.
+Fair value = blended DCF + comparables. Shown to the user; feeds the Valuation score and the target price. All inputs deterministic. Assumptions are centralized constants (fair-value config lives in the scoring module — provisional, not locked until backtested).
 
 **DCF leg (50%):**
-1. Trailing owner FCF = OperatingCashFlow − CapEx (Cash Flow, TTM).
-2. Stage-1 growth g = forward EPS growth from Earnings Estimate (cap config, e.g. 20%); terminal growth g_ter = 2% (config).
+1. Trailing owner FCF = OperatingCashFlow − CapEx (Financials As Reported XBRL concepts, TTM).
+2. Stage-1 growth g = forward EPS growth (forward estimate from the earnings calendar annualized ×4; fallback to trailing EPS growth from EPS Surprises actuals, then to a proxy) (cap config, e.g. 20%); terminal growth g_ter = 2% (config).
 3. Discount rate r = CAPM: risk-free (config, ~4%) + Beta × market premium (config, 5%). WACC proxies initially.
 4. Firm value = Σ FCF·(1+g)^t/(1+r)^t over 5yr + terminal value / (1+r)^5; TV = FCF₅·(1+g_ter)/(r − g_ter).
-5. Equity value = firm value − net debt (Balance Sheet). Per-share = equity / shares outstanding (Company Overview SharesOutstanding).
+5. Equity value = firm value − net debt (Balance Sheet concepts from Financials As Reported). Per-share = equity / shares outstanding (Company Profile 2 `shareOutstanding`).
 
 **Comparables leg (50%):** "Comparable" = the company against its **own 3-5yr historical median multiples** (this repo's sources don't give a clean peer universe; Peers-based multiples are an optional later enrichment).
-1. P/E: historical median P/E × forward EPS (Earnings Estimate)
-2. EV/EBITDA: historical median EV/EBITDA × forward EBITDA (Income Statement)
-3. P/S: historical median P/S × revenue per share
+1. P/E: historical median P/E × forward EPS (forward estimate from earnings calendar)
+2. EV/EBITDA: historical median EV/EBITDA × forward EBITDA (Basic Financials metrics)
+3. P/S: historical median P/S × revenue per share (Basic Financials)
 Fair value(comps) = mean of the three (nulls dropped), outliers clamped.
 
-**Blend:** fair value = 0.5 × DCF + 0.5 × comps. Sanity clamp vs 52-week range (52WeekHigh/Low) — never more than X× from current price (config).
+**Blend:** fair value = 0.5 × DCF + 0.5 × comps. Sanity clamp vs 52-week range (52-week high/low from Basic Financials) — never more than X× from current price (config).
 
 ### Target Pricing Methodology
 
@@ -189,7 +185,7 @@ Target price = **forward fair value** — fair value grown at expected 12-month 
 target = fairValue × (1 + g_fwd)
 ```
 
-`g_fwd` = forward EPS growth (Earnings Estimate), clamped to a config range (e.g. −20%..+30%). The **confidence rating** judges the gap between current price and *fair value*; the **target price** is the 12-month horizon expectation shown alongside the rating.
+`g_fwd` = forward EPS growth (earnings-calendar estimate or trailing-EPS fallback), clamped to a config range (e.g. −20%..+30%). The **confidence rating** judges the gap between current price and *fair value*; the **target price** is the 12-month horizon expectation shown alongside the rating.
 
 ### Advised Buy Price, Stop-Loss & Holding Style (Buy/Strong Buy only)
 

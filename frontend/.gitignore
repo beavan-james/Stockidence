@@ -4,4 +4,4 @@ __pycache__/
 *.py[cod]
 *.db
 .states
-tests/
+tests/__pycache__/

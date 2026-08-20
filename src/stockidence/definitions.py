@@ -57,16 +57,18 @@ def engine_resource() -> IngestEngine:
 
 
 def _make_cadence_job(cadence: Cadence):
-    names = [spec.name for spec in scheduled_endpoints() if spec.cadence == cadence]
+    names = [spec.name for spec in scheduled_endpoints()
+             if spec.cadence == cadence]
     if not names:
         return None
 
     @op(name=f"ingest_{cadence.value}_op", required_resource_keys={"engine"})
-    def ingest_cadence(ctx) -> None:
-        engine = ctx.resources.engine
+    def ingest_cadence(context) -> None:
+        engine = context.resources.engine
         for name in names:
             result = engine.ingest_scheduled(name, now=_now())
-            ctx.log.info(f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
+            context.log.info(
+                f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
 
     @job(name=f"{cadence.value}_ingest")
     def cadence_job():
@@ -127,11 +129,13 @@ def ticker_data(context: AssetExecutionContext) -> None:
                     [ticker],
                 ).fetchone()
             if latest is None:
-                context.log.info(f"[{ticker}] no earnings period on record; skipping transcript")
+                context.log.info(
+                    f"[{ticker}] no earnings period on record; skipping transcript")
                 continue
             dimension = f"{ticker}|{latest[1]}|{latest[0]}"
         result = engine.ingest_on_demand(endpoint, dimension, now=_now())
-        context.log.info(f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
+        context.log.info(
+            f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
 
 
 def stage_ticker_runs(warehouse: Warehouse, instance) -> list[str]:
@@ -161,16 +165,22 @@ def _derived_asset(name: str, rebuild: Any, deps: AssetSelection | list | object
         deps=deps,
     )
     def _asset(context: AssetExecutionContext) -> None:
-        rows = rebuild(context.resources.engine.warehouse, context.partition_key)
-        context.log.info(f"[derived:{name}:{context.partition_key}] rebuilt {rows} rows")
+        rows = rebuild(context.resources.engine.warehouse,
+                       context.partition_key)
+        context.log.info(
+            f"[derived:{name}:{context.partition_key}] rebuilt {rows} rows")
 
     return _asset
 
 
-stg_prices_daily = _derived_asset("stg_prices_daily", rebuild_prices_daily, deps=[ticker_data])
-m_prices_weekly = _derived_asset("m_prices_weekly", rebuild_prices_weekly, deps=[stg_prices_daily])
-m_prices_monthly = _derived_asset("m_prices_monthly", rebuild_prices_monthly, deps=[stg_prices_daily])
-m_advanced_analytics = _derived_asset("m_advanced_analytics", rebuild_advanced_analytics, deps=[stg_prices_daily])
+stg_prices_daily = _derived_asset(
+    "stg_prices_daily", rebuild_prices_daily, deps=[ticker_data])
+m_prices_weekly = _derived_asset(
+    "m_prices_weekly", rebuild_prices_weekly, deps=[stg_prices_daily])
+m_prices_monthly = _derived_asset(
+    "m_prices_monthly", rebuild_prices_monthly, deps=[stg_prices_daily])
+m_advanced_analytics = _derived_asset(
+    "m_advanced_analytics", rebuild_advanced_analytics, deps=[stg_prices_daily])
 m_technical_indicators = _derived_asset(
     "m_technical_indicators", rebuild_technical_indicators, deps=[stg_prices_daily]
 )
@@ -201,6 +211,7 @@ def ticker_score(context: AssetExecutionContext) -> None:
         "m_advanced_analytics", "m_technical_indicators", "ticker_score",
     ),
     minimum_interval_seconds=30,
+    required_resource_keys={"engine"},
     description=(
         "Polls control.ticker_requests (written by the frontend), adds a dynamic "
         "ticker partition, and materializes ticker_data so the staleness gate can "
@@ -208,11 +219,19 @@ def ticker_score(context: AssetExecutionContext) -> None:
     ),
 )
 def ticker_request_sensor(context) -> None:
-    """Event-driven on-demand ingestion: request queue -> partition -> run."""
+    """Event-driven on-demand ingestion: request queue -> partition -> run.
+
+    No run_key: the queue's pending -> launched transition is the dedup
+    mechanism. A stable run_key here would block re-requests forever after
+    the first run for a ticker (even a failed one), since the daemon skips
+    run_keys it has already seen - a user re-searching a ticker would
+    silently trigger nothing.
+    """
     warehouse = context.resources.engine.warehouse
     for ticker in stage_ticker_runs(warehouse, context.instance):
-        context.log.info(f"[request:{ticker}] launching ticker_data materialization")
-        yield RunRequest(run_key=f"ticker_request_{ticker}", partition_key=ticker)
+        context.log.info(
+            f"[request:{ticker}] launching ticker_data materialization")
+        yield RunRequest(partition_key=ticker)
 
 
 defs = Definitions(

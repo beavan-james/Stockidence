@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -179,10 +180,31 @@ class Warehouse:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path else Path(DEFAULT_DB_PATH)
 
-    def connect(self, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    def connect(
+        self,
+        read_only: bool = False,
+        *,
+        max_attempts: int = 40,
+        base_delay: float = 0.2,
+    ) -> duckdb.DuckDBPyConnection:
+        """Open a connection to the DuckDB file.
+
+        DuckDB allows a single writer process per file. Parallel Dagster steps
+        (and the frontend) all funnel through this store, so a write-open can
+        transiently hit "Could not set lock on file" while a sibling step
+        holds the write lock. Reading never contends; write-opens retry with
+        backoff until the lock frees instead of crashing the run.
+        """
         if read_only:
             return duckdb.connect(str(self.path), read_only=True)
-        return duckdb.connect(str(self.path))
+        last_error: Exception | None = None
+        for attempt in range(max_attempts):
+            try:
+                return duckdb.connect(str(self.path))
+            except duckdb.IOException as exc:  # lock held by another process
+                last_error = exc
+                time.sleep(base_delay * (attempt + 1))
+        raise last_error or RuntimeError("warehouse connect failed")
 
     def init_schema(self) -> None:
         """Idempotent bootstrap of schemas, raw tables, and watermarks."""
@@ -269,14 +291,18 @@ class Warehouse:
                 CREATE OR REPLACE VIEW mart.confidence_ratings AS
                 SELECT cr.ticker,
                        COALESCE(p.company_name, cr.ticker) AS company_name,
+                       p.logo,
                        cr.computed_at AS as_of,
                        cr.confidence_score,
                        UPPER(cr.rating) AS advice,
-                       cr.volatility_score
+                       cr.volatility_score,
+                       cr.fair_value,
+                       cr.target_price
                 FROM mart.m_confidence_ratings cr
                 LEFT JOIN (
                     SELECT ticker,
-                           json_extract_string(payload, '$.name') AS company_name
+                           json_extract_string(payload, '$.name') AS company_name,
+                           json_extract_string(payload, '$.logo') AS logo
                     FROM raw.raw_company_profile
                 ) p USING (ticker)
                 """
@@ -302,6 +328,42 @@ class Warehouse:
                 CREATE OR REPLACE VIEW mart.ticker_request_status AS
                 SELECT ticker, requested_at, status
                 FROM control.ticker_requests
+                """
+            )
+            # Model category weights for the confidence blend — provisional
+            # per MODEL.md, held in the warehouse so the frontend never
+            # hardcodes the scoring spec.
+            con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
+            con.execute(
+                """
+                INSERT INTO mart.model_weights (category, weight) VALUES
+                    ('valuation', 0.52), ('trend', 0.21), ('sentiment', 0.21), ('moat', 0.06)
+                ON CONFLICT (category) DO UPDATE SET weight = excluded.weight
+                """
+            )
+            # Category-level contract for the rating breakdown: one row per
+            # (ticker, category) with the confidence blend's category weight —
+            # NOT the component rows (which carry within-category sub-weights).
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.category_scores AS
+                SELECT cr.ticker, cr.computed_at AS as_of,
+                       c.category,
+                       CAST(CASE c.category
+                           WHEN 'valuation' THEN cr.valuation_score
+                           WHEN 'trend'     THEN cr.trend_score
+                           WHEN 'sentiment' THEN cr.sentiment_score
+                           WHEN 'moat'      THEN cr.moat_score
+                       END AS DOUBLE) AS score,
+                       COALESCE(w.weight, 0) AS weight
+                FROM mart.m_confidence_ratings cr
+                CROSS JOIN (
+                    SELECT 'valuation' AS category
+                    UNION ALL SELECT 'trend'
+                    UNION ALL SELECT 'sentiment'
+                    UNION ALL SELECT 'moat'
+                ) c
+                LEFT JOIN mart.model_weights w USING (category)
                 """
             )
 
