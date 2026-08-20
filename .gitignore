@@ -5,4 +5,8 @@ FutureAdditions.md
 .venv
 tests/
 .pytest_cache/
+data/
 AGENTS.md
+__pycache__/
+*.pyc
+.tmp_dagster_home_4brykzw1/

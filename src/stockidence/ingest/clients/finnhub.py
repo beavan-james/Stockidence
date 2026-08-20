@@ -13,12 +13,19 @@ from .base import APIError, BaseClient, InvalidResponseError, build_query
 
 class FinnhubClient(BaseClient):
     def __init__(self, *, api_key: str | None = None, timeout: float = 30.0, **kwargs: Any) -> None:
-        from ..config import load_settings
+        from ...config import load_settings
 
-        key: str = api_key or load_settings().finnhub_api_key
+        settings = load_settings()
+        key: str = api_key or settings.finnhub_api_key
         if not key:
             raise ValueError("FINNHUB_API_KEY is not set")
-        super().__init__(api_key=key, base_url="https://finnhub.io/api/v1", timeout=timeout, **kwargs)
+        super().__init__(
+            api_key=key,
+            base_url="https://finnhub.io/api/v1",
+            timeout=timeout,
+            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["finnhub"]),
+            **kwargs,
+        )
 
     def _default_headers(self) -> dict[str, str]:
         return {
@@ -47,23 +54,27 @@ class FinnhubClient(BaseClient):
         return self._query("/stock/profile2", symbol=symbol)
 
     def basic_financials(self, symbol: str, *, metric: str = "all") -> dict[str, Any]:
-        return self._query("/stock/metrics", symbol=symbol, metric=metric)
+        return self._query("/stock/metric", symbol=symbol, metric=metric)
 
     def financials_reported(self, symbol: str, *, freq: str = "annual") -> dict[str, Any]:
         return self._query("/stock/financials-reported", symbol=symbol, freq=freq)
 
     def eps_surprises(self, symbol: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        payload = self.request("GET", "/stock/eps-surprises", params=build_query({"symbol": symbol, "limit": limit}))
-        self._raise_for_api_error(payload, path="/stock/eps-surprises")
+        payload = self.request("GET", "/stock/earnings", params=build_query({"symbol": symbol, "limit": limit}))
+        self._raise_for_api_error(payload, path="/stock/earnings")
         if not isinstance(payload, list):
-            raise InvalidResponseError("/stock/eps-surprises: expected array")
+            raise InvalidResponseError("/stock/earnings: expected array")
         return payload
 
     def insider_sentiment(self, symbol: str, *, from_date: str, to_date: str) -> dict[str, Any]:
         return self._query("/stock/insider-sentiment", **{"symbol": symbol, "from": from_date, "to": to_date})
 
-    def recommendation_trends(self, symbol: str) -> dict[str, Any]:
-        return self._query("/stock/recommendation-trends", symbol=symbol)
+    def recommendation_trends(self, symbol: str) -> list[dict[str, Any]]:
+        payload = self.request("GET", "/stock/recommendation", params=build_query({"symbol": symbol}))
+        self._raise_for_api_error(payload, path="/stock/recommendation")
+        if not isinstance(payload, list):
+            raise InvalidResponseError("/stock/recommendation: expected array")
+        return payload
 
     def peers(self, symbol: str) -> list[str]:
         payload = self.request("GET", "/stock/peers", params=build_query({"symbol": symbol}))

@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,10 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_news_articles": [("article_id", "VARCHAR")],
     "news_ticker_sentiment": [("article_id", "VARCHAR"), ("ticker", "VARCHAR")],
     "raw_company_profile": [("ticker", "VARCHAR")],
-    "raw_basic_financials": [("ticker", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER")],
+    # /stock/metrics lands one row PER metric per period: the metric is part
+    # of the natural grain, otherwise rows in the same (quarter, year) would
+    # clobber each other on the PK.
+    "raw_basic_financials": [("ticker", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER"), ("metric", "VARCHAR")],
     "raw_financials_reported": [
         ("ticker", "VARCHAR"),
         ("quarter", "INTEGER"),
@@ -76,6 +79,100 @@ def make_dimension_key(values: dict[str, Any], order: tuple[str, ...]) -> str:
     return "|".join(str(values[k]) for k in order)
 
 
+# staging-derived tables: registry derivations land here (stg_*). Staging is
+# cleaning only — typed, deduped, validated. Unlike raw tables (whose dicts
+# ARE the natural keys), STAGING_SCHEMA lists the full column layout — the PK
+# is the (ticker, date) grain, kept separate below so rebuilds can legally
+# write NULLs (first-bar returns).
+STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
+    "stg_prices_daily": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("volume", "DOUBLE"), ("return_1d", "DOUBLE"),
+    ],
+}
+
+
+# mart tables: aggregations and derivations the scoring layer reads — resampled
+# OHLCV, technical indicators, rolling/advanced analytics. Keyed (ticker, date);
+# rebuilt per ticker, never appended.
+MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
+    "m_prices_weekly": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("volume", "DOUBLE"),
+    ],
+    "m_prices_monthly": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("volume", "DOUBLE"),
+    ],
+    "m_technical_indicators": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("sma_20", "DOUBLE"), ("sma_50", "DOUBLE"), ("sma_200", "DOUBLE"),
+        ("ema_12", "DOUBLE"), ("ema_26", "DOUBLE"),
+        ("macd", "DOUBLE"), ("macd_signal", "DOUBLE"), ("macd_hist", "DOUBLE"),
+        ("rsi_14", "DOUBLE"), ("atr_14", "DOUBLE"), ("adx_14", "DOUBLE"),
+        ("plus_di_14", "DOUBLE"), ("minus_di_14", "DOUBLE"),
+        ("stoch_k_14", "DOUBLE"), ("stoch_d_14", "DOUBLE"), ("cci_20", "DOUBLE"),
+        ("ad", "DOUBLE"), ("obv", "DOUBLE"),
+        ("bb_upper_20", "DOUBLE"), ("bb_mid_20", "DOUBLE"), ("bb_lower_20", "DOUBLE"),
+    ],
+    "m_advanced_analytics": [
+        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("close", "DOUBLE"),
+        ("min_252", "DOUBLE"), ("max_252", "DOUBLE"), ("mean_252", "DOUBLE"),
+        ("stddev_252", "DOUBLE"), ("variance_252", "DOUBLE"), ("max_drawdown_252", "DOUBLE"),
+        ("min_all", "DOUBLE"), ("max_all", "DOUBLE"), ("mean_all", "DOUBLE"),
+    ],
+}
+
+
+# mart snapshot tables: one row per ticker, latest run wins (like the
+# company-profile raw table). Written by the scoring asset on every ticker
+# score; `computed_at` stamps the run for the frontend. m_rating_components
+# is keyed per (ticker, category, component) — one run replaces a ticker's
+# whole component set, so the key just needs to pin one row per component.
+MART_SNAPSHOT_SCHEMA: dict[str, list[tuple[str, str]]] = {
+    "m_confidence_ratings": [
+        ("ticker", "VARCHAR"),
+        ("computed_at", "TIMESTAMPTZ"),
+        ("confidence_score", "DOUBLE"),
+        ("rating", "VARCHAR"),
+        ("valuation_score", "DOUBLE"),
+        ("trend_score", "DOUBLE"),
+        ("sentiment_score", "DOUBLE"),
+        ("moat_score", "DOUBLE"),
+        ("volatility_score", "DOUBLE"),
+        ("fair_value", "DOUBLE"),
+        ("target_price", "DOUBLE"),
+        ("valuation_override_applied", "BOOLEAN"),
+    ],
+    "m_rating_components": [
+        ("ticker", "VARCHAR"),
+        ("computed_at", "TIMESTAMPTZ"),
+        ("category", "VARCHAR"),
+        ("component", "VARCHAR"),
+        ("value", "DOUBLE"),
+        ("weight", "DOUBLE"),
+        ("source", "VARCHAR"),
+    ],
+    "m_buy_plans": [
+        ("ticker", "VARCHAR"),
+        ("computed_at", "TIMESTAMPTZ"),
+        ("advised_buy_price", "DOUBLE"),
+        ("stop_loss", "DOUBLE"),
+        ("holding_style", "VARCHAR"),
+    ],
+}
+
+
+def _json_default(value: Any) -> str:
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 class Warehouse:
     """DuckDB store for the pipeline. All writes funnel through here."""
 
@@ -103,6 +200,16 @@ class Warehouse:
                 )
                 """
             )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS control.ticker_requests (
+                    ticker       VARCHAR NOT NULL,
+                    requested_at TIMESTAMPTZ NOT NULL,
+                    status       VARCHAR NOT NULL DEFAULT 'pending',
+                    PRIMARY KEY (ticker)
+                )
+                """
+            )
             for table, keys in RAW_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 pk = ", ".join(f'"{name}"' for name, _ in keys)
@@ -116,6 +223,87 @@ class Warehouse:
                     )
                     """
                 )
+            for table, keys in STAGING_SCHEMA.items():
+                cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
+                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                con.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS staging."{table}" (
+                        {cols},
+                        PRIMARY KEY ({pk})
+                    )
+                    """
+                )
+            for table, keys in MART_SCHEMA.items():
+                cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
+                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                con.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS mart."{table}" (
+                        {cols},
+                        PRIMARY KEY ({pk})
+                    )
+                    """
+                )
+            for table, keys in MART_SNAPSHOT_SCHEMA.items():
+                if table == "m_rating_components":
+                    pk = ", ".join(f'"{name}"' for name in ("ticker", "category", "component"))
+                else:
+                    pk = "ticker"
+                cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
+                con.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS mart."{table}" (
+                        {cols},
+                        PRIMARY KEY ({pk})
+                    )
+                    """
+                )
+            # Presentation views over the mart snapshots: the documented
+            # frontend contract (as_of/company_name mapped from the raw
+            # profile snapshot, advice aliasing the rating label, and the
+            # buy-plan column name from the README). The m_* tables stay the
+            # storage layer; these views are the read API for the UI.
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.confidence_ratings AS
+                SELECT cr.ticker,
+                       COALESCE(p.company_name, cr.ticker) AS company_name,
+                       cr.computed_at AS as_of,
+                       cr.confidence_score,
+                       UPPER(cr.rating) AS advice,
+                       cr.volatility_score
+                FROM mart.m_confidence_ratings cr
+                LEFT JOIN (
+                    SELECT ticker,
+                           json_extract_string(payload, '$.name') AS company_name
+                    FROM raw.raw_company_profile
+                ) p USING (ticker)
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.rating_components AS
+                SELECT ticker, computed_at AS as_of, category, component,
+                       value AS score, weight, source
+                FROM mart.m_rating_components
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.buy_plans AS
+                SELECT ticker, computed_at AS as_of, advised_buy_price,
+                       stop_loss AS stop_loss_price, holding_style
+                FROM mart.m_buy_plans
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.ticker_request_status AS
+                SELECT ticker, requested_at, status
+                FROM control.ticker_requests
+                """
+            )
 
     def land(
         self,
@@ -144,13 +332,14 @@ class Warehouse:
                 if missing:
                     raise KeyError(f"{artifact}: rows missing key columns {missing}")
                 values = [row[k] for k in keys]
+                payload_json = row.get("payload", row)
                 con.execute(
                     f"""
                     INSERT INTO raw."{artifact}" ({', '.join(f'"{k}"' for k in keys)}, payload, fetched_at)
                     VALUES ({', '.join('?' for _ in keys)}, CAST(? AS JSON), ?)
                     ON CONFLICT ({pk}) DO UPDATE SET {set_cols}
                     """,
-                    [*values, json.dumps(row), fetched_at],
+                    [*values, json.dumps(payload_json, default=_json_default), fetched_at],
                 )
                 written += 1
 
@@ -221,4 +410,49 @@ class Warehouse:
                               high_watermark = COALESCE(excluded.high_watermark, control.watermarks.high_watermark)
                 """,
                 [endpoint, dimension_key, fetched_at, high_watermark],
+            )
+
+    # --- ticker request queue (frontend -> Dagster sensor) ---
+
+    def request_ticker(self, ticker: str, *, requested_at: datetime | None = None) -> None:
+        """Queue a ticker lookup request; re-requesting resets it to pending.
+
+        The frontend writes here (control metadata, exempt from the
+        single-writer rule); the Dagster sensor consumes the queue.
+        """
+        requested_at = requested_at or datetime.now(timezone.utc)
+        with self.connect() as con:
+            con.execute(
+                """
+                INSERT INTO control.ticker_requests (ticker, requested_at, status)
+                VALUES (?, ?, 'pending')
+                ON CONFLICT (ticker)
+                DO UPDATE SET requested_at = excluded.requested_at,
+                              status = 'pending'
+                """,
+                [ticker, requested_at],
+            )
+
+    def pending_ticker_requests(self) -> list[str]:
+        with self.connect(read_only=True) as con:
+            rows = con.execute(
+                """
+                SELECT ticker FROM control.ticker_requests
+                WHERE status = 'pending'
+                ORDER BY requested_at
+                """
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def mark_ticker_requests_launched(self, tickers: list[str]) -> None:
+        if not tickers:
+            return
+        with self.connect() as con:
+            con.execute(
+                """
+                UPDATE control.ticker_requests
+                SET status = 'launched'
+                WHERE ticker = ANY(?)
+                """,
+                [tickers],
             )

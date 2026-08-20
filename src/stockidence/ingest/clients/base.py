@@ -40,12 +40,25 @@ class BaseClient:
         timeout: float = 30.0,
         retries: int = 2,
         backoff_seconds: float = 1.0,
+        min_interval_seconds: float = 0.0,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url
         self.timeout = timeout
         self.retries = retries
         self.backoff_seconds = backoff_seconds
+        self.min_interval_seconds = min_interval_seconds
+        self._last_call_at = 0.0
+
+    def _pace(self) -> None:
+        """Enforce a per-provider minimum interval between calls (free-tier
+        limits are coarser than HTTP 429 handling can paper over)."""
+        if self.min_interval_seconds <= 0:
+            return
+        wait = self.min_interval_seconds - (time.monotonic() - self._last_call_at)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_call_at = time.monotonic()
 
     def request(
         self,
@@ -76,6 +89,7 @@ class BaseClient:
         json_body: dict[str, Any] | None,
         headers: dict[str, str] | None,
     ) -> Any:
+        self._pace()
         url = f"{self.base_url}{path}"
         final_headers = {**self._default_headers(), **(headers or {})}
         resp = httpx.request(
@@ -85,6 +99,7 @@ class BaseClient:
             json=json_body,
             headers=final_headers,
             timeout=self.timeout,
+            follow_redirects=True,
         )
         self._raise_for_status(resp)
         return self._parse(resp)

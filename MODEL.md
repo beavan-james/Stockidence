@@ -116,7 +116,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Sub-score                   | Sources                            | Direction (positive = buy-friendly)                                    | Weight |
 | --------------------------- | ---------------------------------- | ---------------------------------------------------------------------- | ------ |
 | Price vs SMA50/SMA200       | SMA, Company Overview (50/200DMA)  | price > SMA → +; golden/death cross alignment                          | 30%    |
-| MACD (derived in staging)   | EMA12/EMA26 from Daily             | MACD > signal + histogram expanding → +                               | 20%    |
+| MACD (derived in mart)   | EMA12/EMA26 from Daily             | MACD > signal + histogram expanding → +                               | 20%    |
 | ADX trend strength +DI/-DI  | ADX                                | ADX > 25 and +DI > -DI → strong uptrend → +                          | 15%    |
 | RSI momentum/entry          | RSI                                | 30-50 in uptrend → 70+, > 70 overbought → 20-30 (mean-reverting)      | 15%    |
 | Stochastic + CCI            | STOCH, CCI                         | 20-40 rising → +; > 80 → -                                           | 10%    |

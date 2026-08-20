@@ -23,6 +23,8 @@ class ScoreCategory(StrEnum):
     VALUATION = "valuation"
     TREND = "trend"
     MOMENTUM = "momentum"
+    VOLATILITY = "volatility"
+    MOAT = "moat"
     SENTIMENT = "sentiment"
 
 

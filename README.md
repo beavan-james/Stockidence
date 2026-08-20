@@ -45,7 +45,7 @@ The full endpoint list — grouped by the scoring category each feeds — is in
 [`API.md`](API.md).
 
 > **Exception:** MACD is Premium-tier on Alpha Vantage, so it is **derived
-> manually in the staging layer** from EMA12/EMA26, never pulled from the
+> manually in the pipeline (mart layer)** from EMA12/EMA26, never pulled from the
 > indicator endpoint. Technical indicators and volatility analytics are
 > computed in-Dagster from raw price bars as pure derivations, not API calls.
 

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
-from stockidence.endpoints import (
+from .endpoints import (
     Cadence,
     EndpointSpec,
     Provider,
@@ -31,7 +31,7 @@ from stockidence.endpoints import (
     Trigger,
     get_endpoint,
 )
-from stockidence.storage import Warehouse, Watermark
+from ..storage import RAW_SCHEMA, Warehouse, Watermark
 
 # Filing-report grace: how long after a fiscal period ends we expect the
 # report to exist before we consider our copy behind. 10-Ks are due ~60-75
@@ -169,14 +169,15 @@ class StalenessGate:
             return now
         return datetime.now(timezone.utc)
 
-    def should_fetch(self, endpoint_name: str, dimension_key: str, now: datetime | None = None) -> FetchDecision:
-        """Decide whether (endpoint, dimension) needs a fresh API call."""
-        spec = REGISTRY.get(endpoint_name) or get_endpoint(endpoint_name)
-        if spec.provider == Provider.DERIVED:
-            return decide(spec, None, self._now_utc(now))
-        now_dt = self._now_utc(now or self._now)
-
+    def _should_fetch(
+        self,
+        spec: EndpointSpec,
+        dimension_key: str,
+        now_dt: datetime,
+    ) -> FetchDecision:
         watermark = self.warehouse.get_watermark(f"raw.{spec.artifacts[0]}", dimension_key)
+        if watermark is None:
+            watermark = self._grain_watermark(spec, dimension_key)
         if spec.cadence == Cadence.CONDITIONAL:
             check = CONDITIONAL_CHECKS.get(spec.name)
             if check is None:
@@ -184,3 +185,38 @@ class StalenessGate:
             conditional_fetch = True if watermark is None else check(self.warehouse, dimension_key, now_dt)
             return decide(spec, watermark, now_dt, conditional_fetch=conditional_fetch)
         return decide(spec, watermark, now_dt)
+
+    def _grain_watermark(self, spec: EndpointSpec, dimension_key: str) -> Watermark | None:
+        """Synthetic watermark from raw-row presence when dimension is a full grain.
+
+        Watermarks are stored at dimension (ticker) granularity, but some
+        endpoints — earnings_call_transcript — are requested at full grain,
+        e.g. "AAPL|4|2026". For those, fall back to "do rows exist at this
+        grain" so an immutable transcript is not refetched because its coarse
+        watermark is shared with other quarters.
+        """
+        parts = dimension_key.split("|")
+        if len(parts) < 2:
+            return None
+        cols = [name for name, _ in RAW_SCHEMA[spec.artifacts[0]]]
+        prefix = cols[: len(parts)]
+        conds = " AND ".join(f'"{c}" = ?' for c in prefix)
+        with self.warehouse.connect(read_only=True) as con:
+            row = con.execute(
+                f"SELECT COUNT(*), MAX(fetched_at) FROM raw.\"{spec.artifacts[0]}\" WHERE {conds}",
+                parts,
+            ).fetchone()
+        if row[0] == 0:
+            return None
+        fetched_at = row[1]
+        if fetched_at is None or fetched_at.tzinfo is None:
+            fetched_at = (fetched_at or datetime.now(timezone.utc)).replace(tzinfo=timezone.utc)
+        return Watermark(spec.name, dimension_key, fetched_at)
+
+    def should_fetch(self, endpoint_name: str, dimension_key: str, now: datetime | None = None) -> FetchDecision:
+        """Decide whether (endpoint, dimension) needs a fresh API call."""
+        spec = REGISTRY.get(endpoint_name) or get_endpoint(endpoint_name)
+        if spec.provider == Provider.DERIVED:
+            return decide(spec, None, self._now_utc(now))
+        now_dt = self._now_utc(now or self._now)
+        return self._should_fetch(spec, dimension_key, now_dt)
