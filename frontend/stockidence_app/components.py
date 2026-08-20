@@ -357,9 +357,9 @@ def stock_header() -> rx.Component:
     return rx.vstack(
         rx.hstack(
             rx.cond(
-                RatingState.logo_url != "",
+                RatingState.logo_display_url != "",
                 rx.image(
-                    src=RatingState.logo_url,
+                    src=RatingState.logo_display_url,
                     alt=f"{RatingState.result_ticker} logo",
                     height="40px",
                     width="40px",
@@ -380,14 +380,14 @@ def stock_header() -> rx.Component:
                     rx.hstack(
                         rx.icon("banknote", size=12),
                         rx.text(
-                            f"${RatingState.quote['price']:,.2f}",
+                            RatingState.quote["price_text"],
                             size="2",
                             weight="bold",
                         ),
                         rx.cond(
-                            RatingState.quote["change_pct"] != None,
+                            RatingState.quote["change_pct_text"] != None,
                             rx.text(
-                                f"{RatingState.quote['change_pct']:+.2f}%",
+                                RatingState.quote["change_pct_text"],
                                 size="1",
                                 color=RatingState.quote["change_color"],
                             ),
@@ -477,6 +477,10 @@ def snowflake_chart() -> rx.Component:
             rx.recharts.polar_angle_axis(
                 data_key="label",
                 tick={"font_size": 12, "fill": rx.color("slate", 10)},
+            ),
+            rx.recharts.polar_radius_axis(
+                domain=[0, 100],
+                tick={"font_size": 10, "fill": rx.color("slate", 9)},
             ),
             rx.recharts.radar(
                 data_key="score",
@@ -793,36 +797,30 @@ def result_section() -> rx.Component:
     return rx.vstack(
         stock_header(),
         the_big_picture(),
-        rx.grid(
-            breakdown_card(),
+        price_reference_card(),
+        breakdown_card(),
+        rx.cond(
+            RatingState.is_buy,
+            buy_plan_card(RatingState.buy_plan),
             rx.cond(
-                RatingState.is_buy,
-                buy_plan_card(RatingState.buy_plan),
-                rx.cond(
-                    RatingState.has_sub_scores,
-                    sub_score_card(),
-                    rx.card(
-                        rx.vstack(
-                            rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
-                            rx.text(
-                                "Volatility is reported as a separate score and is not blended into the confidence rating.",
-                                size="2",
-                                color=rx.color("slate", 10),
-                            ),
-                            align="center",
-                            spacing="2",
+                RatingState.has_sub_scores,
+                sub_score_card(),
+                rx.card(
+                    rx.vstack(
+                        rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
+                        rx.text(
+                            "Volatility is reported as a separate score and is not blended into the confidence rating.",
+                            size="2",
+                            color=rx.color("slate", 10),
                         ),
-                        width="100%",
-                        padding=BODY_CARD_PADDING,
+                        align="center",
+                        spacing="2",
                     ),
+                    width="100%",
+                    padding=BODY_CARD_PADDING,
                 ),
             ),
-            columns=rx.breakpoints(initial="1", md="2"),
-            spacing="4",
-            align="start",
-            width="100%",
         ),
-        price_reference_card(),
         width="100%",
         spacing="4",
         align="start",
@@ -1119,6 +1117,57 @@ def main_panel() -> rx.Component:
     )
 
 
+def computing_card() -> rx.Component:
+    step = lambda text: rx.hstack(
+        rx.spinner(size="1", color=rx.color("iris", 9)),
+        rx.text(text, size="2", color=rx.color("slate", 11)),
+        spacing="2",
+        align="center",
+    )
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.icon("loader_circle", size=22, color=rx.color("iris", 9)),
+                rx.heading(
+                    f"Computing a rating for {RatingState.ticker}",
+                    size="4",
+                    weight="bold",
+                ),
+                spacing="2",
+                align="center",
+                width="100%",
+            ),
+            rx.text(
+                "The pipeline was queued. Steps being run in the warehouse:",
+                size="1",
+                color=rx.color("slate", 9),
+                width="100%",
+            ),
+            rx.vstack(
+                step("Fetching quote, profile, and fundamentals"),
+                step("Deriving indicators and technical context"),
+                step("Scoring valuation, trend, sentiment, moat"),
+                step("Writing the mart snapshot"),
+                align="start",
+                width="100%",
+                spacing="2",
+            ),
+            rx.text(
+                "This page refreshes once the rating lands. If the warehouse is offline, "
+                "a deterministic demo rating is shown instead.",
+                size="1",
+                color=rx.color("slate", 10),
+                width="100%",
+            ),
+            align="start",
+            width="100%",
+            spacing="3",
+        ),
+        width="100%",
+        padding=BODY_CARD_PADDING,
+    )
+
+
 def profile_panel() -> rx.Component:
     return rx.vstack(
         rx.link(
@@ -1138,35 +1187,7 @@ def profile_panel() -> rx.Component:
             rx.cond(
                 RatingState.error != "",
                 error_callout(),
-                rx.vstack(
-                    rx.heading(
-                        f"Analyzing {RatingState.ticker}…",
-                        size="6",
-                        weight="bold",
-                        letter_spacing="-0.02em",
-                    ),
-                    rx.text(
-                        "Pulling ratings inputs from the warehouse mart.",
-                        size="2",
-                        color=rx.color("slate", 10),
-                    ),
-                    rx.hstack(
-                        rx.spinner(
-                            size="3",
-                            color=rx.color("iris", 9),
-                        ),
-                        rx.text(
-                            "Scoring valuation, trend, sentiment, moat",
-                            size="2",
-                            color=rx.color("slate", 9),
-                        ),
-                        spacing="2",
-                        align="center",
-                    ),
-                    align="start",
-                    spacing="3",
-                    width="100%",
-                ),
+                computing_card(),
             ),
         ),
         spacing="4",
@@ -1522,48 +1543,98 @@ def earnings_row(item: rx.Var) -> rx.Component:
     )
 
 
+def limit_select(
+    value: rx.Var,
+    on_change,
+) -> rx.Component:
+    return rx.hstack(
+        rx.text("Show", size="1", color=rx.color("slate", 9)),
+        rx.select(
+            ["5", "10", "15", "25"],
+            value=value,
+            on_change=on_change,
+            size="1",
+            width="72px",
+        ),
+        spacing="1",
+        align="center",
+    )
+
+
 def discover_panel() -> rx.Component:
     return rx.vstack(
-        rx.vstack(
-            rx.icon("compass", size=28, color=rx.color("iris", 9)),
-            rx.heading(
-                "Discover",
-                size="7",
-                weight="bold",
-                letter_spacing="-0.02em",
-            ),
-            rx.text(
-                "Market movers, earnings, IPOs, and the sentiment driving the headlines.",
-                size="3",
-                color=rx.color("slate", 10),
-            ),
-            spacing="3",
-            align="center",
-            padding_y="4",
+        section_header(
+            "compass",
+            "Discover",
+            "Market movers, news sentiment, and upcoming listings — each section is capped with a results toggle.",
         ),
         rx.vstack(
             section_header(
                 "trending_up",
                 "Top gainers / losers",
-                "Biggest movers and most active symbols in the last session.",
+                "Biggest movers in the last session.",
+            ),
+            rx.hstack(
+                limit_select(RatingState.movers_limit, RatingState.set_movers_limit),
+                align="center",
+                justify="end",
+                width="100%",
             ),
             rx.grid(
                 movers_table("Top gainers", RatingState.top_gainers),
                 movers_table("Top losers", RatingState.top_losers),
-                movers_table("Most active", RatingState.most_active),
-                columns=rx.breakpoints(initial="1", md="3"),
+                columns=rx.breakpoints(initial="1", md="2"),
                 spacing="4",
                 width="100%",
             ),
             align="stretch",
             width="100%",
-            spacing="4",
+            spacing="3",
         ),
         rx.vstack(
             section_header(
                 "newspaper",
                 "News & sentiment",
                 "Headlines with Finnhub-style sentiment labels.",
+            ),
+            rx.hstack(
+                rx.input(
+                    placeholder="Filter by ticker…",
+                    value=RatingState.news_ticker_query,
+                    on_change=RatingState.update_news_ticker,
+                    size="1",
+                    variant="soft",
+                    width="180px",
+                ),
+                rx.hstack(
+                    rx.icon_button(
+                        rx.icon("chevron_left", size=14),
+                        title="Previous page",
+                        variant="soft",
+                        size="1",
+                        disabled=RatingState.news_page <= 1,
+                        on_click=RatingState.news_prev_page,
+                    ),
+                    rx.text(
+                        f"Page {RatingState.news_page} / {RatingState.news_page_count}",
+                        size="1",
+                        color=rx.color("slate", 10),
+                    ),
+                    rx.icon_button(
+                        rx.icon("chevron_right", size=14),
+                        title="Next page",
+                        variant="soft",
+                        size="1",
+                        disabled=RatingState.news_page >= RatingState.news_page_count,
+                        on_click=RatingState.news_next_page,
+                    ),
+                    spacing="1",
+                    align="center",
+                ),
+                limit_select(RatingState.news_limit, RatingState.set_news_limit),
+                justify="between",
+                width="100%",
+                align="center",
             ),
             rx.foreach(RatingState.market_news, news_card),
             align="stretch",
@@ -1575,6 +1646,12 @@ def discover_panel() -> rx.Component:
                 "calendar_days",
                 "Market Calendars",
                 "Upcoming IPOs and earnings with consensus estimates.",
+            ),
+            rx.hstack(
+                limit_select(RatingState.calendar_limit, RatingState.set_calendar_limit),
+                align="center",
+                justify="end",
+                width="100%",
             ),
             rx.grid(
                 rx.card(

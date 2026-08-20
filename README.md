@@ -1,5 +1,5 @@
 # Stockidence — Stock Confidence Rating Pipeline
-
+--- 
 ## What this is
 
 A **stock confidence rating pipeline**. The scoring logic is
@@ -15,7 +15,7 @@ ticker:
 - a **separate volatility score**
 - for buy-rated tickers: an **advised buy price**, **stop-loss price**, and
   **holding-style advice** (long-term hold / swing trade / day trade)
-
+---
 ## How it's built
 
 - **On-demand, not a fixed watchlist.** Users enter any ticker at request time.
@@ -31,16 +31,17 @@ ticker:
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full data flow.
 
+---
 ## Data Sources
 
 Sources are deliberately limited to free tiers — rate limits are a problem the
 caching layer exists to solve, not a problem to buy around.
 
-| Source        | Used for                                                                  |
-| ------------- | ------------------------------------------------------------------------- |
-| **Finnhub**   | Company profile 2, basic & as-reported financials, EPS surprises, insider sentiment, recommendation trends, peers, IPO & earnings calendars, quote, stock symbol listing |
-| **Twelve Data** | Price time series (`interval=1day`, split-adjusted); weekly/monthly are resampled downstream in the warehouse, not fetched |
-| **Alpha Vantage** | Market news & sentiment, top gainers/losers, earnings call transcript, macro indicators (inflation, CPI, unemployment, fed funds, natural gas, real GDP), commodities (gold/silver) |
+| Source            | Used for                                                                                                                                                                            | Reference |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **Finnhub**       | Company profile 2, basic & as-reported financials, EPS surprises, insider sentiment, recommendation trends, peers, IPO & earnings calendars, quote, stock symbol listing            |    [Finnhub API Documentation](https://finnhub.io/docs/api/introduction)     |
+| **Twelve Data**   | Price time series (`interval=1day`, split-adjusted); weekly/monthly are resampled downstream in the warehouse, not fetched                                                          |    [Twelve Data API Documentation ](https://twelvedata.com/docs/introduction/overview)      |
+| **Alpha Vantage** | Market news & sentiment, top gainers/losers, earnings call transcript, macro indicators (inflation, CPI, unemployment, fed funds, natural gas, real GDP), commodities (gold/silver) |     [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/)      |
 
 The full endpoint list — grouped by the scoring category each feeds — is in
 [`API.md`](API.md).
@@ -50,6 +51,7 @@ The full endpoint list — grouped by the scoring category each feeds — is in
 > indicator endpoint. Technical indicators and volatility analytics are
 > computed in-Dagster from raw price bars as pure derivations, not API calls.
 
+---
 ## Scoring Model
 
 Deterministic, rule-based, weighted formula — no ML/LLM in the core score.
@@ -60,6 +62,7 @@ volatility is a separate output, not blended in). See
 An LLM layer may be added *on top of* the deterministic score later for
 narrative analysis — it will never replace or obscure the deterministic core.
 
+---
 ## Cadence is heterogeneous by design
 
 - **Near-real-time:** Finnhub quote (cache TTL ~1 min)
@@ -70,6 +73,7 @@ narrative analysis — it will never replace or obscure the deterministic core.
 
 Cadence is heterogeneous primarily to avoid hitting API rate limits specifically with Alpha Vantage, which has a very limited free tier API limit.
 
+---
 ## Docs
 
 | Doc              | What it covers                                        |

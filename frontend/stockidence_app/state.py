@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 
 import reflex as rx
@@ -52,6 +53,12 @@ class RatingState(rx.State):
     ticker_search: str = ""
     ticker_suggestions: list[dict] = []
 
+    movers_limit: str = "5"
+    news_limit: str = "5"
+    news_ticker_query: str = ""
+    news_page: int = 1
+    calendar_limit: str = "5"
+
     lists_json: str = rx.LocalStorage("[]", name=LISTS_STORAGE_KEY, sync=True)
     active_list: str = ""
     renaming_list: str = ""
@@ -101,14 +108,24 @@ class RatingState(rx.State):
         if not self.result_ticker:
             return {}
         quote = market.get_quote(self.result_ticker) or {}
-        if quote.get("price") is not None and quote.get("prev_close"):
-            quote["change_pct"] = (
-                (quote["price"] - quote["prev_close"]) / quote["prev_close"] * 100.0
-            )
-            quote["change_color"] = (
-                "green" if quote["change_pct"] >= 0 else "red"
-            )
+        if quote.get("price") is not None:
+            quote["price_text"] = f"${quote['price']:,.2f}"
+            if quote.get("prev_close"):
+                change_pct = (
+                    (quote["price"] - quote["prev_close"]) / quote["prev_close"] * 100.0
+                )
+                quote["change_pct"] = change_pct
+                quote["change_pct_text"] = f"{change_pct:+.2f}%"
+                quote["change_color"] = (
+                    "green" if change_pct >= 0 else "red"
+                )
         return quote
+
+    @rx.var
+    def logo_display_url(self) -> str:
+        if self.logo_url:
+            return self.logo_url
+        return market.get_company_logo(self.result_ticker)
 
     @rx.var
     def macro_metrics(self) -> list[dict]:
@@ -124,27 +141,45 @@ class RatingState(rx.State):
 
     @rx.var
     def top_gainers(self) -> list[dict]:
-        return self.market_movers.get("top_gainers", [])
+        return self.market_movers.get("top_gainers", [])[: int(self.movers_limit)]
 
     @rx.var
     def top_losers(self) -> list[dict]:
-        return self.market_movers.get("top_losers", [])
-
-    @rx.var
-    def most_active(self) -> list[dict]:
-        return self.market_movers.get("most_actively_traded", [])
+        return self.market_movers.get("top_losers", [])[: int(self.movers_limit)]
 
     @rx.var
     def ipo_calendar(self) -> list[dict]:
-        return market.get_ipo_calendar()
+        return market.get_ipo_calendar()[: int(self.calendar_limit)]
 
     @rx.var
     def earnings_calendar(self) -> list[dict]:
-        return market.get_earnings_calendar()
+        return market.get_earnings_calendar()[: int(self.calendar_limit)]
+
+    def _filtered_news(self) -> list[dict]:
+        news = market.get_market_news()
+        query = self.news_ticker_query.strip().upper()
+        if query:
+            news = [
+                n for n in news
+                if query in (n.get("sentiment_tickers") or "").upper()
+            ]
+        return news
+
+    @rx.var
+    def news_all(self) -> list[dict]:
+        return self._filtered_news()
+
+    @rx.var
+    def news_page_count(self) -> int:
+        limit = int(self.news_limit)
+        return max(1, math.ceil(len(self.news_all) / limit))
 
     @rx.var
     def market_news(self) -> list[dict]:
-        return market.get_market_news()
+        news = self.news_all
+        limit = int(self.news_limit)
+        start = (max(self.news_page, 1) - 1) * limit
+        return news[start : start + limit]
 
     def _parse_lists(self) -> list[dict]:
         try:
@@ -264,6 +299,34 @@ class RatingState(rx.State):
             self.ticker_suggestions = []
             return
         self.ticker_suggestions = warehouse.search_tickers(raw)
+
+    @rx.event
+    def update_news_ticker(self, raw: str):
+        self.news_ticker_query = raw
+        self.news_page = 1
+
+    @rx.event
+    def news_prev_page(self):
+        if self.news_page > 1:
+            self.news_page -= 1
+
+    @rx.event
+    def news_next_page(self):
+        if self.news_page < self.news_page_count:
+            self.news_page += 1
+
+    @rx.event
+    def set_movers_limit(self, raw: str):
+        self.movers_limit = raw
+
+    @rx.event
+    def set_news_limit(self, raw: str):
+        self.news_limit = raw
+        self.news_page = 1
+
+    @rx.event
+    def set_calendar_limit(self, raw: str):
+        self.calendar_limit = raw
 
     @rx.event
     def select_ticker(self, ticker: str):

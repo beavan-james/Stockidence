@@ -82,7 +82,7 @@ class AlphaVantageClient(BaseClient):
     # -- daily persistent --
 
     def market_news(self, *, tickers: str | None = None, time_from: str | None = None,
-                    time_to: str | None = None, limit: int | None = 100,
+                    time_to: str | None = None, limit: int | None = 1000,
                     sort: str = "LATEST") -> dict[str, Any]:
         return self._query(
             "NEWS_SENTIMENT",

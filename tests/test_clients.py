@@ -58,7 +58,7 @@ class TestAlphaVantage:
         def handler(request: httpx.Request) -> httpx.Response:
             assert request.url.params.get("function") == "NEWS_SENTIMENT"
             assert request.url.params.get("tickers") == "AAPL,MSFT"
-            assert request.url.params.get("limit") == "100"
+            assert request.url.params.get("limit") == "1000"
             return httpx.Response(200, json={"feed": []})
 
         client = _client(monkeypatch, AlphaVantageClient, handler)

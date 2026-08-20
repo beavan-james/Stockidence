@@ -102,6 +102,25 @@ def get_quote(ticker: str) -> dict | None:
     }
 
 
+def get_company_logo(ticker: str) -> str:
+    """Company logo URL from the raw profile cache; '' when absent.
+
+    Used as a fallback so any ticker with a fetched profile shows its logo
+    even when its rating came from the demo path.
+    """
+    rows = _read(
+        """
+        SELECT json_extract_string(payload, '$.logo')
+        FROM raw.raw_company_profile
+        WHERE ticker = ?
+        """,
+        [ticker.upper()],
+    )
+    if not rows or not rows[0][0]:
+        return ""
+    return rows[0][0]
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -156,8 +175,10 @@ def get_commodities() -> list[dict]:
     """Spot prices for gold and silver, in USD, from the raw cache."""
     rows = _read(
         """
-        SELECT nominal, json_extract_string(payload, '$.date'),
-               json_extract_string(payload, '$.value')
+        SELECT nominal,
+               json_extract_string(payload, '$.date'),
+               COALESCE(json_extract_string(payload, '$.price'),
+                        json_extract_string(payload, '$.value'))
         FROM (SELECT nominal, payload, ROW_NUMBER() OVER (PARTITION BY nominal ORDER BY date DESC) rn
               FROM raw.raw_commodities) WHERE rn = 1
         """
@@ -222,11 +243,17 @@ def _decorate(rows: list[dict]) -> list[dict]:
     for row in rows:
         signed = str(row["change_percentage"]).rstrip("%").replace("−", "-")
         volume = row.get("volume")
+        amount = _num(row["change_amount"])
+        pct = _num(signed)
         out.append({
             **row,
-            "is_gain": "-" not in signed,
+            "is_gain": signed != "" and "-" not in signed,
             "volume_display": f"{int(float(volume)):,}" if volume else None,
-            "change_display": f"{row['change_amount']} ({row['change_percentage']})",
+            "change_display": (
+                f"{amount:+.2f} ({pct:+.2f}%)"
+                if amount is not None and pct is not None
+                else f"{row['change_amount']} ({row['change_percentage']})"
+            ),
         })
     return out
 
@@ -314,11 +341,15 @@ def _fmt_money(v) -> str | None:
 
 
 def get_market_news() -> list[dict]:
-    """Market-wide news items with sentiment labels."""
+    """Market-wide news items with sentiment labels.
+
+    Capped at 1000 — the daily pipeline fetch size — so on-demand paging in
+    the UI has a real window to move through without re-hitting the API.
+    """
     rows = _read(
         """
         SELECT payload FROM raw.raw_news_articles
-        ORDER BY (payload->>'time_published') DESC LIMIT 12
+        ORDER BY (payload->>'time_published') DESC LIMIT 1000
         """
     )
     if not rows:

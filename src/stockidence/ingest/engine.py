@@ -101,7 +101,7 @@ class IngestEngine:
                 "from_date": f"{now.year}-01-01",
                 "to_date": now.date().isoformat(),
             },
-            "market_news": {"limit": 100, "sort": "LATEST"},
+            "market_news": {"limit": 1000, "sort": "LATEST"},
         }
         if spec.name == "earnings_call_transcript":
             parts = dimension_key.split("|")
