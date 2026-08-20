@@ -24,7 +24,7 @@ class RatingState(rx.State):
     snowflake_data: list[dict] = [
         {"label": "Valuation", "score": 0},
         {"label": "Trend", "score": 0},
-        {"label": "Momentum", "score": 0},
+        {"label": "Moat", "score": 0},
         {"label": "Sentiment", "score": 0},
     ]
     buy_plan: dict = {}
@@ -254,7 +254,8 @@ class RatingState(rx.State):
         labels = {
             "valuation": "Valuation",
             "trend": "Trend",
-            "momentum": "Momentum",
+            "moat": "Moat",
+            "volatility": "Volatility",
             "sentiment": "Sentiment",
         }
         self.category_rows = [

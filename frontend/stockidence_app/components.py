@@ -176,25 +176,25 @@ def hero() -> rx.Component:
         rx.grid(
             rx.vstack(
                 rx.heading("Valuation", size="2", weight="bold"),
-                rx.text("40% weight", size="1", color=rx.color("slate", 10)),
+                rx.text("52% weight", size="1", color=rx.color("slate", 10)),
                 align="center",
                 spacing="1",
             ),
             rx.vstack(
                 rx.heading("Trend", size="2", weight="bold"),
-                rx.text("25% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Momentum", size="2", weight="bold"),
-                rx.text("15% weight", size="1", color=rx.color("slate", 10)),
+                rx.text("21% weight", size="1", color=rx.color("slate", 10)),
                 align="center",
                 spacing="1",
             ),
             rx.vstack(
                 rx.heading("Sentiment", size="2", weight="bold"),
-                rx.text("20% weight", size="1", color=rx.color("slate", 10)),
+                rx.text("21% weight", size="1", color=rx.color("slate", 10)),
+                align="center",
+                spacing="1",
+            ),
+            rx.vstack(
+                rx.heading("Moat", size="2", weight="bold"),
+                rx.text("6% weight", size="1", color=rx.color("slate", 10)),
                 align="center",
                 spacing="1",
             ),
@@ -278,11 +278,13 @@ def source_badge() -> rx.Component:
         rx.match(
             RatingState.source,
             ("warehouse", "Warehouse data"),
+            ("pending", "Computing…"),
             "Demo sample",
         ),
         color_scheme=rx.match(
             RatingState.source,
             ("warehouse", "blue"),
+            ("pending", "violet"),
             "amber",
         ),
         size="2",
@@ -895,7 +897,7 @@ def profile_panel() -> rx.Component:
                             color=rx.color("iris", 9),
                         ),
                         rx.text(
-                            "Scoring valuation, trend, momentum, sentiment",
+                            "Scoring valuation, trend, sentiment, moat",
                             size="2",
                             color=rx.color("slate", 9),
                         ),

@@ -259,6 +259,51 @@ class Warehouse:
                     )
                     """
                 )
+            # Presentation views over the mart snapshots: the documented
+            # frontend contract (as_of/company_name mapped from the raw
+            # profile snapshot, advice aliasing the rating label, and the
+            # buy-plan column name from the README). The m_* tables stay the
+            # storage layer; these views are the read API for the UI.
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.confidence_ratings AS
+                SELECT cr.ticker,
+                       COALESCE(p.company_name, cr.ticker) AS company_name,
+                       cr.computed_at AS as_of,
+                       cr.confidence_score,
+                       UPPER(cr.rating) AS advice,
+                       cr.volatility_score
+                FROM mart.m_confidence_ratings cr
+                LEFT JOIN (
+                    SELECT ticker,
+                           json_extract_string(payload, '$.name') AS company_name
+                    FROM raw.raw_company_profile
+                ) p USING (ticker)
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.rating_components AS
+                SELECT ticker, computed_at AS as_of, category, component,
+                       value AS score, weight, source
+                FROM mart.m_rating_components
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.buy_plans AS
+                SELECT ticker, computed_at AS as_of, advised_buy_price,
+                       stop_loss AS stop_loss_price, holding_style
+                FROM mart.m_buy_plans
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.ticker_request_status AS
+                SELECT ticker, requested_at, status
+                FROM control.ticker_requests
+                """
+            )
 
     def land(
         self,
