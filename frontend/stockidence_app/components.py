@@ -42,6 +42,22 @@ ADVICE_FILLS = {
     "STRONG_SELL": rx.color("red", 8),
 }
 
+CATEGORY_COLORS = {
+    "valuation": rx.color("iris", 9),
+    "trend": rx.color("sky", 9),
+    "sentiment": rx.color("amber", 9),
+    "moat": rx.color("violet", 9),
+    "volatility": rx.color("tomato", 9),
+}
+
+CATEGORY_SCHEMES = {
+    "valuation": "iris",
+    "trend": "sky",
+    "sentiment": "amber",
+    "moat": "violet",
+    "volatility": "tomato",
+}
+
 
 def _advice_color_scheme() -> rx.Var:
     return rx.match(
@@ -216,33 +232,77 @@ def hero() -> rx.Component:
     )
 
 
+def suggestion_row(item: rx.Var) -> rx.Component:
+    return rx.button(
+        rx.hstack(
+            rx.text(item["symbol"], size="2", weight="bold", font_family="monospace"),
+            rx.text(item["description"], size="1", color=rx.color("slate", 10)),
+            width="100%",
+            spacing="2",
+            align="center",
+        ),
+        on_click=RatingState.select_ticker(item["symbol"]),
+        variant="ghost",
+        color_scheme="gray",
+        width="100%",
+        border_radius="6px",
+        padding_x="3",
+        padding_y="2",
+    )
+
+
 def search_form() -> rx.Component:
     return rx.form(
-        rx.hstack(
-            rx.input(
-                placeholder="Search a ticker (e.g. AAPL)",
-                name="ticker",
-                size="2",
-                width="260px",
-                variant="soft",
-                radius="full",
-                padding="3",
-                border=f"1px solid {rx.color('iris', 7)}",
-            ),
-            rx.button(
-                rx.hstack(
-                    rx.icon("search", size=14),
-                    rx.text("Rate it", size="2", weight="medium"),
-                    spacing="1",
+        rx.box(
+            rx.hstack(
+                rx.input(
+                    placeholder="Search a ticker (e.g. AAPL)",
+                    name="ticker",
+                    size="2",
+                    width="260px",
+                    variant="soft",
+                    radius="full",
+                    padding="3",
+                    border=f"1px solid {rx.color('iris', 7)}",
+                    value=RatingState.ticker_search,
+                    on_change=RatingState.update_ticker_search,
                 ),
-                type="submit",
-                size="2",
-                variant="solid",
-                color_scheme="iris",
-                radius="large",
+                rx.button(
+                    rx.hstack(
+                        rx.icon("search", size=14),
+                        rx.text("Rate it", size="2", weight="medium"),
+                        spacing="1",
+                    ),
+                    type="submit",
+                    size="2",
+                    variant="solid",
+                    color_scheme="iris",
+                    radius="large",
+                ),
+                width="auto",
+                spacing="2",
             ),
+            rx.cond(
+                RatingState.ticker_suggestions.length() > 0,
+                rx.box(
+                    rx.foreach(RatingState.ticker_suggestions, suggestion_row),
+                    position="absolute",
+                    top="100%",
+                    left="0",
+                    margin_top="2",
+                    padding_y="1",
+                    background=rx.color("slate", 2),
+                    border=f"1px solid {rx.color('slate', 6)}",
+                    border_radius="12px",
+                    box_shadow="lg",
+                    min_width="340px",
+                    max_height="320px",
+                    overflow_y="auto",
+                    z_index="50",
+                ),
+            ),
+            position="relative",
             width="auto",
-            spacing="2",
         ),
         on_submit=RatingState.submit,
         width="auto",
@@ -296,6 +356,17 @@ def source_badge() -> rx.Component:
 def stock_header() -> rx.Component:
     return rx.vstack(
         rx.hstack(
+            rx.cond(
+                RatingState.logo_url != "",
+                rx.image(
+                    src=RatingState.logo_url,
+                    alt=f"{RatingState.result_ticker} logo",
+                    height="40px",
+                    width="40px",
+                    border_radius="lg",
+                    object_fit="contain",
+                ),
+            ),
             rx.heading(
                 RatingState.result_ticker,
                 size="7",
@@ -303,6 +374,32 @@ def stock_header() -> rx.Component:
                 letter_spacing="-0.02em",
             ),
             source_badge(),
+            rx.cond(
+                RatingState.quote["price"] != None,
+                rx.badge(
+                    rx.hstack(
+                        rx.icon("banknote", size=12),
+                        rx.text(
+                            f"${RatingState.quote['price']:,.2f}",
+                            size="2",
+                            weight="bold",
+                        ),
+                        rx.cond(
+                            RatingState.quote["change_pct"] != None,
+                            rx.text(
+                                f"{RatingState.quote['change_pct']:+.2f}%",
+                                size="1",
+                                color=RatingState.quote["change_color"],
+                            ),
+                        ),
+                        spacing="2",
+                        align="center",
+                    ),
+                    color_scheme="gray",
+                    variant="soft",
+                    radius="full",
+                ),
+            ),
             rx.button(
                 rx.hstack(
                     rx.icon("bookmark_plus", size=14),
@@ -426,6 +523,22 @@ def the_big_picture() -> rx.Component:
     )
 
 
+def _category_fill(color: rx.Var) -> rx.Var:
+    return rx.match(
+        color,
+        *[(slug, c) for slug, c in CATEGORY_COLORS.items()],
+        rx.color("slate", 9),
+    )
+
+
+def _category_scheme(color: rx.Var) -> rx.Var:
+    return rx.match(
+        color,
+        *[(slug, s) for slug, s in CATEGORY_SCHEMES.items()],
+        "gray",
+    )
+
+
 def category_row(item: rx.Var) -> rx.Component:
     return rx.vstack(
         rx.hstack(
@@ -434,17 +547,24 @@ def category_row(item: rx.Var) -> rx.Component:
                     width="10px",
                     height="10px",
                     border_radius="full",
-                    bg=rx.color("iris", 9),
+                    bg=_category_fill(item["color"]),
                 ),
                 rx.text(item["label"], size="3", weight="medium"),
+                rx.text(
+                    item["weight_text"],
+                    size="1",
+                    font_style="italic",
+                    color=rx.color("slate", 9),
+                ),
                 spacing="3",
                 align="center",
             ),
-            rx.text(
+            rx.badge(
                 item["score_text"],
-                size="2",
-                weight="medium",
-                color=rx.color("slate", 10),
+                size="1",
+                variant="soft",
+                radius="full",
+                color_scheme=_category_scheme(item["color"]),
             ),
             width="100%",
             justify="between",
@@ -453,7 +573,7 @@ def category_row(item: rx.Var) -> rx.Component:
             rx.box(
                 width=f"{item['score']}%",
                 height="100%",
-                bg=rx.color("iris", 9),
+                bg=_category_fill(item["color"]),
                 border_radius="full",
             ),
             width="100%",
@@ -471,6 +591,98 @@ def breakdown_card() -> rx.Component:
         rx.vstack(
             rx.heading("Score breakdown", size="5", weight="bold"),
             rx.foreach(RatingState.category_rows, category_row),
+            align="start",
+            width="100%",
+            spacing="4",
+        ),
+        width="100%",
+        padding=BODY_CARD_PADDING,
+    )
+
+
+def sub_score_row(item: rx.Var) -> rx.Component:
+    return rx.vstack(
+        rx.cond(
+            item.show_header,
+            rx.hstack(
+                rx.box(
+                    width="10px",
+                    height="10px",
+                    border_radius="full",
+                    bg=_category_fill(item.color),
+                ),
+                rx.text(
+                    item.category_label,
+                    size="1",
+                    weight="bold",
+                    color=rx.color("slate", 11),
+                    text_transform="uppercase",
+                    letter_spacing="0.05em",
+                ),
+                spacing="2",
+                align="center",
+            ),
+        ),
+        rx.hstack(
+            rx.text(item.label, size="2", weight="medium"),
+            rx.badge(
+                item.score_text,
+                size="1",
+                variant="soft",
+                radius="full",
+                color_scheme=_category_scheme(item.color),
+            ),
+            spacing="3",
+            align="center",
+            width="100%",
+            justify="between",
+        ),
+        rx.box(
+            rx.box(
+                width=f"{item.score}%",
+                height="100%",
+                bg=_category_fill(item.color),
+                border_radius="full",
+            ),
+            width="100%",
+            height="6px",
+            bg=rx.color("slate", 3),
+            border_radius="full",
+        ),
+        rx.hstack(
+            rx.icon("database", size=12, color=rx.color("slate", 9)),
+            rx.text(
+                f"{item.sources} · {item.weight_text}",
+                size="1",
+                color=rx.color("slate", 10),
+            ),
+            spacing="2",
+            align="center",
+        ),
+        rx.text(
+            item.direction,
+            size="1",
+            font_style="italic",
+            color=rx.color("slate", 9),
+        ),
+        rx.separator(width="100%"),
+        align="start",
+        width="100%",
+        spacing="2",
+    )
+
+
+def sub_score_card() -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.heading("Sub-score detail", size="5", weight="bold"),
+            rx.text(
+                "The sub-scores behind each category. Volatility is reported "
+                "as a separate score and is never blended into the rating.",
+                size="1",
+                color=rx.color("slate", 9),
+            ),
+            rx.foreach(RatingState.sub_score_rows, sub_score_row),
             align="start",
             width="100%",
             spacing="4",
@@ -535,6 +747,48 @@ def buy_plan_card(plan: rx.Var) -> rx.Component:
     )
 
 
+def price_reference_card() -> rx.Component:
+    return rx.cond(
+        RatingState.has_fair_value,
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("scale", size=18, color=rx.color("iris", 9)),
+                    rx.heading("Valuation reference", size="4", weight="bold"),
+                    spacing="2",
+                    width="100%",
+                ),
+                rx.text(
+                    "Model fair value and the price target implied by it, computed for every rating.",
+                    size="1",
+                    color=rx.color("slate", 9),
+                ),
+                rx.grid(
+                    rx.vstack(
+                        rx.text("Fair value", size="2", color=rx.color("slate", 10)),
+                        rx.heading(RatingState.fair_value_text, size="6", weight="bold"),
+                        align="start",
+                        spacing="1",
+                    ),
+                    rx.vstack(
+                        rx.text("Target price (12m)", size="2", color=rx.color("slate", 10)),
+                        rx.heading(RatingState.target_price_text, size="6", weight="bold"),
+                        align="start",
+                        spacing="1",
+                    ),
+                    columns=rx.breakpoints(initial="1", md="2"),
+                    spacing="4",
+                    width="100%",
+                ),
+                width="100%",
+                spacing="3",
+            ),
+            width="100%",
+            padding=BODY_CARD_PADDING,
+        ),
+    )
+
+
 def result_section() -> rx.Component:
     return rx.vstack(
         stock_header(),
@@ -544,19 +798,23 @@ def result_section() -> rx.Component:
             rx.cond(
                 RatingState.is_buy,
                 buy_plan_card(RatingState.buy_plan),
-                rx.card(
-                    rx.vstack(
-                        rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
-                        rx.text(
-                            "Volatility is reported as a separate score and is not blended into the confidence rating.",
-                            size="2",
-                            color=rx.color("slate", 10),
+                rx.cond(
+                    RatingState.has_sub_scores,
+                    sub_score_card(),
+                    rx.card(
+                        rx.vstack(
+                            rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
+                            rx.text(
+                                "Volatility is reported as a separate score and is not blended into the confidence rating.",
+                                size="2",
+                                color=rx.color("slate", 10),
+                            ),
+                            align="center",
+                            spacing="2",
                         ),
-                        align="center",
-                        spacing="2",
+                        width="100%",
+                        padding=BODY_CARD_PADDING,
                     ),
-                    width="100%",
-                    padding=BODY_CARD_PADDING,
                 ),
             ),
             columns=rx.breakpoints(initial="1", md="2"),
@@ -564,6 +822,7 @@ def result_section() -> rx.Component:
             align="start",
             width="100%",
         ),
+        price_reference_card(),
         width="100%",
         spacing="4",
         align="start",

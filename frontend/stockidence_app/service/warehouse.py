@@ -4,7 +4,15 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .models import Advice, BuyPlan, CategoryScore, HoldingStyle, Rating, ScoreCategory
+from .models import (
+    Advice,
+    BuyPlan,
+    CategoryScore,
+    ComponentScore,
+    HoldingStyle,
+    Rating,
+    ScoreCategory,
+)
 
 
 def _config_db_path() -> str:
@@ -64,8 +72,8 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
     try:
         row = con.execute(
             """
-            SELECT ticker, company_name, as_of, confidence_score, advice,
-                   volatility_score
+            SELECT ticker, company_name, logo, as_of, confidence_score, advice,
+                   volatility_score, fair_value, target_price
             FROM mart.confidence_ratings
             WHERE ticker = ?
             ORDER BY as_of DESC
@@ -76,7 +84,9 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
         if row is None:
             return None
 
-        ticker, company_name, as_of, confidence, advice, volatility = row
+        ticker, company_name, logo, as_of, confidence, advice, volatility = row[:7]
+        fair_value = row[7] if len(row) > 7 else None
+        target_price = row[8] if len(row) > 8 else None
         if isinstance(as_of, str):
             as_of = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
 
@@ -84,7 +94,7 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
         for r in con.execute(
             """
             SELECT category, score, weight
-            FROM mart.rating_components
+            FROM mart.category_scores
             WHERE ticker = ? AND as_of = ?
             ORDER BY weight DESC
             """,
@@ -94,6 +104,29 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
             if isinstance(cat, str):
                 cat = ScoreCategory(cat)
             categories.append(CategoryScore(category=cat, score=float(score), weight=float(weight)))
+
+        components = []
+        for r in con.execute(
+            """
+            SELECT category, component, score, weight, source
+            FROM mart.rating_components
+            WHERE ticker = ? AND as_of = ?
+            ORDER BY category, weight DESC
+            """,
+            [ticker, as_of.isoformat()],
+        ).fetchall():
+            cat, component, score, weight, source = r
+            if isinstance(cat, str):
+                cat = ScoreCategory(cat)
+            components.append(
+                ComponentScore(
+                    category=cat,
+                    component=component,
+                    score=float(score),
+                    weight=float(weight),
+                    source=source,
+                )
+            )
 
         buy_plan = None
         bp = con.execute(
@@ -121,11 +154,64 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
             advice=Advice(advice),
             volatility_score=float(volatility),
             categories=tuple(categories),
+            components=tuple(components),
             buy_plan=buy_plan,
+            logo_url=logo,
+            fair_value=float(fair_value) if fair_value is not None else None,
+            target_price=float(target_price) if target_price is not None else None,
             source="warehouse",
         )
     except Exception:
         return None
+    finally:
+        con.close()
+
+
+def search_tickers(query: str, limit: int = 8) -> list[dict]:
+    """Ticker autocomplete from the raw stock symbol listing (Finnhub).
+
+    Restricted to the major US listing venues so the dropdown stays relevant
+    for the search bar. Returns [] when the query is too short, the warehouse
+    is absent, or nothing matches.
+    """
+    q = query.strip()
+    if not q:
+        return []
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return []
+    try:
+        import duckdb
+    except ImportError:
+        return []
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return []
+    try:
+        rows = con.execute(
+            """
+            SELECT symbol, payload->>'description' AS description,
+                   mic, payload->>'type' AS security_type
+            FROM raw.raw_stock_symbols
+            WHERE mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
+              AND (symbol ILIKE ? OR COALESCE(payload->>'description', '') ILIKE ?)
+            ORDER BY symbol ILIKE ?, symbol
+            LIMIT ?
+            """,
+            [f"{q}%", f"%{q}%", f"{q}%", limit],
+        ).fetchall()
+        return [
+            {
+                "symbol": r[0],
+                "description": r[1] or "",
+                "mic": r[2],
+                "type": r[3] or "",
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
     finally:
         con.close()
 

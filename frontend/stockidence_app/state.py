@@ -1,12 +1,27 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 import reflex as rx
 
-from .service import market, rating_service
+from .service import market, rating_service, warehouse
+from .service import sub_scores as sub_score_service
 
 LISTS_STORAGE_KEY = "stockidence.lists"
+
+
+@dataclass
+class SubScoreItem:
+    category_label: str
+    color: str
+    show_header: bool
+    label: str
+    sources: str
+    direction: str
+    score: float
+    score_text: str
+    weight_text: str
 
 
 class RatingState(rx.State):
@@ -17,10 +32,14 @@ class RatingState(rx.State):
     result_ticker: str = ""
     result_company: str = ""
     result_as_of: str = ""
+    logo_url: str = ""
+    fair_value: float = 0.0
+    target_price: float = 0.0
     confidence_score: float = 0.0
     advice: str = ""
     volatility_score: float = 0.0
     category_rows: list[dict] = []
+    sub_score_rows: list[SubScoreItem] = []
     snowflake_data: list[dict] = [
         {"label": "Valuation", "score": 0},
         {"label": "Trend", "score": 0},
@@ -29,6 +48,9 @@ class RatingState(rx.State):
     ]
     buy_plan: dict = {}
     source: str = ""
+
+    ticker_search: str = ""
+    ticker_suggestions: list[dict] = []
 
     lists_json: str = rx.LocalStorage("[]", name=LISTS_STORAGE_KEY, sync=True)
     active_list: str = ""
@@ -57,6 +79,36 @@ class RatingState(rx.State):
     @rx.var
     def has_lists(self) -> bool:
         return len(self.list_names) > 0
+
+    @rx.var
+    def has_sub_scores(self) -> bool:
+        return len(self.sub_score_rows) > 0
+
+    @rx.var
+    def has_fair_value(self) -> bool:
+        return self.fair_value > 0
+
+    @rx.var
+    def fair_value_text(self) -> str:
+        return f"${self.fair_value:,.2f}"
+
+    @rx.var
+    def target_price_text(self) -> str:
+        return f"${self.target_price:,.2f}"
+
+    @rx.var
+    def quote(self) -> dict:
+        if not self.result_ticker:
+            return {}
+        quote = market.get_quote(self.result_ticker) or {}
+        if quote.get("price") is not None and quote.get("prev_close"):
+            quote["change_pct"] = (
+                (quote["price"] - quote["prev_close"]) / quote["prev_close"] * 100.0
+            )
+            quote["change_color"] = (
+                "green" if quote["change_pct"] >= 0 else "red"
+            )
+        return quote
 
     @rx.var
     def macro_metrics(self) -> list[dict]:
@@ -206,8 +258,25 @@ class RatingState(rx.State):
         self._persist_lists(lists)
 
     @rx.event
+    def update_ticker_search(self, raw: str):
+        self.ticker_search = raw
+        if len(raw.strip()) < 2:
+            self.ticker_suggestions = []
+            return
+        self.ticker_suggestions = warehouse.search_tickers(raw)
+
+    @rx.event
+    def select_ticker(self, ticker: str):
+        self.ticker_search = ticker
+        self.ticker_suggestions = []
+        self._run_search(ticker)
+        if self.has_result:
+            return rx.redirect(f"/stocks/{self.result_ticker}")
+
+    @rx.event
     def submit(self, form_data: dict):
         raw = form_data.get("ticker", "").strip()
+        self.ticker_suggestions = []
         self._run_search(raw)
         if self.has_result:
             return rx.redirect(f"/stocks/{self.result_ticker}")
@@ -247,6 +316,9 @@ class RatingState(rx.State):
         self.result_ticker = rating["ticker"]
         self.result_company = rating["company_name"]
         self.result_as_of = rating["as_of"]
+        self.logo_url = rating.get("logo_url") or ""
+        self.fair_value = float(rating.get("fair_value") or 0.0)
+        self.target_price = float(rating.get("target_price") or 0.0)
         self.confidence_score = float(rating["confidence_score"])
         self.advice = rating["advice"]
         self.volatility_score = float(rating["volatility_score"])
@@ -262,7 +334,9 @@ class RatingState(rx.State):
             {
                 "label": labels.get(item["category"], item["category"]),
                 "score": round(item["score"], 1),
-                "score_text": f"{item['score']:.0f} / {item['weight']*100:.0f}% weight",
+                "score_text": f"{item['score']:.0f} / 100",
+                "weight_text": f"{item['weight']*100:.0f}% weight",
+                "color": item["category"],
             }
             for item in rating["categories"]
         ]
@@ -275,4 +349,40 @@ class RatingState(rx.State):
         ]
         self.buy_plan = rating.get("buy_plan") or {}
         self.source = rating["source"]
+        self.sub_score_rows = self._build_sub_score_rows(
+            rating.get("components") or []
+        )
         self.has_result = True
+
+    @staticmethod
+    def _build_sub_score_rows(components: list[dict]) -> list[SubScoreItem]:
+        category_labels = {
+            "valuation": "Valuation",
+            "trend": "Trend",
+            "sentiment": "Sentiment",
+            "moat": "Moat",
+            "volatility": "Volatility (separate)",
+        }
+        rows: list[SubScoreItem] = []
+        for category in ("valuation", "trend", "sentiment", "moat", "volatility"):
+            comps = [
+                c for c in components if c.get("category", "").lower() == category
+            ]
+            if not comps:
+                continue
+            comps.sort(key=lambda c: c.get("weight", 0.0), reverse=True)
+            for i, c in enumerate(comps):
+                rows.append(
+                    SubScoreItem(
+                        category_label=category_labels[category],
+                        color=category,
+                        show_header=i == 0,
+                        label=sub_score_service.component_label(c["component"]),
+                        sources=sub_score_service.component_sources(c["component"]),
+                        direction=sub_score_service.component_direction(c["component"]),
+                        score=round(c["score"], 1),
+                        score_text=f"{round(c['score'], 1):.0f} / 100",
+                        weight_text=f"{c['weight']*100:.0f}%",
+                    )
+                )
+        return rows

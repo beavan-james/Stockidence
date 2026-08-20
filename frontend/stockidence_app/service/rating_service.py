@@ -38,7 +38,10 @@ def get_rating(ticker: str) -> dict:
             "advice": "PENDING",
             "volatility_score": 0.0,
             "categories": [],
+            "components": [],
             "buy_plan": None,
+            "fair_value": None,
+            "target_price": None,
             "source": "pending",
         }
 

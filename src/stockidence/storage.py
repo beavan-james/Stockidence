@@ -269,14 +269,18 @@ class Warehouse:
                 CREATE OR REPLACE VIEW mart.confidence_ratings AS
                 SELECT cr.ticker,
                        COALESCE(p.company_name, cr.ticker) AS company_name,
+                       p.logo,
                        cr.computed_at AS as_of,
                        cr.confidence_score,
                        UPPER(cr.rating) AS advice,
-                       cr.volatility_score
+                       cr.volatility_score,
+                       cr.fair_value,
+                       cr.target_price
                 FROM mart.m_confidence_ratings cr
                 LEFT JOIN (
                     SELECT ticker,
-                           json_extract_string(payload, '$.name') AS company_name
+                           json_extract_string(payload, '$.name') AS company_name,
+                           json_extract_string(payload, '$.logo') AS logo
                     FROM raw.raw_company_profile
                 ) p USING (ticker)
                 """
@@ -302,6 +306,42 @@ class Warehouse:
                 CREATE OR REPLACE VIEW mart.ticker_request_status AS
                 SELECT ticker, requested_at, status
                 FROM control.ticker_requests
+                """
+            )
+            # Model category weights for the confidence blend — provisional
+            # per MODEL.md, held in the warehouse so the frontend never
+            # hardcodes the scoring spec.
+            con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
+            con.execute(
+                """
+                INSERT INTO mart.model_weights (category, weight) VALUES
+                    ('valuation', 0.52), ('trend', 0.21), ('sentiment', 0.21), ('moat', 0.06)
+                ON CONFLICT (category) DO UPDATE SET weight = excluded.weight
+                """
+            )
+            # Category-level contract for the rating breakdown: one row per
+            # (ticker, category) with the confidence blend's category weight —
+            # NOT the component rows (which carry within-category sub-weights).
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW mart.category_scores AS
+                SELECT cr.ticker, cr.computed_at AS as_of,
+                       c.category,
+                       CAST(CASE c.category
+                           WHEN 'valuation' THEN cr.valuation_score
+                           WHEN 'trend'     THEN cr.trend_score
+                           WHEN 'sentiment' THEN cr.sentiment_score
+                           WHEN 'moat'      THEN cr.moat_score
+                       END AS DOUBLE) AS score,
+                       COALESCE(w.weight, 0) AS weight
+                FROM mart.m_confidence_ratings cr
+                CROSS JOIN (
+                    SELECT 'valuation' AS category
+                    UNION ALL SELECT 'trend'
+                    UNION ALL SELECT 'sentiment'
+                    UNION ALL SELECT 'moat'
+                ) c
+                LEFT JOIN mart.model_weights w USING (category)
                 """
             )
 

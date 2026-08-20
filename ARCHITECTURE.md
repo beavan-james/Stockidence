@@ -6,9 +6,9 @@
 - **Commodities** — one table, key `(nominal, date)` — gold/silver spot prices (monthly)
 - **Macro indicators** — one table, key `(indicator, date)` — CPI, unemployment, fed funds, natural gas, inflation, real GDP (one row per indicator/date rather than a separate table per series) (monthly)
 - **Top Gainers/Losers** — own table, key `(ticker, date)` (weekdays)
-- **IPO Calendar** — own table, key `(symbol, date)` (daily)
-- **Earnings Calendar** — own table, key `(symbol, quarter, year)` (daily)
-- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, overall_sentiment_score (Daily)
+- **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
+- **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
+- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, overall_sentiment_score (daily)
 - **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — relevance_score, ticker_sentiment_score. This junction table is what makes news joinable to a ticker for the Sentiment category, since one article can mention several tickers and one ticker appears in many articles.
 ---
 ## Real-Time / Ticker-Partitioned Data
@@ -18,13 +18,13 @@
 - **Quote** — own table or cache, key `(ticker)`. Finnhub quote, hot path with cache TTL ~1 min.
 - **Company Profile 2** — own table, key `(ticker)` with `last_updated`, snapshot-style (latest row only). TTL: 3 days.
 - **Basic Financials** — own table, key `(ticker, quarter, year)` with `last_updated`. TTL: 3 days.
-- **Financials As Reported** — own table, key `(ticker, quarter, year)` with `last_updated`. Staleness check compares against the filing's actual `filedDate`/period rather than a blind day-count TTL — refetch only if a newer filing (`accessNumber`) exists for that ticker, not on a fixed 7-day clock. Staging layer applies field-name normalization (Finnhub's raw XBRL tags → canonical schema, e.g. `Assets` → `totalAssets`) with fallback/coalesce logic per canonical metric, since tag names aren't standardized across companies.
+- **Financials As Reported** — own table, key `(ticker, quarter, year)` with `last_updated`. Staleness check compares the latest held `(year, quarter)` against the latest expected period from filing-deadline math — refetch only if a newer period should exist for that ticker, not on a fixed 7-day clock. XBRL tag normalization (Finnhub's raw XBRL tags → canonical metric names, e.g. `Assets` → `totalAssets`, via alias/prefix matching) happens in the mart scoring layer with fallback/coalesce logic per canonical metric, since tag names aren't standardized across companies.
 - **EPS Surprises** — own table, key `(ticker, quarter, year)` with `last_updated`. TTL: 30 days.
 - **Earnings Call Transcript** — own table, key `(ticker, quarter, year, speaker_sequence)` — one row per speaker segment, not one row per call. Effectively immutable once published — fetch once per quarter, never refetch.
 - **Insider Sentiment** — own table, key `(ticker, year, month)` with `last_updated`. TTL: refetch only if current month has no row.
 - **Recommendation Trends** — own table, key `(ticker, period)` with `last_updated`. TTL: 30 days.
 - **Peers** — own table, key `(ticker)` with `last_updated`. TTL: 60 days.
-- **Technical Indicators** (SMA, EMA, MACD, RSI, ADX, CCI, AD, OBV, BBANDS, ATR) — table `m_technical_indicators`, key `(ticker, date)`, computed from the cleaned daily bars via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock. Aggregations live in the mart layer, not staging.
+- **Technical Indicators** (SMA, EMA, MACD, RSI, STOCH, ADX, CCI, AD, OBV, BBANDS, ATR) — table `m_technical_indicators`, key `(ticker, date)`, computed from the cleaned daily bars via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock. Aggregations live in the mart layer, not staging.
 - **Advanced Analytics** — Scalar stats (MIN, MAX, MEAN, VARIANCE, STDDEV, MAX_DRAWDOWN), table `m_advanced_analytics`, key `(ticker, date)`, computed from the cleaned daily bars via a downstream Dagster asset. No API call involved — this is pure derivation, refreshed whenever new daily bars land, not on the API-staleness clock.
 ---
 ### API Calling
@@ -32,7 +32,8 @@
 
 Monthly: Commodities (AV), Macro indicators (AV), Stock Symbol (FH)
 Weekly: n/a
-Weekdays: IPO Calendar (FH), Earnings Calendar (FH), Top Gainers/Losers (AV), Market News (AV)
+Weekdays: IPO Calendar (FH), Earnings Calendar (FH), Top Gainers/Losers (AV)
+Daily: Market News (AV)
 
 On Stock Lookup (Everytime): Quote (FH), Time Series (TD)
 On Stock Lookup (If stale): Company Profile 2 (FH), Basic Financials (FH), Financials As Reported (FH), Insider Sentiment (FH), Recommendation Trends (FH), EPS Surprises (FH), Peers (FH), Earnings Call Transcript (AV)
@@ -55,7 +56,7 @@ flowchart TD
 
     subgraph RAW["raw layer — landed API responses · doubles as staleness-aware cache"]
         R_PERS["Commodities · macro · top gainers/losers · IPO & earnings calendars<br/>raw_news_articles · news_ticker_sentiment"]
-        R_PRC["Price history daily/weekly/monthly · company profile 2<br/>basic & as-reported financials · EPS surprises · transcripts<br/>insider sentiment · rec trends · peers"]
+        R_PRC["Price history daily · company profile 2<br/>basic & as-reported financials · EPS surprises · transcripts<br/>insider sentiment · rec trends · peers"]
     end
 
     subgraph STG["staging layer — typed · cleaned · deduped"]
@@ -65,10 +66,12 @@ flowchart TD
     end
 
     subgraph MART["mart layer — aggregated & derived tables the scoring layer reads"]
-        M_TECH["m_technical_indicators<br/>SMA · EMA · MACD · RSI · ADX · CCI · AD · OBV · BBANDS · ATR"]
+        M_TECH["m_technical_indicators<br/>SMA · EMA · MACD · RSI · STOCH · ADX · CCI · AD · OBV · BBANDS · ATR"]
         M_ADV["m_advanced_analytics<br/>rolling stats · max drawdown"]
         M_RESH["m_prices_weekly · m_prices_monthly"]
         M_SCORE["Category scores<br/>valuation · trend · sentiment · moat"]
+        M_WEIGHTS["model_weights<br/>category weights for the blend"]
+        M_CATS["category_scores view<br/>per (ticker, category) score + weight"]
         M_RATING["confidence_ratings<br/>rating_components · buy_plans"]
         M_FV["Fair value · target price<br/>buy price · stop-loss · holding style"]
     end
@@ -91,3 +94,8 @@ flowchart TD
     STG -->|"aggregate / score"| MART
     MART --> UI
 ```
+
+> Note: the mart stores fair value and target price per ticker
+> (`m_confidence_ratings`), but the UI currently surfaces only the buy-plan
+> trio (advised buy price, stop-loss, holding style) for buy-rated tickers —
+> fair value/target price display is a planned addition, not yet wired up.

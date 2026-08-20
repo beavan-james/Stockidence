@@ -1,4 +1,4 @@
-"""Documentation — README, MODEL, and API reference rendered as markdown tabs."""
+"""Documentation — README, MODEL, API, and architecture rendered as markdown tabs."""
 
 from pathlib import Path
 
@@ -12,6 +12,12 @@ DOCS = [
         "value": "readme",
         "file": "README.md",
         "description": "Project overview, data sources, and architecture decisions.",
+    },
+    {
+        "label": "ARCHITECTURE",
+        "value": "architecture",
+        "file": "ARCHITECTURE.md",
+        "description": "Layered warehouse design, incremental loads, and orchestration.",
     },
     {
         "label": "MODEL",

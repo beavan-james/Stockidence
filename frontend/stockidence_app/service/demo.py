@@ -4,13 +4,55 @@ import hashlib
 import random
 from datetime import datetime, timezone
 
-from .models import Advice, BuyPlan, CategoryScore, HoldingStyle, Rating, ScoreCategory
+from .models import (
+    Advice,
+    BuyPlan,
+    CategoryScore,
+    ComponentScore,
+    HoldingStyle,
+    Rating,
+    ScoreCategory,
+)
 
 PROVISIONAL_WEIGHTS: dict[str, float] = {
-    "valuation": 0.40,
-    "trend": 0.25,
-    "momentum": 0.15,
-    "sentiment": 0.20,
+    "valuation": 0.52,
+    "trend": 0.21,
+    "sentiment": 0.21,
+    "moat": 0.06,
+}
+
+# Demo mirrors the MODEL.md sub-score weights per category so the breakdown
+# card is consistent with the live pipeline (which reads weights from mart).
+PROVISIONAL_COMPONENT_WEIGHTS: dict[str, dict[str, float]] = {
+    "valuation": {
+        "discount_to_fair_value": 0.40,
+        "pe_percentile": 0.20,
+        "forward_vs_trailing_pe": 0.10,
+        "peg": 0.15,
+        "multiple_quality": 0.10,
+        "eps_surprise_momentum": 0.05,
+    },
+    "trend": {
+        "price_vs_smas": 0.30,
+        "macd": 0.20,
+        "adx_di": 0.15,
+        "rsi": 0.15,
+        "stoch_cci": 0.10,
+        "volume_confirmation": 0.10,
+    },
+    "sentiment": {
+        "news_14d": 0.30,
+        "analyst_consensus": 0.25,
+        "insider": 0.20,
+        "transcript_tone": 0.15,
+        "eps_surprise_trend": 0.10,
+    },
+    "moat": {
+        "margin_quality": 0.35,
+        "return_on_capital": 0.30,
+        "growth_consistency": 0.20,
+        "scale_advantage": 0.15,
+    },
 }
 
 _KNOWN_PRICES: dict[str, float] = {
@@ -44,15 +86,15 @@ def _advice_from_confidence(score: float) -> Advice:
         return Advice.STRONG_BUY
     if score >= 60:
         return Advice.BUY
-    if score >= 45:
+    if score >= 40:
         return Advice.HOLD
-    if score >= 30:
+    if score >= 25:
         return Advice.SELL
     return Advice.STRONG_SELL
 
 
 def _holding_style(volatility: float) -> HoldingStyle:
-    if volatility < 30:
+    if volatility < 25:
         return HoldingStyle.LONG_TERM
     if volatility < 60:
         return HoldingStyle.SWING
@@ -76,8 +118,26 @@ def generate_rating(ticker: str) -> Rating:
         for slug in weights
     )
 
+    components = []
+    for slug, sub_weights in PROVISIONAL_COMPONENT_WEIGHTS.items():
+        for name in sub_weights:
+            components.append(
+                ComponentScore(
+                    category=ScoreCategory(slug),
+                    component=name,
+                    score=10 + (_score(f"{ticker}:{slug}:{name}") * 85),
+                    weight=sub_weights[name],
+                    source="demo",
+                )
+            )
+
     confidence = sum(c.score * c.weight for c in categories)
     advice = _advice_from_confidence(confidence)
+
+    # Deterministic demo stand-ins for the live mart outputs (fair value and
+    # the 12-month target are always computed in the pipeline, buy or not).
+    fair_value = round(purchase_price * (0.9 + 0.3 * _score(f"{ticker}:fair_value")), 2)
+    target_price = round(fair_value * (1.0 + 0.1 * _score(f"{ticker}:target")), 2)
 
     volatility = _score(f"{ticker}:volatility") * 95 + 5
 
@@ -99,6 +159,9 @@ def generate_rating(ticker: str) -> Rating:
         advice=advice,
         volatility_score=volatility,
         categories=categories,
+        components=tuple(components),
         buy_plan=buy_plan,
+        fair_value=fair_value,
+        target_price=target_price,
         source="demo",
     )

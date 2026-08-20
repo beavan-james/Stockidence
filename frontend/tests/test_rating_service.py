@@ -38,6 +38,7 @@ def test_valid_ticker_returns_rating(monkeypatch):
     assert 0 <= rating["confidence_score"] <= 100
     assert 0 <= rating["volatility_score"] <= 100
     assert len(rating["categories"]) == 4
+    assert len(rating["components"]) > 0
     assert rating["source"] == "demo"
 
 

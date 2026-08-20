@@ -63,6 +63,45 @@ def _num(value) -> float | None:
         return None
 
 
+def get_quote(ticker: str) -> dict | None:
+    """Latest Finnhub quote for a ticker from the raw cache (TTL ~1 min).
+
+    Returns None when the warehouse is absent or the ticker has no quote row.
+    The raw key is the ticker only, so every landing replaces the previous
+    quote — no history is kept in the raw layer.
+    """
+    rows = _read(
+        """
+        SELECT json_extract_string(payload, '$.c'),
+               json_extract_string(payload, '$.h'),
+               json_extract_string(payload, '$.l'),
+               json_extract_string(payload, '$.o'),
+               json_extract_string(payload, '$.pc'),
+               json_extract_string(payload, '$.t')
+        FROM raw.raw_quotes
+        WHERE ticker = ?
+        """,
+        [ticker.upper()],
+    )
+    if not rows or not rows[0][0]:
+        return None
+    c, h, l, o, pc, t = rows[0]
+    ts = None
+    if t:
+        try:
+            ts = datetime.fromtimestamp(int(t), tz=timezone.utc).isoformat()
+        except (ValueError, OSError):
+            ts = None
+    return {
+        "price": _num(c),
+        "high": _num(h),
+        "low": _num(l),
+        "open": _num(o),
+        "prev_close": _num(pc),
+        "as_of": ts,
+    }
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -118,7 +157,7 @@ def get_commodities() -> list[dict]:
     rows = _read(
         """
         SELECT nominal, json_extract_string(payload, '$.date'),
-               json_extract_string(payload, '$.price')
+               json_extract_string(payload, '$.value')
         FROM (SELECT nominal, payload, ROW_NUMBER() OVER (PARTITION BY nominal ORDER BY date DESC) rn
               FROM raw.raw_commodities) WHERE rn = 1
         """
