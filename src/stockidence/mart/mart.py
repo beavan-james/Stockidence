@@ -163,9 +163,53 @@ def atr(highs: list[float], lows: list[float], closes: list[float], period: int 
 def adx(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float | None]:
     """Wilder ADX. None for the first 2*period - 1 bars (DM/ATR smoothing
     seeds at bar `period`, then DX needs `period` values to seed ADX)."""
+    _, _, _, dx = _dm_components(highs, lows, closes, period)
+    n = len(highs)
+    if not dx:
+        return [None] * n
+
+    def wilder(series: list[float]) -> list[float]:
+        seed = sum(series[:period]) / period
+        out = [seed]
+        for v in series[period:]:
+            out.append((out[-1] * (period - 1) + v) / period)
+        return out
+
+    # ADX is Wilder-smoothed DX; its j-th value belongs to bar 2*period - 1 + j
+    adx_s = wilder(dx)
+    out: list[float | None] = [None] * n
+    for j, v in enumerate(adx_s):
+        out[2 * period - 1 + j] = v
+    return out
+
+
+def directional_indexes(
+    highs: list[float], lows: list[float], closes: list[float], period: int = 14,
+) -> tuple[list[float | None], list[float | None]]:
+    """+DI / -DI series: Wilder-smoothed directional movement over smoothed
+    ATR, scaled to 100. None before bar `period`."""
+    n = len(highs)
+    atr_s, pdm, mdm, _ = _dm_components(highs, lows, closes, period)
+    plus: list[float | None] = [None] * n
+    minus: list[float | None] = [None] * n
+    for i, t in enumerate(atr_s):
+        idx = period + i
+        plus[idx] = 0.0 if t == 0 else 100.0 * pdm[i] / t
+        minus[idx] = 0.0 if t == 0 else 100.0 * mdm[i] / t
+    return plus, minus
+
+
+def _dm_components(
+    highs: list[float], lows: list[float], closes: list[float], period: int,
+) -> tuple[list[float], list[float], list[float], list[float]]:
+    """Smoothed ATR, +DM, -DM and the DX series (shared by ADX/+DI/-DI).
+
+    All four series align on the same Wilder-smoothed index: entry i covers
+    bar `period + i`. Returns empty lists when there isn't enough data.
+    """
     n = len(highs)
     if n < 2 * period:
-        return [None] * n
+        return [], [], [], []
     up = [highs[i] - highs[i - 1] for i in range(1, n)]
     down = [lows[i - 1] - lows[i] for i in range(1, n)]
     plus_dm = [u if (u > d and u > 0) else 0.0 for u, d in zip(up, down)]
@@ -183,21 +227,34 @@ def adx(highs: list[float], lows: list[float], closes: list[float], period: int 
             out.append((out[-1] * (period - 1) + v) / period)
         return out
 
-    # smoothed series are indexed by bar (period + i); DX shares that index
     atr_s = wilder(trs)
     pdm = wilder(plus_dm)
     mdm = wilder(minus_dm)
     dx = [0.0] * len(atr_s)
-    for i, t in enumerate(atr_s):
+    for i in range(len(atr_s)):
         s = pdm[i] + mdm[i]
         dx[i] = 0.0 if s == 0 else 100.0 * abs(pdm[i] - mdm[i]) / s
+    return atr_s, pdm, mdm, dx
 
-    # ADX is Wilder-smoothed DX; its j-th value belongs to bar 2*period - 1 + j
-    adx_s = wilder(dx)
-    out: list[float | None] = [None] * n
-    for j, v in enumerate(adx_s):
-        out[2 * period - 1 + j] = v
-    return out
+
+def stoch(
+    highs: list[float], lows: list[float], closes: list[float],
+    k_period: int = 14, d_period: int = 3,
+) -> tuple[list[float | None], list[float | None]]:
+    """Stochastic %K / %D. %K = where close sits in the last k_period
+    (high-low) range; %D = SMA over d_period of %K. None before k_period."""
+    n = len(highs)
+    k_out: list[float | None] = [None] * (k_period - 1)
+    for i in range(k_period - 1, n):
+        window_high = max(highs[i - k_period + 1: i + 1])
+        window_low = min(lows[i - k_period + 1: i + 1])
+        rng = window_high - window_low
+        k_out.append(50.0 if rng == 0 else 100.0 * (closes[i] - window_low) / rng)
+    d_out: list[float | None] = [None] * (k_period + d_period - 2)
+    for i in range(k_period + d_period - 2, n):
+        window = k_out[i - d_period + 1: i + 1]
+        d_out.append(sum(v for v in window if v is not None) / d_period)
+    return k_out, d_out
 
 
 def cci(highs: list[float], lows: list[float], closes: list[float], period: int = 20) -> list[float | None]:
@@ -262,13 +319,10 @@ def _obv_and_ad(
 
 
 def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
-    """SMA/BBANDS/EMA/MACD/RSI/ATR/ADX/CCI/AD/OBV — one row per trading day → mart.
-
-    Indicators are computed for every bar (None before an indicator's
-    warm-up period). The recursive/Wilder series (EMA/MACD/RSI/ATR/ADX/CCI)
-    and the cumulative/summation series (SMA/BBANDS/OBV/AD) are computed
-    here from stg_prices_daily bars and inserted in one pass.
-    """
+    """SMA/BBANDS/EMA/MACD/RSI/ATR/ADX/+DI/-DI/STOCH/CCI/AD/OBV — one row per
+    trading day → mart. Computed for every bar; None before the warm-up period.
+    The recursive/Wilder series and the cumulative/summation series are all
+    computed here from stg_prices_daily bars and inserted in one pass."""
     row = warehouse.connect(read_only=True).execute(
         """
         SELECT date, open, high, low, close, volume
@@ -296,14 +350,18 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
     r = rsi(closes)
     a = atr(highs, lows, closes)
     dx_ = adx(highs, lows, closes)
+    plus_di, minus_di = directional_indexes(highs, lows, closes)
+    k, d = stoch(highs, lows, closes)
     ch = cci(highs, lows, closes)
-    sma_20, sma_50 = sma(closes, 20), sma(closes, 50)
+    sma_20, sma_50, sma_200 = sma(closes, 20), sma(closes, 50), sma(closes, 200)
     bb_upper, bb_mid, bb_lower = _bbands(closes)
 
     rows = [
-        [ticker, dates[i], sma_20[i], sma_50[i], ema_12[i], ema_26[i], macd[i], macd_signal[i],
+        [ticker, dates[i], sma_20[i], sma_50[i], sma_200[i], ema_12[i], ema_26[i],
+         macd[i], macd_signal[i],
          macd[i] - macd_signal[i] if macd[i] is not None and macd_signal[i] is not None else None,
-         r[i], a[i], dx_[i], ch[i], money[i], obv[i], bb_upper[i], bb_mid[i], bb_lower[i]]
+         r[i], a[i], dx_[i], plus_di[i], minus_di[i], k[i], d[i], ch[i],
+         money[i], obv[i], bb_upper[i], bb_mid[i], bb_lower[i]]
         for i in range(len(dates))
     ]
     with warehouse.connect() as con:
@@ -312,10 +370,11 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
             con.execute(
                 """
                 INSERT INTO mart.m_technical_indicators
-                    (ticker, date, sma_20, sma_50, ema_12, ema_26, macd, macd_signal,
-                     macd_hist, rsi_14, atr_14, adx_14, cci_20, ad, obv,
+                    (ticker, date, sma_20, sma_50, sma_200, ema_12, ema_26, macd, macd_signal,
+                     macd_hist, rsi_14, atr_14, adx_14, plus_di_14, minus_di_14,
+                     stoch_k_14, stoch_d_14, cci_20, ad, obv,
                      bb_upper_20, bb_mid_20, bb_lower_20)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 r,
             )

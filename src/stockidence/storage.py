@@ -42,7 +42,10 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_news_articles": [("article_id", "VARCHAR")],
     "news_ticker_sentiment": [("article_id", "VARCHAR"), ("ticker", "VARCHAR")],
     "raw_company_profile": [("ticker", "VARCHAR")],
-    "raw_basic_financials": [("ticker", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER")],
+    # /stock/metrics lands one row PER metric per period: the metric is part
+    # of the natural grain, otherwise rows in the same (quarter, year) would
+    # clobber each other on the PK.
+    "raw_basic_financials": [("ticker", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER"), ("metric", "VARCHAR")],
     "raw_financials_reported": [
         ("ticker", "VARCHAR"),
         ("quarter", "INTEGER"),
@@ -106,10 +109,12 @@ MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
     ],
     "m_technical_indicators": [
         ("ticker", "VARCHAR"), ("date", "DATE"),
-        ("sma_20", "DOUBLE"), ("sma_50", "DOUBLE"),
+        ("sma_20", "DOUBLE"), ("sma_50", "DOUBLE"), ("sma_200", "DOUBLE"),
         ("ema_12", "DOUBLE"), ("ema_26", "DOUBLE"),
         ("macd", "DOUBLE"), ("macd_signal", "DOUBLE"), ("macd_hist", "DOUBLE"),
-        ("rsi_14", "DOUBLE"), ("atr_14", "DOUBLE"), ("adx_14", "DOUBLE"), ("cci_20", "DOUBLE"),
+        ("rsi_14", "DOUBLE"), ("atr_14", "DOUBLE"), ("adx_14", "DOUBLE"),
+        ("plus_di_14", "DOUBLE"), ("minus_di_14", "DOUBLE"),
+        ("stoch_k_14", "DOUBLE"), ("stoch_d_14", "DOUBLE"), ("cci_20", "DOUBLE"),
         ("ad", "DOUBLE"), ("obv", "DOUBLE"),
         ("bb_upper_20", "DOUBLE"), ("bb_mid_20", "DOUBLE"), ("bb_lower_20", "DOUBLE"),
     ],
@@ -119,6 +124,45 @@ MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("min_252", "DOUBLE"), ("max_252", "DOUBLE"), ("mean_252", "DOUBLE"),
         ("stddev_252", "DOUBLE"), ("variance_252", "DOUBLE"), ("max_drawdown_252", "DOUBLE"),
         ("min_all", "DOUBLE"), ("max_all", "DOUBLE"), ("mean_all", "DOUBLE"),
+    ],
+}
+
+
+# mart snapshot tables: one row per ticker, latest run wins (like the
+# company-profile raw table). Written by the scoring asset on every ticker
+# score; `computed_at` stamps the run for the frontend. m_rating_components
+# is keyed per (ticker, category, component) — one run replaces a ticker's
+# whole component set, so the key just needs to pin one row per component.
+MART_SNAPSHOT_SCHEMA: dict[str, list[tuple[str, str]]] = {
+    "m_confidence_ratings": [
+        ("ticker", "VARCHAR"),
+        ("computed_at", "TIMESTAMPTZ"),
+        ("confidence_score", "DOUBLE"),
+        ("rating", "VARCHAR"),
+        ("valuation_score", "DOUBLE"),
+        ("trend_score", "DOUBLE"),
+        ("sentiment_score", "DOUBLE"),
+        ("moat_score", "DOUBLE"),
+        ("volatility_score", "DOUBLE"),
+        ("fair_value", "DOUBLE"),
+        ("target_price", "DOUBLE"),
+        ("valuation_override_applied", "BOOLEAN"),
+    ],
+    "m_rating_components": [
+        ("ticker", "VARCHAR"),
+        ("computed_at", "TIMESTAMPTZ"),
+        ("category", "VARCHAR"),
+        ("component", "VARCHAR"),
+        ("value", "DOUBLE"),
+        ("weight", "DOUBLE"),
+        ("source", "VARCHAR"),
+    ],
+    "m_buy_plans": [
+        ("ticker", "VARCHAR"),
+        ("computed_at", "TIMESTAMPTZ"),
+        ("advised_buy_price", "DOUBLE"),
+        ("stop_loss", "DOUBLE"),
+        ("holding_style", "VARCHAR"),
     ],
 }
 
@@ -193,6 +237,20 @@ class Warehouse:
             for table, keys in MART_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                con.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS mart."{table}" (
+                        {cols},
+                        PRIMARY KEY ({pk})
+                    )
+                    """
+                )
+            for table, keys in MART_SNAPSHOT_SCHEMA.items():
+                if table == "m_rating_components":
+                    pk = ", ".join(f'"{name}"' for name in ("ticker", "category", "component"))
+                else:
+                    pk = "ticker"
+                cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 con.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS mart."{table}" (

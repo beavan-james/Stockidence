@@ -36,6 +36,7 @@ from .mart.mart import (
     rebuild_prices_weekly,
     rebuild_technical_indicators,
 )
+from .mart.scoring import score_ticker
 from .staging.staging import rebuild_prices_daily
 from .storage import Warehouse
 
@@ -165,10 +166,29 @@ m_technical_indicators = _derived_asset(
 )
 
 
+@asset(
+    name="ticker_score",
+    partitions_def=ticker_partitions,
+    required_resource_keys={"engine"},
+    deps=[ticker_data, m_technical_indicators, m_advanced_analytics],
+)
+def ticker_score(context: AssetExecutionContext) -> None:
+    """Deterministic score pipeline for one ticker: reads raw/staging/mart,
+    writes the m_confidence_ratings / m_rating_components / m_buy_plans
+    snapshot tables (one row per ticker, latest run wins)."""
+    ticker = context.partition_key
+    result = score_ticker(context.resources.engine.warehouse, ticker)
+    context.log.info(
+        f"[score:{ticker}] {result.rating} (confidence {result.confidence_score:.1f}, "
+        f"val {next(c.score for c in result.categories if c.name == 'valuation'):.1f}, "
+        f"vol {result.volatility_score:.1f})"
+    )
+
+
 @sensor(
     target=AssetSelection.keys(
         "ticker_data", "stg_prices_daily", "m_prices_weekly", "m_prices_monthly",
-        "m_advanced_analytics", "m_technical_indicators",
+        "m_advanced_analytics", "m_technical_indicators", "ticker_score",
     ),
     minimum_interval_seconds=30,
     description=(
@@ -188,7 +208,7 @@ def ticker_request_sensor(context) -> None:
 defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
-            m_advanced_analytics, m_technical_indicators],
+            m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
     sensors=[ticker_request_sensor],

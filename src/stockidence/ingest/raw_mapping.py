@@ -64,25 +64,39 @@ def normalize_company_profile2(payload: dict[str, Any], symbol: str, now: dateti
 def normalize_basic_financials(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
     """Finnhub /stock/metrics: flatten the annual + quarterly series.
 
-    Metric entries arrive keyed by period string; annual rows are stored as
-    the fiscal year's Q4 since the artifact key is (ticker, quarter, year).
+    The API returns `series` keyed by frequency, then by metric name, then a
+    list of (period, value) points — e.g.
+    `series.annual.netMargin = [{"period": "2025-12-31", "v": 0.28}]`.
+    Landing a full response flattens it to one row per (metric, period),
+    keeping the metric NAME on the row so the grain
+    (ticker, quarter, year, metric) can hold every metric for a period
+    without PK collisions. Annual rows are stored as the fiscal year's Q4
+    since the artifact key is (ticker, quarter, year, metric).
+
+    A legacy shape where `series.<freq>` is a plain list of points is also
+    accepted (metric name blank) rather than dropping data.
     """
     ticker = payload.get("symbol") or symbol
     rows: list[dict[str, Any]] = []
     for freq, quarter in (("annual", 4), ("quarterly", None)):
-        series = (payload.get("series") or {}).get(freq) or []
-        for entry in series:
-            period = entry.get("period")
-            if not period:
-                continue
-            rows.append(
-                {
-                    "ticker": ticker,
-                    "quarter": quarter if quarter is not None else _quarter_of(period),
-                    "year": _as_date(period).year,
-                    "payload": {**entry, "freq": freq},
-                }
-            )
+        series = payload.get("series") or {}
+        freq_series = series.get(freq) or []
+        if isinstance(freq_series, list):  # legacy flat-list shape
+            freq_series = {"": freq_series}
+        for metric, points in freq_series.items():
+            for entry in points or []:
+                period = entry.get("period")
+                if not period:
+                    continue
+                rows.append(
+                    {
+                        "ticker": ticker,
+                        "quarter": quarter if quarter is not None else _quarter_of(period),
+                        "year": _as_date(period).year,
+                        "metric": metric,
+                        "payload": {**entry, "freq": freq, "metric": metric},
+                    }
+                )
     return _single("raw_basic_financials", rows)
 
 
