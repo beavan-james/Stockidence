@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
+from datetime import date, timedelta
+
 import duckdb
 import pytest
 
 from stockidence_app.service import market
+
+_TODAY = date.today()
 
 
 @pytest.fixture(autouse=True)
@@ -64,13 +69,31 @@ def _build_db(tmp_path) -> str:
     con.execute(
         "CREATE TABLE raw.raw_earnings_calendar (symbol VARCHAR, quarter INTEGER, year INTEGER, payload JSON)"
     )
+    def _earn(symbol: str, d: date, hour: str, eps: float) -> tuple:
+        ds = d.isoformat()
+        return (
+            symbol,
+            3,
+            2026,
+            json.dumps(
+                {
+                    "date": ds,
+                    "symbol": symbol,
+                    "quarter": 3,
+                    "year": 2026,
+                    "hour": hour,
+                    "epsEstimate": eps,
+                }
+            ),
+        )
+
     con.executemany(
         "INSERT INTO raw.raw_earnings_calendar VALUES (?, ?, ?, ?)",
         [
-            ("AARD", 3, 2026, '{"date": "2026-08-19", "symbol": "AARD", "quarter": 3, "year": 2026, "hour": "amc", "epsEstimate": -0.8917}'),
-            ("ADI", 3, 2026, '{"date": "2026-08-19", "symbol": "ADI", "quarter": 3, "year": 2026, "hour": "bmo", "epsEstimate": 3.3681}'),
-            ("ZYX", 3, 2026, '{"date": "2026-10-02", "symbol": "ZYX", "quarter": 3, "year": 2026, "hour": "bmo", "epsEstimate": 1.25}'),
-            ("ZZZ", 3, 2026, '{"date": "2026-10-15", "symbol": "ZZZ", "quarter": 3, "year": 2026, "hour": "amc", "epsEstimate": 0.5}'),
+            _earn("AARD", _TODAY, "amc", -0.8917),
+            _earn("ADI", _TODAY, "bmo", 3.3681),
+            _earn("ZYX", _TODAY + timedelta(days=43), "bmo", 1.25),
+            _earn("ZZZ", _TODAY + timedelta(days=100), "amc", 0.5),
         ],
     )
     con.close()

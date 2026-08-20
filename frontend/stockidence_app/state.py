@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 from dataclasses import dataclass
@@ -10,6 +11,9 @@ from .service import market, rating_service, warehouse
 from .service import sub_scores as sub_score_service
 
 LISTS_STORAGE_KEY = "stockidence.lists"
+
+POLL_INTERVAL_SECONDS = 10
+POLL_MAX_ATTEMPTS = 30
 
 
 @dataclass
@@ -90,7 +94,7 @@ class RatingState(rx.State):
     volatility_score: float = 0.0
     category_rows: list[dict] = []
     sub_score_rows: list[SubScoreItem] = []
-    snowflake_track_points: str = ""
+    snowflake_points: str = ""
     snowflake_data: list[dict] = [
         {"label": "Valuation", "score": 0},
         {"label": "Trend", "score": 0},
@@ -137,6 +141,10 @@ class RatingState(rx.State):
     @rx.var
     def has_lists(self) -> bool:
         return len(self.list_names) > 0
+
+    @rx.var
+    def confidence_score_text(self) -> str:
+        return f"{self.confidence_score:.0f}"
 
     @rx.var
     def has_sub_scores(self) -> bool:
@@ -406,9 +414,37 @@ class RatingState(rx.State):
         if not symbol:
             return
         if self.has_result and self.result_ticker == symbol:
-            return
+            return RatingState.poll_rating
         self.ticker = symbol
         self._run_search(symbol)
+        return RatingState.poll_rating
+
+    @rx.event(background=True)
+    async def poll_rating(self):
+        """Wait for the Dagster run to land a fresh mart snapshot.
+
+        Runs while the current search shows pending/refreshing: re-reads
+        m_confidence_ratings every POLL_INTERVAL_SECONDS and swaps the UI to
+        the fresh rating as soon as the snapshot's as_of changes. Bails out
+        after POLL_MAX_ATTEMPTS so a failing pipeline doesn't poll forever.
+        """
+        ticker: str = ""
+        async with self:
+            ticker = self.result_ticker
+        for _ in range(POLL_MAX_ATTEMPTS):
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+            rating = warehouse.load_rating_from_warehouse(ticker)
+            async with self:
+                if self.source not in ("pending", "refreshing"):
+                    return
+                if self.result_ticker != ticker:
+                    return
+                if rating is None:
+                    continue
+                result = rating.to_dict()
+                if result.get("as_of") and result["as_of"] != self.result_as_of:
+                    self._apply_rating(result)
+                    return
 
     def _run_search(self, raw: str):
         if not raw:
@@ -451,7 +487,7 @@ class RatingState(rx.State):
             }
             for item in rating["categories"]
         ]
-        self.snowflake_track_points, _, self.snowflake_data = _snowflake_geometry(
+        _, self.snowflake_points, self.snowflake_data = _snowflake_geometry(
             [
                 {
                     "label": labels.get(item["category"], item["category"]),

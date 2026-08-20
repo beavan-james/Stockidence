@@ -48,54 +48,68 @@ flowchart TD
     TD(["Twelve Data"])
 
     subgraph ORCH["Dagster orchestration"]
-        SCHED["Scheduled daily jobs<br/>market-wide persistent data"]
-        ONDM["On-demand per-ticker jobs<br/>dynamic partitions"]
-        GATE{{"Staleness gate<br/>watermarks / last_updated + TTL"}}
-        TI["Derivation asset<br/>staging clean → mart aggregates"]
+        SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
+        SENSOR["ticker_request_sensor<br/>polls control.ticker_requests every 30s"]
+        RUN["On-demand per-ticker run<br/>ticker_data → staging → mart → score"]
+        GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
+        TI["Derivation assets<br/>staging clean → mart aggregates"]
+    end
+
+    subgraph CONTROL["control layer"]
+        Q["ticker_requests<br/>key (ticker) · pending → launched"]
     end
 
     subgraph RAW["raw layer — landed API responses · doubles as staleness-aware cache"]
         R_PERS["Commodities · macro · top gainers/losers · IPO & earnings calendars<br/>raw_news_articles · news_ticker_sentiment"]
-        R_PRC["Price history daily · company profile 2<br/>basic & as-reported financials · EPS surprises · transcripts<br/>insider sentiment · rec trends · peers"]
+        R_PRC["Price history daily · quotes · company profile 2<br/>basic & as-reported financials · EPS surprises · transcripts<br/>insider sentiment · rec trends · peers"]
     end
 
     subgraph STG["staging layer — typed · cleaned · deduped"]
-        S_PRC["Exhaustive OHLCV<br/>(one table: stg_prices_daily)"]
+        S_PRC["stg_prices_daily<br/>exhaustive OHLCV"]
         S_FUND["Fundamentals + earnings"]
         S_NEWS["Ticker-level news sentiment"]
     end
 
     subgraph MART["mart layer — aggregated & derived tables the scoring layer reads"]
-        M_TECH["m_technical_indicators<br/>SMA · EMA · MACD · RSI · STOCH · ADX · CCI · AD · OBV · BBANDS · ATR"]
+        M_TECH["m_technical_indicators<br/>SMA · EMA · MACD · RSI · ADX · ATR · OBV · ..."]
         M_ADV["m_advanced_analytics<br/>rolling stats · max drawdown"]
         M_RESH["m_prices_weekly · m_prices_monthly"]
-        M_SCORE["Category scores<br/>valuation · trend · sentiment · moat"]
-        M_WEIGHTS["model_weights<br/>category weights for the blend"]
-        M_CATS["category_scores view<br/>per (ticker, category) score + weight"]
-        M_RATING["confidence_ratings<br/>rating_components · buy_plans"]
-        M_FV["Fair value · target price<br/>buy price · stop-loss · holding style"]
+        M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
     end
 
-    UI["Frontend service<br/>read-only access"]
+    UI["Frontend service<br/>reads mart/raw · writes control"]
 
-    SCHED -->|"warm-up universe + market-wide"| ONDM
-    ONDM <--> GATE
+    SCHED -->|"ingest_scheduled<br/>market-wide"| RAW
+    UI -->|"enqueue ticker<br/>(pending) when no snapshot"| Q
+    SENSOR -->|"poll 30s"| Q
+    SENSOR -->|"launch partition run"| RUN
+    RUN <--> GATE
     GATE -->|"stale → fetch"| AV
     GATE -->|"stale → fetch"| FH
     GATE -->|"stale → fetch"| TD
-    ONDM -->|"land responses"| RAW
-    FH -->|"quote · hot path<br/>cache TTL ~1 min"| UI
+    AV & FH & TD -->|"land responses"| RAW
+    RUN -->|"land responses"| RAW
 
     RAW -->|"load / unnest / type"| STG
     S_PRC --> TI
     TI -->|"pure derivation, no API call"| M_TECH
-    TI -->|"resample / window agg"| M_RESH
+    TI -->|"resample"| M_RESH
     TI -->|"rolling stats"| M_ADV
-    STG -->|"aggregate / score"| MART
-    MART --> UI
+    STG -->|"aggregate / score"| M_RATING
+
+    MART -->|"rating snapshot<br/>source=warehouse"| UI
+    RAW -->|"quotes · news · commodities · macro"| UI
 ```
 
-> Note: the mart stores fair value and target price per ticker
-> (`m_confidence_ratings`), but the UI currently surfaces only the buy-plan
-> trio (advised buy price, stop-loss, holding style) for buy-rated tickers —
-> fair value/target price display is a planned addition, not yet wired up.
+> Notes on the loop:
+> - The quote path is **not** a direct frontend→Finnhub call — the UI reads
+>   `raw.raw_quotes` from the warehouse; the sensor-driven run refreshes it
+>   (TTL ~1 min) whenever the ticker is recomputed.
+> - Snapshot freshness: a search for a ticker with an existing rating serves
+>   the mart snapshot immediately when fresh (younger than 1 day). A stale
+>   snapshot is still served (source="refreshing" in the UI) while the
+>   request is re-queued for a recompute; a ticker with no snapshot goes
+>   straight to the queue (source="pending").
+> - Scheduled jobs and on-demand runs are independent: schedules warm the
+>   persistent universe (news, calendars, movers, macro); on-demand runs
+>   compute per-ticker ratings.

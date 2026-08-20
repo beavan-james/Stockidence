@@ -316,16 +316,30 @@ def advice_badge() -> rx.Component:
 
 def source_badge() -> rx.Component:
     return rx.badge(
-        rx.match(
-            RatingState.source,
-            ("warehouse", "Warehouse data"),
-            ("pending", "Computing…"),
-            "Demo sample",
+        rx.hstack(
+            rx.cond(
+                RatingState.source == "refreshing",
+                rx.spinner(size="1", color=rx.match(RatingState.source, ("refreshing", "blue"), "blue")),
+            ),
+            rx.text(
+                rx.match(
+                    RatingState.source,
+                    ("warehouse", "Warehouse data"),
+                    ("pending", "Computing…"),
+                    ("refreshing", "Refreshing…"),
+                    "Demo sample",
+                ),
+                size="1",
+                weight="medium",
+            ),
+            spacing="1",
+            align="center",
         ),
         color_scheme=rx.match(
             RatingState.source,
             ("warehouse", "blue"),
             ("pending", "violet"),
+            ("refreshing", "violet"),
             "amber",
         ),
         size="2",
@@ -342,8 +356,7 @@ def stock_header() -> rx.Component:
                 size="7",
                 weight="bold",
                 letter_spacing="-0.02em",
-            ),
-            source_badge(),
+            ),            source_badge(),
             rx.cond(
                 RatingState.quote["price"] != None,
                 rx.badge(
@@ -400,6 +413,7 @@ def stock_header() -> rx.Component:
         ),
         align="start",
         spacing="1",
+        class_name="sk-fade",
     )
 
 
@@ -437,20 +451,6 @@ def score_panel() -> rx.Component:
         width="100%",
         spacing="3",
         padding_y="4",
-    )
-
-
-def snowflake_spoke(item: rx.Var) -> rx.Component:
-    """Axis bar from the center to the score point, colored by the score."""
-    return rx.el.svg.line(
-        x1=170,
-        y1=170,
-        x2=item["cx"],
-        y2=item["cy"],
-        stroke=item["color"],
-        stroke_width=9,
-        stroke_linecap="round",
-        opacity=0.75,
     )
 
 
@@ -494,18 +494,51 @@ def snowflake_label(item: rx.Var) -> rx.Component:
     )
 
 
+def score_badge() -> rx.Component:
+    """Composite confidence score at the diamond's center, advice-colored."""
+    return rx.el.svg.g(
+        rx.el.svg.circle(
+            cx=170,
+            cy=170,
+            r=30,
+            fill=_advice_color(),
+            opacity=0.9,
+        ),
+        rx.el.svg.text(
+            RatingState.confidence_score_text,
+            x=170,
+            y=167,
+            fill="white",
+            font_size=22,
+            font_weight=800,
+            text_anchor="middle",
+        ),
+        rx.el.svg.text(
+            "CONFIDENCE",
+            x=170,
+            y=183,
+            fill="white",
+            font_size=8,
+            font_weight=600,
+            letter_spacing="0.12em",
+            text_anchor="middle",
+        ),
+    )
+
+
 def snowflake_chart() -> rx.Component:
     return rx.el.svg(
         rx.el.svg.polygon(
-            points=RatingState.snowflake_track_points,
-            fill="none",
-            stroke=rx.color("slate", 6),
+            points=RatingState.snowflake_points,
+            fill=_advice_color(),
+            fill_opacity=0.15,
+            stroke=_advice_color(),
             stroke_width=1.5,
-            stroke_dasharray="4 4",
         ),
-        rx.foreach(RatingState.snowflake_data, snowflake_spoke),
         rx.foreach(RatingState.snowflake_data, snowflake_vertex),
         rx.foreach(RatingState.snowflake_data, snowflake_label),
+        score_badge(),
+        class_name="sk-pop",
         view_box="0 0 340 340",
         width="100%",
         height=340,
@@ -537,6 +570,7 @@ def the_big_picture() -> rx.Component:
         ),
         width="100%",
         padding="6",
+        class_name="sk-fade",
     )
 
 
@@ -614,6 +648,7 @@ def breakdown_card() -> rx.Component:
         ),
         width="100%",
         padding=BODY_CARD_PADDING,
+        class_name="sk-fade sk-delay-1",
     )
 
 
@@ -706,6 +741,7 @@ def sub_score_card() -> rx.Component:
         ),
         width="100%",
         padding=BODY_CARD_PADDING,
+        class_name="sk-fade sk-delay-2",
     )
 
 
@@ -802,6 +838,7 @@ def price_reference_card() -> rx.Component:
             ),
             width="100%",
             padding=BODY_CARD_PADDING,
+            class_name="sk-fade sk-delay-2",
         ),
     )
 

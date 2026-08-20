@@ -1,21 +1,38 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 
 from . import demo, warehouse
 
 TICKER_RE = re.compile(r"^[A-Z0-9.\-^]{1,10}$")
+
+# Re-queue a rating for recompute once the snapshot is this old. Serves the
+# existing data immediately (source="refreshing") while the sensor recalcs.
+REFRESH_AFTER = timedelta(days=1)
 
 
 def normalize_ticker(ticker: str) -> str:
     return ticker.strip().upper()
 
 
+def _stale_snapshot(rating) -> bool:
+    """True when the mart snapshot is old enough to warrant a recompute."""
+    computed_at = rating.as_of
+    if computed_at is None:
+        return True
+    if computed_at.tzinfo is None:
+        computed_at = computed_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - computed_at >= REFRESH_AFTER
+
+
 def get_rating(ticker: str) -> dict:
     """Resolve a ticker to a rating dict.
 
     Resolution order:
-      1. warehouse mart snapshot for the ticker (source="warehouse")
+      1. warehouse mart snapshot for the ticker — returned immediately when
+         fresh; if stale, re-queued and served with source="refreshing" so the
+         UI shows the old numbers while the sensor recomputes
       2. queue a pipeline request and report source="pending" — the Dagster
          sensor consumes control.ticker_requests and will compute the ticker
       3. deterministic demo data only when the warehouse itself is
@@ -27,7 +44,11 @@ def get_rating(ticker: str) -> dict:
 
     rating = warehouse.load_rating_from_warehouse(normalized)
     if rating is not None:
-        return rating.to_dict()
+        result = rating.to_dict()
+        if _stale_snapshot(rating):
+            warehouse.enqueue_ticker_request(normalized)
+            result["source"] = "refreshing"
+        return result
 
     if warehouse.enqueue_ticker_request(normalized) is True:
         return {

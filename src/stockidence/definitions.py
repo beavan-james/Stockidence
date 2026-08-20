@@ -209,11 +209,18 @@ def ticker_score(context: AssetExecutionContext) -> None:
     ),
 )
 def ticker_request_sensor(context) -> None:
-    """Event-driven on-demand ingestion: request queue -> partition -> run."""
+    """Event-driven on-demand ingestion: request queue -> partition -> run.
+
+    No run_key: the queue's pending -> launched transition is the dedup
+    mechanism. A stable run_key here would block re-requests forever after
+    the first run for a ticker (even a failed one), since the daemon skips
+    run_keys it has already seen - a user re-searching a ticker would
+    silently trigger nothing.
+    """
     warehouse = context.resources.engine.warehouse
     for ticker in stage_ticker_runs(warehouse, context.instance):
         context.log.info(f"[request:{ticker}] launching ticker_data materialization")
-        yield RunRequest(run_key=f"ticker_request_{ticker}", partition_key=ticker)
+        yield RunRequest(partition_key=ticker)
 
 
 defs = Definitions(

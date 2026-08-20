@@ -1,0 +1,51 @@
+/* Subtle entrance animations used across the profile page.
+   All classes are opt-in via class_name — nothing animates unless applied. */
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-fade,
+  .sk-pop {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+@keyframes sk-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sk-fade {
+  animation: sk-fade-up 0.45s ease-out both;
+}
+
+@keyframes sk-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sk-pop {
+  animation: sk-pop-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+
+.sk-delay-1 {
+  animation-delay: 0.1s;
+}
+.sk-delay-2 {
+  animation-delay: 0.2s;
+}
+.sk-delay-3 {
+  animation-delay: 0.3s;
+}

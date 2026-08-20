@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -179,10 +180,31 @@ class Warehouse:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path else Path(DEFAULT_DB_PATH)
 
-    def connect(self, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    def connect(
+        self,
+        read_only: bool = False,
+        *,
+        max_attempts: int = 40,
+        base_delay: float = 0.2,
+    ) -> duckdb.DuckDBPyConnection:
+        """Open a connection to the DuckDB file.
+
+        DuckDB allows a single writer process per file. Parallel Dagster steps
+        (and the frontend) all funnel through this store, so a write-open can
+        transiently hit "Could not set lock on file" while a sibling step
+        holds the write lock. Reading never contends; write-opens retry with
+        backoff until the lock frees instead of crashing the run.
+        """
         if read_only:
             return duckdb.connect(str(self.path), read_only=True)
-        return duckdb.connect(str(self.path))
+        last_error: Exception | None = None
+        for attempt in range(max_attempts):
+            try:
+                return duckdb.connect(str(self.path))
+            except duckdb.IOException as exc:  # lock held by another process
+                last_error = exc
+                time.sleep(base_delay * (attempt + 1))
+        raise last_error or RuntimeError("warehouse connect failed")
 
     def init_schema(self) -> None:
         """Idempotent bootstrap of schemas, raw tables, and watermarks."""
