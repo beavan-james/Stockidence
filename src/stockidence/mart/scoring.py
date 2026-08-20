@@ -320,6 +320,21 @@ def _eps_pe_history(price: float, rows: list[dict[str, Any]]) -> list[float]:
     return pes
 
 
+_METRIC_ALIASES = {
+    # MODEL.md metric name -> Finnhub /stock/metric name. The API's series are
+    # period-keyed; its scalar `metric` dict is landed at the sentinel period
+    # (quarter=0/year=0) with freq "latest".
+    "salesPerShareTTM": "revenuePerShareTTM",
+    "returnOnEquityTTM": "roeTTM",
+    "gGrowth": "epsGrowth3Y",
+    "evToEBITDA": "evEbitdaTTM",
+}
+
+
+def _resolve_metric(name: str) -> str:
+    return _METRIC_ALIASES.get(name, name)
+
+
 def _current_ps(price: float, basic: list[dict[str, Any]]) -> float | None:
     rps = _latest_series(basic, "salesPerShareTTM")
     return price / rps if rps and rps > 0 and price > 0 else None
@@ -327,8 +342,9 @@ def _current_ps(price: float, basic: list[dict[str, Any]]) -> float | None:
 
 def _ps_history(price: float, basic: list[dict[str, Any]]) -> list[float]:
     out: list[float] = []
+    metric = _resolve_metric("salesPerShareTTM")
     for r in basic:
-        if r["payload"].get("freq") != "quarterly" or r["payload"].get("metric") != "salesPerShareTTM":
+        if r["payload"].get("freq") != "quarterly" or r["payload"].get("metric") != metric:
             continue
         rps = _num(r["payload"].get("v"))
         if rps and rps > 0:
@@ -339,13 +355,13 @@ def _ps_history(price: float, basic: list[dict[str, Any]]) -> list[float]:
 def _latest_series(basic: list[dict[str, Any]], metric: str) -> float | None:
     """Latest value of a per-period metric (rows ordered by period asc)."""
     vals = [_num(r["payload"].get("v")) for r in basic
-            if r["payload"].get("metric") == metric]
+            if r["payload"].get("metric") == _resolve_metric(metric)]
     return vals[-1] if vals else None
 
 
 def _latest_metric(basic: list[dict[str, Any]], key: str) -> float | None:
     vals = [_num(r["payload"].get("v"))
-            for r in basic if r["payload"].get("metric") == key]
+            for r in basic if r["payload"].get("metric") == _resolve_metric(key)]
     return vals[-1] if vals else None
 
 
@@ -444,9 +460,9 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
         Component("trend", "stoch_cci", 50.0, 0.10, "neutral"),
         Component("trend", "volume_confirmation", 50.0, 0.10, "neutral"),
     ]
-    if not rows:
+    if len(rows) < 2:
         return neutral
-    last, prev = rows[-1], (rows[-2] if len(rows) > 1 else last)
+    last, prev = rows[-1], rows[-2]
     sma20, sma50, sma200 = last[0], last[1], last[2]
     ema12, ema26 = last[3], last[4]
     macd, macd_signal, hist, prev_hist = last[5], last[6], last[7], prev[7]
@@ -704,7 +720,7 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
     # 2. return on capital (30%) — TTM ROE from metrics, else reported
     roe = _latest_series(basic, "returnOnEquityTTM")
     if roe is None and reported:
-        latest = reported[-1]["payload"].get("data", [])
+        latest = _reported_concepts(reported[-1]["payload"])
         ni = next((_num(d.get("value"))
                   for d in latest if d.get("concept") in _IS_NET_INCOME), None)
         eq = next((_num(d.get("value"))
@@ -712,8 +728,9 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
         if ni is not None and eq and eq > 0:
             roe = ni / eq
     if roe is not None:
+        # ROE ~1.5+ on heavily bought-back names; linear on the ratio
         components.append(Component("moat", "return_on_capital",
-                                    _clamp(roe * 5.0, 0.0, 100.0), 0.30, "live"))
+                                    _clamp(roe * 90.0, 0.0, 100.0), 0.30, "live"))
     else:
         components.append(
             Component("moat", "return_on_capital", 50.0, 0.30, "neutral"))
@@ -721,7 +738,7 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
     # 3. growth consistency (20%) — share of YoY revenue periods with growth
     revenues: dict[tuple[Any, Any], float] = {}
     for r in reported:
-        rev = next((_num(d.get("value")) for d in r["payload"].get("data", [])
+        rev = next((_num(d.get("value")) for d in _reported_concepts(r["payload"])
                     if d.get("concept") in _IS_REVENUE), None)
         if rev is not None and r.get("year") is not None and r.get("quarter") is not None:
             revenues[(r["year"], r["quarter"])] = rev
@@ -850,13 +867,33 @@ def _volatility_components(con: Any, ticker: str, price: float | None) -> list[C
 # Fair value (DCF + own-history comparables, per MODEL.md)
 # ---------------------------------------------------------------------------
 
+def _reported_concepts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten /stock/financials-reported rows: live payloads nest XBRL
+    concepts under report.{bs,ic,cf}; legacy payloads carry a flat `data`
+    list. Concept names are stripped of their taxonomy prefix (us-gaap_...)."""
+    flat = payload.get("data")
+    if flat is None:
+        flat = [d for section in payload.get("report", {}).values() for d in section]
+    out: list[dict[str, Any]] = []
+    for d in flat or []:
+        row = dict(d)
+        concept = str(row.get("concept") or "")
+        for prefix in ("us-gaap_", "ifrs-full_", "srt_", "dei_", "us-gaap_2_"):
+            if concept.startswith(prefix):
+                concept = concept[len(prefix):]
+                break
+        row["concept"] = concept
+        out.append(row)
+    return out
+
+
 def _reported_ttm(reported: list[dict[str, Any]], concepts: tuple[str, ...]) -> float | None:
     """Trailing-twelve-months total of an income/cash-flow XBRL concept over
     the last 4 filings. A missing concept in ANY of the last 4 filings
     aborts the TTM (defensive, no silent partial sums)."""
     vals: list[float] = []
     for r in reported[-4:]:
-        v = next((_num(d.get("value")) for d in r["payload"].get("data", [])
+        v = next((_num(d.get("value")) for d in _reported_concepts(r["payload"])
                   if d.get("concept") in concepts), None)
         if v is None:
             return None
@@ -867,7 +904,7 @@ def _reported_ttm(reported: list[dict[str, Any]], concepts: tuple[str, ...]) -> 
 def _reported_latest(reported: list[dict[str, Any]], concepts: tuple[str, ...]) -> float | None:
     """Latest snapshot of a balance-sheet XBRL concept (no summing)."""
     for r in reversed(reported[-4:]):
-        v = next((_num(d.get("value")) for d in r["payload"].get("data", [])
+        v = next((_num(d.get("value")) for d in _reported_concepts(r["payload"])
                   if d.get("concept") in concepts), None)
         if v is not None:
             return v
@@ -887,9 +924,18 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
         g_fwd = _clamp(fwd / (trailing * 4.0) - 1.0, *FAIR_VALUE["growth_clamp"])
         sources.append("growth=earnings_estimate")
     else:
-        g_fwd = _clamp(_latest_series(basic, "gGrowth")
-                       or 0.0, *FAIR_VALUE["growth_clamp"])
-        sources.append("growth=proxy")
+        # free-tier forward estimates aren't available: fall back to trailing
+        # EPS growth annualized from /stock/earnings actuals (which we hold)
+        actuals = [_num(r["payload"].get("actual")) for r in surprise_rows]
+        actuals = [a for a in actuals if a is not None and a > 0]
+        if len(actuals) >= 4:
+            ann = (actuals[-1] / actuals[0]) ** (4.0 / (len(actuals) - 1)) - 1.0
+            g_fwd = _clamp(ann, *FAIR_VALUE["growth_clamp"])
+            sources.append("growth=trailing_eps")
+        else:
+            g_fwd = _clamp(_latest_series(basic, "gGrowth") or 0.0,
+                           *FAIR_VALUE["growth_clamp"])
+            sources.append("growth=proxy")
     beta = _latest_series(basic, "beta") or 1.0
     r = FAIR_VALUE["risk_free_rate"] + beta * FAIR_VALUE["equity_risk_premium"]
 
@@ -930,7 +976,8 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
     if len(ps_hist) >= 8 and rps and rps > 0:
         comps.append(statistics.median(ps_hist) * rps * (1 + g_fwd))
     ev_ebitda = _latest_series(basic, "evToEBITDA")
-    ebitda_ttm = _latest_series(basic, "ebitdaTTM")
+    ebitd_ps = _latest_series(basic, "ebitdPerShareTTM")
+    ebitda_ttm = (ebitd_ps * shares) if (ebitd_ps and ebitd_ps > 0 and shares and shares > 0) else None
     if ev_ebitda and ebitda_ttm and ebitda_ttm > 0 and shares and shares > 0:
         comps.append(ev_ebitda * (ebitda_ttm * (1 + g_fwd)) / shares)
     comps_ps = _mean(comps) if comps else None

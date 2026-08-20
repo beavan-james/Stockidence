@@ -97,6 +97,18 @@ def normalize_basic_financials(payload: dict[str, Any], symbol: str, now: dateti
                         "payload": {**entry, "freq": freq, "metric": metric},
                     }
                 )
+    for metric, value in (payload.get("metric") or {}).items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        rows.append(
+            {
+                "ticker": ticker,
+                "quarter": 0,  # latest-snapshot sentinel period (no API period)
+                "year": 0,
+                "metric": metric,
+                "payload": {"v": value, "freq": "latest", "metric": metric},
+            }
+        )
     return _single("raw_basic_financials", rows)
 
 
@@ -168,11 +180,12 @@ def normalize_insider_sentiment(payload: dict[str, Any], symbol: str, now: datet
     return _single("raw_insider_sentiment", rows)
 
 
-def normalize_recommendation_trends(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
-    ticker = payload.get("symbol") or symbol
+def normalize_recommendation_trends(payload: list[dict[str, Any]] | dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+    entries = payload if isinstance(payload, list) else payload.get("data", [])
+    ticker = payload.get("symbol") if isinstance(payload, dict) else None
     rows = [
-        {"ticker": ticker, "period": _as_date(entry["period"]), "payload": entry}
-        for entry in payload.get("data", [])
+        {"ticker": ticker or symbol, "period": _as_date(entry["period"]), "payload": entry}
+        for entry in entries
         if entry.get("period")
     ]
     return _single("raw_recommendation_trends", rows)

@@ -287,13 +287,14 @@ class Warehouse:
                 if missing:
                     raise KeyError(f"{artifact}: rows missing key columns {missing}")
                 values = [row[k] for k in keys]
+                payload_json = row.get("payload", row)
                 con.execute(
                     f"""
                     INSERT INTO raw."{artifact}" ({', '.join(f'"{k}"' for k in keys)}, payload, fetched_at)
                     VALUES ({', '.join('?' for _ in keys)}, CAST(? AS JSON), ?)
                     ON CONFLICT ({pk}) DO UPDATE SET {set_cols}
                     """,
-                    [*values, json.dumps(row, default=_json_default), fetched_at],
+                    [*values, json.dumps(payload_json, default=_json_default), fetched_at],
                 )
                 written += 1
 

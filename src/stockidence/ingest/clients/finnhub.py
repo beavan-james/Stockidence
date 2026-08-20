@@ -47,23 +47,27 @@ class FinnhubClient(BaseClient):
         return self._query("/stock/profile2", symbol=symbol)
 
     def basic_financials(self, symbol: str, *, metric: str = "all") -> dict[str, Any]:
-        return self._query("/stock/metrics", symbol=symbol, metric=metric)
+        return self._query("/stock/metric", symbol=symbol, metric=metric)
 
     def financials_reported(self, symbol: str, *, freq: str = "annual") -> dict[str, Any]:
         return self._query("/stock/financials-reported", symbol=symbol, freq=freq)
 
     def eps_surprises(self, symbol: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        payload = self.request("GET", "/stock/eps-surprises", params=build_query({"symbol": symbol, "limit": limit}))
-        self._raise_for_api_error(payload, path="/stock/eps-surprises")
+        payload = self.request("GET", "/stock/earnings", params=build_query({"symbol": symbol, "limit": limit}))
+        self._raise_for_api_error(payload, path="/stock/earnings")
         if not isinstance(payload, list):
-            raise InvalidResponseError("/stock/eps-surprises: expected array")
+            raise InvalidResponseError("/stock/earnings: expected array")
         return payload
 
     def insider_sentiment(self, symbol: str, *, from_date: str, to_date: str) -> dict[str, Any]:
         return self._query("/stock/insider-sentiment", **{"symbol": symbol, "from": from_date, "to": to_date})
 
-    def recommendation_trends(self, symbol: str) -> dict[str, Any]:
-        return self._query("/stock/recommendation-trends", symbol=symbol)
+    def recommendation_trends(self, symbol: str) -> list[dict[str, Any]]:
+        payload = self.request("GET", "/stock/recommendation", params=build_query({"symbol": symbol}))
+        self._raise_for_api_error(payload, path="/stock/recommendation")
+        if not isinstance(payload, list):
+            raise InvalidResponseError("/stock/recommendation: expected array")
+        return payload
 
     def peers(self, symbol: str) -> list[str]:
         payload = self.request("GET", "/stock/peers", params=build_query({"symbol": symbol}))

@@ -117,7 +117,17 @@ def ticker_data(context: AssetExecutionContext) -> None:
                 [ticker],
             ).fetchone()
             if latest is None:
-                context.log.info(f"[{ticker}] no earnings calendar entry; skipping transcript")
+                # free-tier calendar only looks ahead ~2 weeks: fall back to
+                # the latest reported quarter from /stock/earnings
+                latest = engine.warehouse.connect(read_only=True).execute(
+                    """
+                    SELECT year, quarter FROM raw.raw_eps_surprises
+                    WHERE ticker = ? ORDER BY year DESC, quarter DESC LIMIT 1
+                    """,
+                    [ticker],
+                ).fetchone()
+            if latest is None:
+                context.log.info(f"[{ticker}] no earnings period on record; skipping transcript")
                 continue
             dimension = f"{ticker}|{latest[1]}|{latest[0]}"
         result = engine.ingest_on_demand(endpoint, dimension, now=_now())
