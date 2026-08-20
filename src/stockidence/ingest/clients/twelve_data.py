@@ -17,10 +17,17 @@ class TwelveDataClient(BaseClient):
     def __init__(self, *, api_key: str | None = None, timeout: float = 30.0, **kwargs: Any) -> None:
         from ...config import load_settings
 
-        key: str = api_key or load_settings().twelve_data_api_key
+        settings = load_settings()
+        key: str = api_key or settings.twelve_data_api_key
         if not key:
             raise ValueError("TWELVE_DATA_API_KEY is not set")
-        super().__init__(api_key=key, base_url="https://api.twelvedata.com", timeout=timeout, **kwargs)
+        super().__init__(
+            api_key=key,
+            base_url="https://api.twelvedata.com",
+            timeout=timeout,
+            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["twelve_data"]),
+            **kwargs,
+        )
 
     def time_series(
         self,

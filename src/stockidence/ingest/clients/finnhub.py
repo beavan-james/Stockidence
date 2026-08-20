@@ -15,10 +15,17 @@ class FinnhubClient(BaseClient):
     def __init__(self, *, api_key: str | None = None, timeout: float = 30.0, **kwargs: Any) -> None:
         from ...config import load_settings
 
-        key: str = api_key or load_settings().finnhub_api_key
+        settings = load_settings()
+        key: str = api_key or settings.finnhub_api_key
         if not key:
             raise ValueError("FINNHUB_API_KEY is not set")
-        super().__init__(api_key=key, base_url="https://finnhub.io/api/v1", timeout=timeout, **kwargs)
+        super().__init__(
+            api_key=key,
+            base_url="https://finnhub.io/api/v1",
+            timeout=timeout,
+            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["finnhub"]),
+            **kwargs,
+        )
 
     def _default_headers(self) -> dict[str, str]:
         return {

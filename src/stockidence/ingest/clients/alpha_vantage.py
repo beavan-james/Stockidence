@@ -16,10 +16,17 @@ class AlphaVantageClient(BaseClient):
     def __init__(self, *, api_key: str | None = None, timeout: float = 30.0, **kwargs: Any) -> None:
         from ...config import load_settings
 
-        key: str = api_key or load_settings().alpha_vantage_api_key
+        settings = load_settings()
+        key: str = api_key or settings.alpha_vantage_api_key
         if not key:
             raise ValueError("ALPHA_VANTAGE_API_KEY is not set")
-        super().__init__(api_key=key, base_url="https://www.alphavantage.co", timeout=timeout, **kwargs)
+        super().__init__(
+            api_key=key,
+            base_url="https://www.alphavantage.co",
+            timeout=timeout,
+            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["alpha_vantage"]),
+            **kwargs,
+        )
 
     def _query(self, function: str, **params: Any) -> dict[str, Any]:
         payload = self.request(
@@ -44,10 +51,10 @@ class AlphaVantageClient(BaseClient):
     # -- monthly persistent --
 
     def gold(self) -> dict[str, Any]:
-        return self._query("GOLD")
+        return self._query("GOLD_SILVER_HISTORY", symbol="GOLD", interval="monthly")
 
     def silver(self) -> dict[str, Any]:
-        return self._query("SILVER")
+        return self._query("GOLD_SILVER_HISTORY", symbol="SILVER", interval="monthly")
 
     def inflation(self) -> dict[str, Any]:
         return self._query("INFLATION")

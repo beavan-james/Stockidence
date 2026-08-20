@@ -25,6 +25,7 @@ class Settings:
     finnhub_api_key: str
     twelve_data_api_key: str
     alpha_vantage_api_key: str
+    min_interval_seconds: dict[str, float] = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -34,6 +35,11 @@ class Settings:
             or os.environ.get("X_FINNHUB_API_KEY", ""),
             twelve_data_api_key=os.environ.get("TWELVE_DATA_API_KEY", ""),
             alpha_vantage_api_key=os.environ.get("ALPHA_VANTAGE_API_KEY", ""),
+            min_interval_seconds={
+                "finnhub": float(os.environ.get("FINNHUB_MIN_INTERVAL_S", "1.05")),
+                "twelve_data": float(os.environ.get("TWELVE_DATA_MIN_INTERVAL_S", "8.0")),
+                "alpha_vantage": float(os.environ.get("ALPHA_VANTAGE_MIN_INTERVAL_S", "61.0")),
+            },
         )
 
 
