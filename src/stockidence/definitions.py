@@ -201,6 +201,7 @@ def ticker_score(context: AssetExecutionContext) -> None:
         "m_advanced_analytics", "m_technical_indicators", "ticker_score",
     ),
     minimum_interval_seconds=30,
+    required_resource_keys={"engine"},
     description=(
         "Polls control.ticker_requests (written by the frontend), adds a dynamic "
         "ticker partition, and materializes ticker_data so the staleness gate can "

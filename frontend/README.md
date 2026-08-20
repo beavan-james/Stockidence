@@ -8,10 +8,15 @@ Reflex app for the stock **confidence rating pipeline**. Lets a user enter any t
 cd frontend
 uv venv --system-site-packages
 uv pip install -r requirements.txt
-uv run reflex run --env dev
+uv run reflex run --env prod
 ```
 
 Open http://localhost:3000.
+
+`--env prod` compiles the production bundle and serves it directly — the
+recommended mode for day-to-day local use. `--env dev` enables hot reload for
+UI iteration, but is slower and less stable (frequent recompiles, page
+reloads while assets rebuild).
 
 ## Data layer
 

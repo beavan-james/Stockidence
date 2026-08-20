@@ -72,3 +72,10 @@ def test_sensor_registered_in_definitions():
 
     sensor_names = {s.name for s in defs.sensors}
     assert "ticker_request_sensor" in sensor_names
+
+
+def test_sensor_declares_engine_resource():
+    from stockidence.definitions import defs
+
+    sensor = next(s for s in defs.sensors if s.name == "ticker_request_sensor")
+    assert "engine" in sensor.required_resource_keys
