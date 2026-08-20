@@ -207,7 +207,7 @@ def test_scheduled_calendar_uses_default_window(engine):
     result = eng.ingest_scheduled("ipo_calendar", now=NOW)
     assert result.fetched and result.rows_written == 1
     kwargs = fh.calls[-1][1]
-    assert kwargs["from_date"] == "2026-08-17"
+    assert kwargs["from_date"] == "2026-08-10"  # today - 7 (recently priced backfill)
     assert kwargs["to_date"] == "2026-10-01"  # today + 45 days
 
     result2 = eng.ingest_scheduled("ipo_calendar", now=NOW, params={"from_date": "2026-01-01", "to_date": "2026-02-01"})

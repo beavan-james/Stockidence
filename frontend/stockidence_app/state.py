@@ -25,6 +25,56 @@ class SubScoreItem:
     weight_text: str
 
 
+def _score_color(score: float) -> str:
+    """Score-driven diamond color: >=65 green, >=40 amber, else red."""
+    if score >= 65:
+        return "#30a46c"
+    if score >= 40:
+        return "#f59f00"
+    return "#e5484d"
+
+
+def _snowflake_geometry(scores: list[dict]) -> tuple[str, str, list[dict]]:
+    """Diamond grid + per-axis vertices on a 340x340 canvas (center 170,170).
+
+    Returns (track_points, points, data): `track_points` is the fixed
+    full-radius boundary diamond that anchors the chart, `points` joins the
+    per-score vertices (deformed by each category's score), and `data` holds
+    the per-vertex geometry for the SVG spokes, dots, and labels.
+    """
+    center = (170, 170)
+    radius, label_radius = 115, 130
+    n = len(scores)
+    if n < 2:
+        return "", "", list(scores)
+    track: list[str] = []
+    points: list[str] = []
+    out: list[dict] = []
+    for i in range(n):
+        angle = math.pi / 2 + 2 * math.pi * i / n
+        track.append(f"{center[0] + math.cos(angle) * radius:.1f},{center[1] - math.sin(angle) * radius:.1f}")
+    for i, item in enumerate(scores):
+        angle = math.pi / 2 + 2 * math.pi * i / n
+        fraction = max(0.0, min(float(item["score"]), 100.0)) / 100.0
+        cx = center[0] + math.cos(angle) * radius * fraction
+        cy = center[1] - math.sin(angle) * radius * fraction
+        points.append(f"{cx:.1f},{cy:.1f}")
+        out.append(
+            {
+                **item,
+                "cx": round(cx, 1),
+                "cy": round(cy, 1),
+                "lx": round(center[0] + math.cos(angle) * label_radius, 1),
+                "ly": round(center[1] - math.sin(angle) * label_radius, 1),
+                "ly2": round(center[1] - math.sin(angle) * label_radius + 16, 1),
+                "lx2": round(center[0] + math.cos(angle) * label_radius - 52, 1),
+                "ly3": round(center[1] - math.sin(angle) * label_radius + 8, 1),
+                "score_text": f"{float(item['score']):.0f}",
+            }
+        )
+    return " ".join(track), " ".join(points), out
+
+
 class RatingState(rx.State):
     ticker: str = ""
     error: str = ""
@@ -33,7 +83,6 @@ class RatingState(rx.State):
     result_ticker: str = ""
     result_company: str = ""
     result_as_of: str = ""
-    logo_url: str = ""
     fair_value: float = 0.0
     target_price: float = 0.0
     confidence_score: float = 0.0
@@ -41,6 +90,7 @@ class RatingState(rx.State):
     volatility_score: float = 0.0
     category_rows: list[dict] = []
     sub_score_rows: list[SubScoreItem] = []
+    snowflake_track_points: str = ""
     snowflake_data: list[dict] = [
         {"label": "Valuation", "score": 0},
         {"label": "Trend", "score": 0},
@@ -63,6 +113,7 @@ class RatingState(rx.State):
     active_list: str = ""
     renaming_list: str = ""
     show_new_list: bool = False
+    list_form_error: str = ""
 
     sidebar_collapsed_str: str = rx.LocalStorage("0", name="stockidence.sidebar_collapsed", sync=True)
 
@@ -122,12 +173,6 @@ class RatingState(rx.State):
         return quote
 
     @rx.var
-    def logo_display_url(self) -> str:
-        if self.logo_url:
-            return self.logo_url
-        return market.get_company_logo(self.result_ticker)
-
-    @rx.var
     def macro_metrics(self) -> list[dict]:
         return market.get_macro_metrics()
 
@@ -149,11 +194,11 @@ class RatingState(rx.State):
 
     @rx.var
     def ipo_calendar(self) -> list[dict]:
-        return market.get_ipo_calendar()[: int(self.calendar_limit)]
+        return market.get_ipo_calendar(int(self.calendar_limit))
 
     @rx.var
     def earnings_calendar(self) -> list[dict]:
-        return market.get_earnings_calendar()[: int(self.calendar_limit)]
+        return market.get_earnings_calendar(int(self.calendar_limit))
 
     def _filtered_news(self) -> list[dict]:
         news = market.get_market_news()
@@ -206,19 +251,23 @@ class RatingState(rx.State):
     @rx.event
     def toggle_new_list(self):
         self.show_new_list = not self.show_new_list
+        self.list_form_error = ""
 
     @rx.event
     def create_list(self, form_data: dict):
         name = str(form_data.get("list_name", "")).strip()
-        if not name:
-            return
         lists = self._parse_lists()
+        if not name:
+            self.list_form_error = "Enter a list name first."
+            return
         if any(l["name"] == name for l in lists):
+            self.list_form_error = f"A list named \"{name}\" already exists."
             return
         lists.append({"name": name, "tickers": []})
         self._persist_lists(lists)
         self.active_list = name
         self.show_new_list = False
+        self.list_form_error = ""
 
     @rx.event
     def delete_list(self, name: str):
@@ -379,7 +428,6 @@ class RatingState(rx.State):
         self.result_ticker = rating["ticker"]
         self.result_company = rating["company_name"]
         self.result_as_of = rating["as_of"]
-        self.logo_url = rating.get("logo_url") or ""
         self.fair_value = float(rating.get("fair_value") or 0.0)
         self.target_price = float(rating.get("target_price") or 0.0)
         self.confidence_score = float(rating["confidence_score"])
@@ -403,13 +451,16 @@ class RatingState(rx.State):
             }
             for item in rating["categories"]
         ]
-        self.snowflake_data = [
-            {
-                "label": labels.get(item["category"], item["category"]),
-                "score": round(item["score"], 1),
-            }
-            for item in rating["categories"]
-        ]
+        self.snowflake_track_points, _, self.snowflake_data = _snowflake_geometry(
+            [
+                {
+                    "label": labels.get(item["category"], item["category"]),
+                    "score": round(item["score"], 1),
+                    "color": _score_color(item["score"]),
+                }
+                for item in rating["categories"]
+            ]
+        )
         self.buy_plan = rating.get("buy_plan") or {}
         self.source = rating["source"]
         self.sub_score_rows = self._build_sub_score_rows(

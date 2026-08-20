@@ -102,25 +102,6 @@ def get_quote(ticker: str) -> dict | None:
     }
 
 
-def get_company_logo(ticker: str) -> str:
-    """Company logo URL from the raw profile cache; '' when absent.
-
-    Used as a fallback so any ticker with a fetched profile shows its logo
-    even when its rating came from the demo path.
-    """
-    rows = _read(
-        """
-        SELECT json_extract_string(payload, '$.logo')
-        FROM raw.raw_company_profile
-        WHERE ticker = ?
-        """,
-        [ticker.upper()],
-    )
-    if not rows or not rows[0][0]:
-        return ""
-    return rows[0][0]
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -258,14 +239,15 @@ def _decorate(rows: list[dict]) -> list[dict]:
     return out
 
 
-def get_ipo_calendar() -> list[dict]:
-    """Upcoming and recently priced IPOs on US exchanges."""
+def get_ipo_calendar(limit: int = 10) -> list[dict]:
+    """Upcoming and recently priced IPOs on US exchanges (up to `limit` rows)."""
     rows = _read(
         """
         SELECT payload FROM raw.raw_ipo_calendar
         WHERE date >= current_date - INTERVAL 7 DAY
-        ORDER BY date ASC LIMIT 10
-        """
+        ORDER BY date ASC LIMIT ?
+        """,
+        [limit],
     )
     if not rows:
         return _DEMO_IPO
@@ -297,14 +279,15 @@ def _fmt_int(v) -> str | None:
         return str(v) if v else None
 
 
-def get_earnings_calendar() -> list[dict]:
-    """Upcoming earnings releases with consensus estimates."""
+def get_earnings_calendar(limit: int = 10) -> list[dict]:
+    """Upcoming earnings releases with consensus estimates (up to `limit` rows)."""
     rows = _read(
         """
         SELECT payload FROM raw.raw_earnings_calendar
         WHERE CAST(json_extract_string(payload, '$.date') AS DATE) >= current_date
-        ORDER BY json_extract_string(payload, '$.date') ASC LIMIT 10
-        """
+        ORDER BY json_extract_string(payload, '$.date') ASC LIMIT ?
+        """,
+        [limit],
     )
     if not rows:
         return _DEMO_EARNINGS

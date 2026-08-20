@@ -50,6 +50,29 @@ def _build_db(tmp_path) -> str:
         "INSERT INTO raw.raw_company_profile VALUES (?, ?)",
         ["MSFT", '{"name": "Microsoft Corp", "logo": "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/MSFT.png"}'],
     )
+    con.execute(
+        "CREATE TABLE raw.raw_ipo_calendar (symbol VARCHAR, date DATE, payload JSON)"
+    )
+    con.executemany(
+        "INSERT INTO raw.raw_ipo_calendar VALUES (?, ?, ?)",
+        [
+            ("AAA", "2026-08-04", '{"date": "2026-08-04", "symbol": "AAA", "name": "Old Co", "status": "priced"}'),
+            ("LYNX", "2026-08-19", '{"date": "2026-08-19", "symbol": "LYNX", "name": "Lyntris Inc.", "status": "expected", "price": "17.50"}'),
+            ("PTT", "2026-09-08", '{"date": "2026-09-08", "symbol": "PTT", "name": "SIYATA PTT", "status": "expected"}'),
+        ],
+    )
+    con.execute(
+        "CREATE TABLE raw.raw_earnings_calendar (symbol VARCHAR, quarter INTEGER, year INTEGER, payload JSON)"
+    )
+    con.executemany(
+        "INSERT INTO raw.raw_earnings_calendar VALUES (?, ?, ?, ?)",
+        [
+            ("AARD", 3, 2026, '{"date": "2026-08-19", "symbol": "AARD", "quarter": 3, "year": 2026, "hour": "amc", "epsEstimate": -0.8917}'),
+            ("ADI", 3, 2026, '{"date": "2026-08-19", "symbol": "ADI", "quarter": 3, "year": 2026, "hour": "bmo", "epsEstimate": 3.3681}'),
+            ("ZYX", 3, 2026, '{"date": "2026-10-02", "symbol": "ZYX", "quarter": 3, "year": 2026, "hour": "bmo", "epsEstimate": 1.25}'),
+            ("ZZZ", 3, 2026, '{"date": "2026-10-15", "symbol": "ZZZ", "quarter": 3, "year": 2026, "hour": "amc", "epsEstimate": 0.5}'),
+        ],
+    )
     con.close()
     return str(db)
 
@@ -68,9 +91,15 @@ def test_mover_change_display_rounded(tmp_path, monkeypatch):
     assert nvda["change_display"] == "+2.88 (+2.19%)"
 
 
-def test_get_company_logo(tmp_path, monkeypatch):
+def test_ipo_calendar_limit_respected(tmp_path, monkeypatch):
     monkeypatch.setenv("STOCKIDENCE_DB", _build_db(tmp_path))
-    assert market.get_company_logo("msft") == (
-        "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/MSFT.png"
-    )
-    assert market.get_company_logo("NOPE") == ""
+    all_ipos = market.get_ipo_calendar(limit=10)
+    assert [i["symbol"] for i in all_ipos] == ["LYNX", "PTT"]
+    assert market.get_ipo_calendar(limit=1) == all_ipos[:1]
+
+
+def test_earnings_calendar_limit_respected(tmp_path, monkeypatch):
+    monkeypatch.setenv("STOCKIDENCE_DB", _build_db(tmp_path))
+    all_rows = market.get_earnings_calendar(limit=10)
+    assert [e["symbol"] for e in all_rows] == ["AARD", "ADI", "ZYX", "ZZZ"]
+    assert market.get_earnings_calendar(limit=2) == all_rows[:2]

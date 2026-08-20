@@ -34,14 +34,6 @@ ADVICE_COLORS = {
     "STRONG_SELL": rx.color("red", 9),
 }
 
-ADVICE_FILLS = {
-    "STRONG_BUY": rx.color("green", 8),
-    "BUY": rx.color("teal", 8),
-    "HOLD": rx.color("amber", 8),
-    "SELL": rx.color("orange", 8),
-    "STRONG_SELL": rx.color("red", 8),
-}
-
 CATEGORY_COLORS = {
     "valuation": rx.color("iris", 9),
     "trend": rx.color("sky", 9),
@@ -78,17 +70,6 @@ def _advice_color() -> rx.Var:
             for key, color in ADVICE_COLORS.items()
         ],
         rx.color("slate", 9),
-    )
-
-
-def _advice_fill_color() -> rx.Var:
-    return rx.match(
-        RatingState.advice,
-        *[
-            (key, color)
-            for key, color in ADVICE_FILLS.items()
-        ],
-        rx.color("slate", 8),
     )
 
 
@@ -356,17 +337,6 @@ def source_badge() -> rx.Component:
 def stock_header() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.cond(
-                RatingState.logo_display_url != "",
-                rx.image(
-                    src=RatingState.logo_display_url,
-                    alt=f"{RatingState.result_ticker} logo",
-                    height="40px",
-                    width="40px",
-                    border_radius="lg",
-                    object_fit="contain",
-                ),
-            ),
             rx.heading(
                 RatingState.result_ticker,
                 size="7",
@@ -470,30 +440,73 @@ def score_panel() -> rx.Component:
     )
 
 
-def snowflake_chart() -> rx.Component:
-    return rx.recharts.responsive_container(
-        rx.recharts.radar_chart(
-            rx.recharts.polar_grid(stroke=rx.color("slate", 5)),
-            rx.recharts.polar_angle_axis(
-                data_key="label",
-                tick={"font_size": 12, "fill": rx.color("slate", 10)},
-            ),
-            rx.recharts.polar_radius_axis(
-                domain=[0, 100],
-                tick={"font_size": 10, "fill": rx.color("slate", 9)},
-            ),
-            rx.recharts.radar(
-                data_key="score",
-                stroke=_advice_color(),
-                fill=_advice_fill_color(),
-                fill_opacity=0.35,
-                stroke_width=2,
-            ),
-            data=RatingState.snowflake_data,
-            cx="50%",
-            cy="50%",
-            outer_radius="80%",
+def snowflake_spoke(item: rx.Var) -> rx.Component:
+    """Axis bar from the center to the score point, colored by the score."""
+    return rx.el.svg.line(
+        x1=170,
+        y1=170,
+        x2=item["cx"],
+        y2=item["cy"],
+        stroke=item["color"],
+        stroke_width=9,
+        stroke_linecap="round",
+        opacity=0.75,
+    )
+
+
+def snowflake_vertex(item: rx.Var) -> rx.Component:
+    return rx.el.svg.circle(
+        cx=item["cx"],
+        cy=item["cy"],
+        r=6,
+        fill=item["color"],
+        stroke="white",
+        stroke_width=1.5,
+    )
+
+
+def snowflake_label(item: rx.Var) -> rx.Component:
+    return rx.fragment(
+        rx.el.svg.text(
+            item["label"],
+            x=item["lx"],
+            y=item["ly"],
+            fill=rx.color("slate", 10),
+            font_size=12,
+            font_weight=600,
+            text_anchor="middle",
         ),
+        rx.el.svg.text(
+            item["score_text"],
+            x=item["lx"],
+            y=item["ly2"],
+            fill=item["color"],
+            font_size=13,
+            font_weight=700,
+            text_anchor="middle",
+        ),
+        rx.el.svg.circle(
+            cx=item["lx2"],
+            cy=item["ly3"],
+            r=3,
+            fill=item["color"],
+        ),
+    )
+
+
+def snowflake_chart() -> rx.Component:
+    return rx.el.svg(
+        rx.el.svg.polygon(
+            points=RatingState.snowflake_track_points,
+            fill="none",
+            stroke=rx.color("slate", 6),
+            stroke_width=1.5,
+            stroke_dasharray="4 4",
+        ),
+        rx.foreach(RatingState.snowflake_data, snowflake_spoke),
+        rx.foreach(RatingState.snowflake_data, snowflake_vertex),
+        rx.foreach(RatingState.snowflake_data, snowflake_label),
+        view_box="0 0 340 340",
         width="100%",
         height=340,
     )
@@ -831,22 +844,43 @@ def new_list_form() -> rx.Component:
     return rx.cond(
         RatingState.show_new_list,
         rx.form(
-            rx.hstack(
-                rx.input(
-                    placeholder="List name",
-                    name="list_name",
-                    size="2",
-                    variant="soft",
+            rx.vstack(
+                rx.hstack(
+                    rx.input(
+                        placeholder="List name",
+                        name="list_name",
+                        size="2",
+                        variant="soft",
+                        width="100%",
+                        required=True,
+                    ),
+                    rx.icon_button(
+                        "plus",
+                        size="2",
+                        variant="solid",
+                        color_scheme="iris",
+                        type="submit",
+                    ),
+                    rx.icon_button(
+                        rx.icon("x", size=14),
+                        title="Hide new-list form",
+                        size="2",
+                        variant="ghost",
+                        type="button",
+                        on_click=RatingState.toggle_new_list,
+                    ),
+                    spacing="2",
                     width="100%",
                 ),
-                rx.icon_button(
-                    "plus",
-                    size="2",
-                    variant="solid",
-                    color_scheme="iris",
-                    type="submit",
+                rx.cond(
+                    RatingState.list_form_error,
+                    rx.text(
+                        RatingState.list_form_error,
+                        size="1",
+                        color=rx.color("red", 9),
+                    ),
                 ),
-                spacing="2",
+                spacing="1",
                 width="100%",
             ),
             on_submit=RatingState.create_list,

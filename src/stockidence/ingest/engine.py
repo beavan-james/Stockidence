@@ -121,7 +121,15 @@ class IngestEngine:
         params = dict(params or {})
         if spec.name in ("ipo_calendar", "earnings_calendar"):
             if "from_date" not in params or "to_date" not in params:
-                params.setdefault("from_date", now.date().isoformat())
+                # IPO calendar: backfill the trailing week too, so "recently
+                # priced" listings stay visible to the frontend (it filters
+                # `date >= current_date - 7`).
+                params.setdefault(
+                    "from_date",
+                    (now.date() - timedelta(days=7)).isoformat()
+                    if spec.name == "ipo_calendar"
+                    else now.date().isoformat(),
+                )
                 params.setdefault("to_date", (now.date() + timedelta(days=_SCHEDULED_DEFAULT_WINDOW_DAYS)).isoformat())
             return params
         return params
