@@ -197,6 +197,11 @@ class RatingState(rx.State):
         return market.get_market_movers()
 
     @rx.var
+    def movers_as_of(self) -> str:
+        """Trading day the gainers/losers snapshot represents ('' if demo)."""
+        return self.market_movers.get("movers_as_of", "")
+
+    @rx.var
     def top_gainers(self) -> list[dict]:
         return self.market_movers.get("top_gainers", [])[: int(self.movers_limit)]
 

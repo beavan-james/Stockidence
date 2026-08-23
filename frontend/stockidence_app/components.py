@@ -1495,10 +1495,25 @@ def mover_row(item: rx.Var) -> rx.Component:
     )
 
 
-def movers_table(title: str, data: rx.Var) -> rx.Component:
+def movers_table(title: str, data: rx.Var, as_of: rx.Var) -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.heading(title, size="4", weight="bold"),
+            rx.hstack(
+                rx.heading(title, size="4", weight="bold"),
+                rx.cond(
+                    as_of != "",
+                    rx.badge(
+                        "Market close · ", as_of,
+                        variant="soft",
+                        radius="full",
+                        color_scheme="gray",
+                    ),
+                    rx.fragment(),
+                ),
+                align="center",
+                spacing="3",
+                width="100%",
+            ),
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
@@ -1721,8 +1736,10 @@ def discover_panel() -> rx.Component:
                 width="100%",
             ),
             rx.grid(
-                movers_table("Top gainers", RatingState.top_gainers),
-                movers_table("Top losers", RatingState.top_losers),
+                movers_table("Top gainers", RatingState.top_gainers,
+                             RatingState.movers_as_of),
+                movers_table("Top losers", RatingState.top_losers,
+                             RatingState.movers_as_of),
                 columns=rx.breakpoints(initial="1", md="2"),
                 spacing="4",
                 width="100%",

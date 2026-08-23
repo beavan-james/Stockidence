@@ -233,7 +233,12 @@ def get_commodities() -> list[dict]:
 
 
 def get_market_movers() -> dict:
-    """Top gainers, losers, and most actively traded, bucket-aggregated."""
+    """Top gainers, losers, and most actively traded, bucket-aggregated.
+
+    movers_as_of is the trading day the snapshot represents (max land date
+    in raw_gainers_losers) so the UI can show how fresh the table is; ''
+    for the demo fallback.
+    """
     rows = _read(
         """
         SELECT ticker,
@@ -252,10 +257,15 @@ def get_market_movers() -> dict:
         return {
             "metadata": "Top gainers, losers, and most actively traded US tickers (demo)",
             "last_updated": _now() + " US/Eastern",
+            "movers_as_of": "",
             "top_gainers": _decorate(_DEMO_MOVERS["top_gainers"]),
             "top_losers": _decorate(_DEMO_MOVERS["top_losers"]),
             "most_actively_traded": _decorate(_DEMO_MOVERS["most_actively_traded"]),
         }
+    as_of_rows = _read("SELECT max(date) FROM raw.raw_gainers_losers")
+    movers_as_of = (
+        _fmt_fetched(as_of_rows[0][0]) if as_of_rows and as_of_rows[0][0] else ""
+    )
     movers: dict[str, list[dict]] = {"top_gainers": [], "top_losers": [], "most_actively_traded": []}
     for ticker, bucket, price, change_amount, change_percentage, volume in rows:
         if bucket in movers and price is not None:
@@ -266,6 +276,7 @@ def get_market_movers() -> dict:
     return {
         "metadata": "Top gainers, losers, and most actively traded US tickers",
         "last_updated": _now() + " US/Eastern",
+        "movers_as_of": movers_as_of,
         "top_gainers": _decorate(movers["top_gainers"]),
         "top_losers": _decorate(movers["top_losers"]),
         "most_actively_traded": _decorate(movers["most_actively_traded"]),

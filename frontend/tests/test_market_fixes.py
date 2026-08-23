@@ -112,6 +112,8 @@ def test_mover_change_display_rounded(tmp_path, monkeypatch):
     movers = market.get_market_movers()
     nvda = next(r for r in movers["top_gainers"] if r["ticker"] == "NVDA")
     assert nvda["change_display"] == "+2.88 (+2.19%)"
+    # snapshot day surfaces so the discover tables can show data freshness
+    assert movers["movers_as_of"] == "Aug 19, 2026"
 
 
 def test_ipo_calendar_limit_respected(tmp_path, monkeypatch):
