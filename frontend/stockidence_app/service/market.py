@@ -159,11 +159,19 @@ def _series_stale(series: list[dict], reference: list[dict], months: int = 6) ->
     return _month_add(series[-1]["date"][:7], months) < reference[-1]["date"][:7]
 
 
+def _fmt_fetched(ts) -> str:
+    """TIMESTAMPTZ -> 'Aug 20, 2026'; '' for missing/demo values."""
+    try:
+        return ts.strftime("%b %d, %Y")
+    except AttributeError:
+        return ""
+
+
 def get_macro_metrics() -> list[dict]:
     """Latest quarterly/monthly macro indicators (inflation, CPI, etc.)."""
     rows = _read(
         """
-        SELECT indicator, min(date), max(date)
+        SELECT indicator, min(date), max(date), max(fetched_at)
         FROM raw.raw_macro_indicators GROUP BY 1
         """
     )
@@ -172,10 +180,12 @@ def get_macro_metrics() -> list[dict]:
     out: list[dict] = []
     for indicator, label, unit, detail in _MACRO_DEFS:
         series = _latest_macro_series(indicator, points=8)
+        derived_from_cpi = False
         if indicator == "inflation" and _series_stale(series, cpi_series):
             derived = _inflation_from_cpi()
             if derived:
-                series, detail = derived, "Derived from CPI YoY"
+                series, detail, derived_from_cpi = (
+                    derived, "Derived from CPI YoY", True)
         latest = series[-1] if series else None
         if latest is None or indicator not in live:
             continue  # untouched indicator: let the demo fill the grid
@@ -184,8 +194,12 @@ def get_macro_metrics() -> list[dict]:
             value = round(value) if value is not None else None
         else:
             value = round(value, 2) if value is not None else None
+        # 'as_of' is the data period (BLS lags a month); 'fetched' is when
+        # our pipeline landed it. Derived inflation credits CPI's fetch time.
+        fetched_key = "cpi" if derived_from_cpi else indicator
+        fetched = _fmt_fetched((live.get(fetched_key) or (None,) * 4)[3])
         out.append({"label": label, "value": value, "unit": unit, "detail": detail,
-                    "as_of": latest["date"], "series": series})
+                    "as_of": latest["date"], "series": series, "fetched": fetched})
     if out:
         return out
     return _DEMO_MACRO
@@ -412,17 +426,17 @@ def _str_list(v) -> list[str]:
 # --- deterministic demo placeholders (kept in sync with API.md schemas) ---
 
 _DEMO_MACRO = [
-    {"label": "Inflation", "value": 2.95, "unit": "%", "detail": "YoY annual rate", "as_of": "2026-07-01",
+    {"label": "Inflation", "value": 2.95, "unit": "%", "detail": "YoY annual rate", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2024-01-01", "value": 2.95}, {"date": "2025-01-01", "value": 3.41}, {"date": "2026-01-01", "value": 2.85}, {"date": "2026-07-01", "value": 2.62}]},
-    {"label": "CPI", "value": 333.918, "unit": "index", "detail": "Consumer price index", "as_of": "2026-07-01",
+    {"label": "CPI", "value": 333.918, "unit": "index", "detail": "Consumer price index", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-01-01", "value": 318.2}, {"date": "2026-01-01", "value": 329.1}, {"date": "2026-07-01", "value": 333.9}]},
-    {"label": "Unemployment Rate", "value": 4.1, "unit": "%", "detail": "Seasonally adjusted", "as_of": "2026-07-01",
+    {"label": "Unemployment Rate", "value": 4.1, "unit": "%", "detail": "Seasonally adjusted", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-07-01", "value": 4.3}, {"date": "2026-01-01", "value": 4.2}, {"date": "2026-07-01", "value": 4.1}]},
-    {"label": "Federal Funds Rate", "value": 3.63, "unit": "%", "detail": "Effective rate", "as_of": "2026-07-01",
+    {"label": "Federal Funds Rate", "value": 3.63, "unit": "%", "detail": "Effective rate", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-01-01", "value": 4.33}, {"date": "2026-01-01", "value": 3.84}, {"date": "2026-07-01", "value": 3.63}]},
-    {"label": "Real GDP per Capita", "value": 88698, "unit": "$", "detail": "Quarterly, USD", "as_of": "2026-06-30",
+    {"label": "Real GDP per Capita", "value": 88698, "unit": "$", "detail": "Quarterly, USD", "as_of": "2026-06-30", "fetched": "",
      "series": [{"date": "2025-06-30", "value": 86410}, {"date": "2026-06-30", "value": 88698}]},
-    {"label": "Natural Gas", "value": 2.89, "unit": "$/MMBtu", "detail": "Henry Hub spot price", "as_of": "2026-07-01",
+    {"label": "Natural Gas", "value": 2.89, "unit": "$/MMBtu", "detail": "Henry Hub spot price", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-11-01", "value": 3.28}, {"date": "2026-03-01", "value": 2.54}, {"date": "2026-07-01", "value": 2.89}]},
 ]
 

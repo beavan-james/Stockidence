@@ -1369,6 +1369,14 @@ def macro_metric_card(item: rx.Var) -> rx.Component:
                 size="1",
                 color=rx.color("slate", 10),
             ),
+            rx.cond(
+                item["fetched"] != "",
+                rx.text(
+                    f"fetched {item['fetched']}",
+                    size="1",
+                    color=rx.color("slate", 9),
+                ),
+            ),
             macro_metric_chart(item),
             align="start",
             width="100%",
