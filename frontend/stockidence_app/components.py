@@ -302,6 +302,66 @@ def error_callout() -> rx.Component:
     )
 
 
+def failure_row(item: rx.Var) -> rx.Component:
+    return rx.hstack(
+        rx.badge(
+            item["job_name"],
+            color_scheme="red",
+            variant="soft",
+            radius="full",
+            size="1",
+            flex_shrink="0",
+        ),
+        rx.text(
+            item["failed_at_display"],
+            size="1",
+            color=rx.color("slate", 9),
+            flex_shrink="0",
+        ),
+        rx.text(
+            item["error"],
+            size="1",
+            color=rx.color("slate", 10),
+            overflow="hidden",
+            text_overflow="ellipsis",
+            white_space="nowrap",
+            flex_grow="1",
+        ),
+        spacing="3",
+        align="center",
+        width="100%",
+    )
+
+
+def pipeline_health_strip() -> rx.Component:
+    """Compact ops strip: green when no recent failures, red list otherwise."""
+    return rx.cond(
+        RatingState.pipeline_failures.length() == 0,
+        rx.callout(
+            rx.text("All pipelines operational (no failed runs in the last 7 days)", size="2"),
+            icon="circle_check",
+            color_scheme="grass",
+            size="1",
+            width="100%",
+            variant="surface",
+        ),
+        rx.card(
+            rx.vstack(
+                section_header(
+                    "triangle_alert",
+                    "Pipeline failures (last 7 days)",
+                    "Recorded by the Dagster failure sensor into control.pipeline_failures. Check the webserver for full run logs.",
+                ),
+                rx.foreach(RatingState.pipeline_failures, failure_row),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+            padding="4",
+        ),
+    )
+
+
 def advice_badge() -> rx.Component:
     return rx.badge(
         _advice_label(),
@@ -1178,6 +1238,7 @@ def main_panel() -> rx.Component:
     return rx.vstack(
         hero(),
         macro_metrics_section(),
+        pipeline_health_strip(),
         rx.cond(
             RatingState.error != "",
             error_callout(),

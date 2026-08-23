@@ -189,6 +189,10 @@ class RatingState(rx.State):
         return market.get_commodities()
 
     @rx.var
+    def pipeline_failures(self) -> list[dict]:
+        return warehouse.get_recent_failures()
+
+    @rx.var
     def market_movers(self) -> dict:
         return market.get_market_movers()
 

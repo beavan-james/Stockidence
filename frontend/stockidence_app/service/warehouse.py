@@ -245,3 +245,49 @@ def enqueue_ticker_request(ticker: str) -> bool | None:
         return True
     except Exception:
         return None
+
+
+def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
+    """Recent failed pipeline runs from control.pipeline_failures.
+
+    Written by the daemon-run failure sensor; empty list when the table is
+    missing/empty or the warehouse is unavailable — the UI treats that as
+    'no recent failures' rather than an error.
+    """
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return []
+    try:
+        import duckdb
+    except ImportError:
+        return []
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return []
+    try:
+        rows = con.execute(
+            """
+            SELECT job_name, failed_at, error_message
+            FROM control.pipeline_failures
+            WHERE failed_at >= CURRENT_TIMESTAMP - INTERVAL (?) DAY
+            ORDER BY failed_at DESC
+            LIMIT ?
+            """,
+            [days, limit],
+        ).fetchall()
+        return [
+            {
+                "job_name": r[0],
+                "failed_at": r[1].isoformat() if r[1] else "",
+                "failed_at_display": (
+                    r[1].strftime("%Y-%m-%d %H:%M") + " UTC" if r[1] else ""
+                ),
+                "error": (r[2] or "").splitlines()[0][:160],
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+    finally:
+        con.close()

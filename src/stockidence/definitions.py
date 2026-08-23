@@ -29,6 +29,7 @@ from dagster import (
     asset,
 )
 
+from .failure_sensor import pipeline_failure_sensor
 from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest.engine import IngestEngine
 from .mart.mart import (
@@ -244,7 +245,7 @@ defs = Definitions(
             m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
-    sensors=[ticker_request_sensor],
+    sensors=[ticker_request_sensor, pipeline_failure_sensor],
     # DuckDB is a single-writer file: with the default multiprocess executor
     # every step runs in its own subprocess and the four mart siblings (all
     # depending only on stg_prices_daily) launch concurrently and fight over

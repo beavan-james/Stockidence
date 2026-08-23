@@ -231,6 +231,17 @@ class Warehouse:
                 )
                 """
             )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS control.pipeline_failures (
+                    run_id        VARCHAR NOT NULL,
+                    job_name      VARCHAR NOT NULL,
+                    failed_at     TIMESTAMPTZ NOT NULL,
+                    error_message VARCHAR,
+                    PRIMARY KEY (run_id)
+                )
+                """
+            )
             for table, keys in RAW_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 pk = ", ".join(f'"{name}"' for name, _ in keys)
