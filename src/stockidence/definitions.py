@@ -20,6 +20,7 @@ from dagster import (
     Definitions,
     DynamicPartitionsDefinition,
     RunRequest,
+    in_process_executor,
     job,
     op,
     resource,
@@ -241,4 +242,10 @@ defs = Definitions(
     jobs=[monthly_job, weekdays_job, daily_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
     sensors=[ticker_request_sensor],
+    # DuckDB is a single-writer file: with the default multiprocess executor
+    # every step runs in its own subprocess and the four mart siblings (all
+    # depending only on stg_prices_daily) launch concurrently and fight over
+    # the write lock. In-process keeps each run's steps sequential; cross-run
+    # overlap is still safe because Warehouse.connect retries on lock.
+    executor=in_process_executor,
 )

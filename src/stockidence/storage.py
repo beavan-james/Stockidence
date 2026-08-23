@@ -189,18 +189,17 @@ class Warehouse:
     ) -> duckdb.DuckDBPyConnection:
         """Open a connection to the DuckDB file.
 
-        DuckDB allows a single writer process per file. Parallel Dagster steps
-        (and the frontend) all funnel through this store, so a write-open can
-        transiently hit "Could not set lock on file" while a sibling step
-        holds the write lock. Reading never contends; write-opens retry with
+        DuckDB's file lock is exclusive per process: while ANY process holds
+        the file open read-write, even read_only opens are refused, and while
+        any process holds it read-only, writers are refused. Parallel Dagster
+        steps (and the frontend) all funnel through this store, so opens can
+        transiently hit "Could not set lock on file". Both modes retry with
         backoff until the lock frees instead of crashing the run.
         """
-        if read_only:
-            return duckdb.connect(str(self.path), read_only=True)
         last_error: Exception | None = None
         for attempt in range(max_attempts):
             try:
-                return duckdb.connect(str(self.path))
+                return duckdb.connect(str(self.path), read_only=read_only)
             except duckdb.IOException as exc:  # lock held by another process
                 last_error = exc
                 time.sleep(base_delay * (attempt + 1))
