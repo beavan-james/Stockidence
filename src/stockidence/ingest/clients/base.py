@@ -41,6 +41,7 @@ class BaseClient:
         retries: int = 2,
         backoff_seconds: float = 1.0,
         min_interval_seconds: float = 0.0,
+        pace_file: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url
@@ -49,16 +50,54 @@ class BaseClient:
         self.backoff_seconds = backoff_seconds
         self.min_interval_seconds = min_interval_seconds
         self._last_call_at = 0.0
+        self.pace_file = pace_file
 
     def _pace(self) -> None:
         """Enforce a per-provider minimum interval between calls (free-tier
         limits are coarser than HTTP 429 handling can paper over)."""
         if self.min_interval_seconds <= 0:
             return
+        if self.pace_file:
+            self._pace_shared()
+            return
         wait = self.min_interval_seconds - (time.monotonic() - self._last_call_at)
         if wait > 0:
             time.sleep(wait)
         self._last_call_at = time.monotonic()
+
+    def _pace_shared(self) -> None:
+        """Cross-process pacing via an flock-guarded timestamp file.
+
+        In-memory pacing is per-instance, and every Dagster run is its own
+        process with a fresh client — a bulk sensor tick can launch many runs
+        at once and stampede a provider's burst limit (seen live with Alpha
+        Vantage transcripts). The lockfile makes all processes on this
+        machine share one call schedule.
+        """
+        import fcntl
+        import os
+
+        directory = os.path.dirname(self.pace_file)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(self.pace_file, "a+") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            try:
+                fh.seek(0)
+                content = fh.read().strip()
+                try:
+                    last = float(content)
+                except ValueError:
+                    last = 0.0
+                wait = self.min_interval_seconds - (time.time() - last)
+                if wait > 0:
+                    time.sleep(wait)
+                fh.seek(0)
+                fh.truncate()
+                fh.write(str(time.time()))
+                fh.flush()
+            finally:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
     def request(
         self,
@@ -73,6 +112,12 @@ class BaseClient:
         for attempt in range(self.retries + 1):
             try:
                 return self._request_once(method, path, params=params, json_body=json_body, headers=headers)
+            except RateLimitError as exc:
+                # burst collisions heal with patience; a genuinely exhausted
+                # daily quota will fail all attempts and surface to Dagster
+                last_error = exc
+                if attempt < self.retries:
+                    time.sleep(self.backoff_seconds * 12 * (attempt + 1))
             except (APIError, InvalidResponseError) as exc:
                 last_error = exc
                 if attempt < self.retries:

@@ -44,6 +44,12 @@ from .storage import Warehouse
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
 
+# Max RunRequests emitted per sensor tick. Each run fires provider calls
+# (including one Alpha Vantage transcript), so launching the whole queue at
+# once stampedes free-tier burst limits; a small batch per 30s tick keeps
+# providers paced while still draining the queue within minutes.
+SENSOR_BATCH_SIZE = 2
+
 _ON_DEMAND_ENDPOINTS = tuple(spec.name for spec in on_demand_endpoints())
 
 
@@ -143,12 +149,14 @@ def ticker_data(context: AssetExecutionContext) -> None:
             f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
 
 
-def stage_ticker_runs(warehouse: Warehouse, instance) -> list[str]:
-    """Consume the request queue: add a dynamic ticker partition per pending
-    request and mark them launched. Returns the staged tickers so the sensor
-    can emit one RunRequest each. Requests whose runs fail are picked up again
-    on the next frontend re-request."""
-    pending = warehouse.pending_ticker_requests()
+def stage_ticker_runs(warehouse: Warehouse, instance,
+                      batch_size: int = SENSOR_BATCH_SIZE) -> list[str]:
+    """Consume the request queue: add dynamic ticker partitions and mark
+    launched, oldest requests first, at most `batch_size` per tick. Returns
+    the staged tickers so the sensor can emit one RunRequest each; the rest
+    stay pending for the next tick. Requests whose runs fail are picked up
+    again on the next frontend re-request."""
+    pending = warehouse.pending_ticker_requests()[:batch_size]
     for ticker in pending:
         instance.add_dynamic_partitions("ticker", [ticker])
     if pending:
