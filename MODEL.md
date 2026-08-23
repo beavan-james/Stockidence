@@ -221,7 +221,9 @@ target = fairValue × (1 + g_fwd)
 ### Advised Buy Price, Stop-Loss & Holding Style (Buy/Strong Buy only)
 
 1. **Advised buy price** = min(current price, fairValue × (1 − margin_of_safety)) — margin of safety default 15% (config). Price ≤ buy price → buy now; above → wait for pullback to that level.
-2. **Stop-loss** = advised buy price − k × ATR, k scaled by holding style: day trade 1.0, swing 1.5, long-term 2.0 (provisional; floored so low-priced stocks don't get absurdly tight stops).
-3. **Holding style** from the volatility bands above. Long-term holdings track the 12m target; swing/day trades are managed off the stop/ATR, not fair value.
+2. **Stop-loss** = advised buy price − k × ATR, k scaled by holding style: day trade 3.0, swing 4.5, long-term 6.0 (v2 2026-08: widened ×3 after trade-level backtesting — the original 1.0/1.5/2.0 stopped out ~84% of positions before any target could be reached, median trade −2.4%; at 3× the avg/trade went +1.4% → +13.5% train / +16.3% held-out with win rate 25%→73%. Floored so low-priced stocks don't get absurdly tight stops.)
+3. **Holding style** from the volatility bands above. Long-term holdings track the 12m target; swing/day trades are managed off the stop/ATR, not fair value. Expected holding window for plan-based exits is up to ~120 trading days (~6 months) per the backtest's timeout horizon.
+
+Backtesting further found that exiting at **fair value itself** (instead of the growth-extended target price) adds roughly +10pp avg/trade on top of the stop widening (+18.1% vs +13.5% train). Not yet adopted — it changes what "target price" means downstream. Candidate for v3.
 
 All weights, thresholds, growth caps, margins of safety, and ATR multipliers are **provisional spec, not locked** — centralize them as constants so backtesting can tune them without touching scoring logic.

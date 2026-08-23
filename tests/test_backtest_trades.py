@@ -104,3 +104,26 @@ def test_unfilled_limit_recorded():
                        entry_window=2, max_hold=10, cost_bps=0.0)
     assert len(ts) == 1 and ts[0].exit_reason == "unfilled"
     assert ts[0].net_return is None
+
+
+def test_apply_plan_params_rebuilds_geometry():
+    from stockidence.backtest_trades import PlanParams, apply_plan_params
+    row = _signal(1)
+    row.plan.update({"signal_price": 100.0, "atr_14": 4.0,
+                     "fair_value": 130.0})
+    # defaults reproduce the stored plan exactly (buy=min(100, 110.5)=100,
+    # stop=100-1.5*4=94 -> floored to 60? no: floor 0.6*100=60, stays 94)
+    out = apply_plan_params([row], PlanParams())[0].plan
+    assert out["buy_price"] == 100.0
+    assert out["stop_loss"] == 94.0
+    # wider stop: scale 2 -> 100 - 3*4 = 88 (above the 60 floor)
+    out = apply_plan_params([row], PlanParams(atr_scale=2.0))[0].plan
+    assert out["stop_loss"] == 88.0
+    # deeper margin of safety pulls the limit below market: 130*0.85=110>100,
+    # so mos must bite: 130*(1-0.30)=91 -> buy 91, stop 91-6=85, floor 54.6
+    out = apply_plan_params([row], PlanParams(mos=0.30))[0].plan
+    assert abs(out["buy_price"] - 91.0) < 1e-9
+    assert abs(out["stop_loss"] - 85.0) < 1e-9
+    # target_mode=fv swaps the exit for fair value
+    out = apply_plan_params([row], PlanParams(target_mode="fv"))[0].plan
+    assert out["target_price"] == 130.0

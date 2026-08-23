@@ -27,11 +27,61 @@ import statistics
 from dataclasses import dataclass
 
 from .backtest import BacktestRow, load_rows
+from .mart.scoring import BUY_PLAN
 from .storage import Warehouse
 
 DEFAULT_ENTRY_RATINGS = ("Strong Buy",)
 DEFAULT_ENTRY_WINDOW = 5
 DEFAULT_MAX_HOLD = 60
+
+
+@dataclass
+class PlanParams:
+    """Overrides for the buy-plan geometry stored on replay rows.
+
+    Rows capture the plan *inputs* (signal price, fair value, ATR14), so a
+    sweep over stop distance / margin of safety / exit rule reuses one
+    replay set instead of re-running score_ticker per combination. Defaults
+    reproduce the live scoring.BUY_PLAN behavior exactly.
+    """
+
+    mos: float | None = None           # margin of safety (default 0.15)
+    atr_scale: float = 1.0             # scales the style's ATR multiple
+    stop_floor: float | None = None    # floor as fraction of buy price (0.6)
+    target_mode: str = "captured"      # "captured" or "fv" (= fair value)
+
+
+def apply_plan_params(rows: list[BacktestRow],
+                      p: PlanParams) -> list[BacktestRow]:
+    """Rebuild each row's plan geometry under PlanParams (pure)."""
+    out: list[BacktestRow] = []
+    for r in rows:
+        src = r.plan
+        if not _plan_ok(r):
+            out.append(r)
+            continue
+        price, fv = src["signal_price"], src.get("fair_value")
+        mos = BUY_PLAN["margin_of_safety"] if p.mos is None else p.mos
+        buy = min(price, fv * (1.0 - mos)) if fv else min(price, price)
+        style = src["holding_style"]
+        k = BUY_PLAN["atr_multiplier"][style] * p.atr_scale
+        atr = src.get("atr_14")
+        stop = (buy - k * atr) if atr else buy * 0.85
+        floor = BUY_PLAN["stop_floor_scale"] if p.stop_floor is None else p.stop_floor
+        stop = max(stop, buy * floor)
+        if p.target_mode == "fv":
+            target = fv
+        else:
+            target = src.get("target_price")
+        new = dict(src)
+        new.update({"buy_price": buy, "stop_loss": stop,
+                    "target_price": target})
+        out.append(BacktestRow(
+            ticker=r.ticker, as_of=r.as_of, rating=r.rating,
+            confidence=r.confidence, volatility=r.volatility,
+            category_scores=r.category_scores, fwd_returns=r.fwd_returns,
+            fwd_vols=r.fwd_vols, plan=new))
+    return out
 
 
 @dataclass
@@ -142,8 +192,11 @@ def simulate(warehouse: Warehouse, rows: list[BacktestRow], *,
              entry_ratings: tuple[str, ...] = DEFAULT_ENTRY_RATINGS,
              entry_window: int = DEFAULT_ENTRY_WINDOW,
              max_hold: int = DEFAULT_MAX_HOLD,
-             cost_bps: float = 5.0) -> list[Trade]:
+             cost_bps: float = 5.0,
+             plan_params: PlanParams | None = None) -> list[Trade]:
     """Resolve cached signals against stored OHLC bars, ticker by ticker."""
+    if plan_params is not None:
+        rows = apply_plan_params(rows, plan_params)
     by_ticker: dict[str, list[BacktestRow]] = {}
     for r in rows:
         by_ticker.setdefault(r.ticker, []).append(r)
@@ -209,12 +262,25 @@ def main() -> None:
     parser.add_argument("--max-hold", type=int, default=DEFAULT_MAX_HOLD)
     parser.add_argument("--cost-bps", type=float, default=5.0,
                         help="round-trip transaction cost in basis points")
+    parser.add_argument("--mos", type=float, default=None,
+                        help="margin-of-safety override (default 0.15)")
+    parser.add_argument("--atr-scale", type=float, default=1.0,
+                        help="scale the style's ATR stop multiple")
+    parser.add_argument("--stop-floor", type=float, default=None,
+                        help="stop floor as fraction of buy price (0.6)")
+    parser.add_argument("--target-mode", choices=("captured", "fv"),
+                        default="captured",
+                        help="exit target: model's target price or fair value")
     args = parser.parse_args()
     warehouse = Warehouse(args.db)
     ratings = tuple(r.strip() for r in args.entry.split(",") if r.strip())
     trades = simulate(warehouse, load_rows(args.rows_json),
                       entry_ratings=ratings, entry_window=args.entry_window,
-                      max_hold=args.max_hold, cost_bps=args.cost_bps)
+                      max_hold=args.max_hold, cost_bps=args.cost_bps,
+                      plan_params=PlanParams(
+                          mos=args.mos, atr_scale=args.atr_scale,
+                          stop_floor=args.stop_floor,
+                          target_mode=args.target_mode))
     print(render_trades(trades))
 
 

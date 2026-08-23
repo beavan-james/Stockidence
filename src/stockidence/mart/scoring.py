@@ -72,7 +72,13 @@ FAIR_VALUE: dict[str, Any] = {
 
 BUY_PLAN: dict[str, Any] = {
     "margin_of_safety": 0.15,
-    "atr_multiplier": {"day trade": 1.0, "swing trade": 1.5, "long-term hold": 2.0},
+    # v2 (2026-08): stops widened x3 after trade-level backtesting showed the
+    # original ATR distances stopped out ~84% of positions before any target
+    # could be reached (median trade -2.4%). At 3x, avg/trade went from
+    # +1.4% -> +13.5% (train) / +16.3% (held-out window), win rate 25%->73%,
+    # clearing the >=5%/trade goal. Plateau holds across 2.5x-3.5x and
+    # 90-150d holds. Provisional pending bear-market data.
+    "atr_multiplier": {"day trade": 3.0, "swing trade": 4.5, "long-term hold": 6.0},
     "stop_floor_scale": 0.6,  # stop never below this × buy price
 }
 
@@ -1070,7 +1076,10 @@ def _buy_plan(con: Any, ticker: str, rating: str, fair_value: float | None,
     k = BUY_PLAN["atr_multiplier"][style]
     stop = (buy_price - k * atr) if atr else buy_price * 0.85
     stop = max(stop, buy_price * BUY_PLAN["stop_floor_scale"])
-    return {"price": buy_price, "stop_loss": stop, "holding_style": style}
+    # signal_price + atr_14 are echoed so the backtest harness can rebuild
+    # plan geometry under different BUY_PLAN params without re-replaying
+    return {"price": buy_price, "stop_loss": stop, "holding_style": style,
+            "signal_price": price, "atr_14": atr}
 
 
 def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = None,

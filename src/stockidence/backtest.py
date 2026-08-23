@@ -126,6 +126,10 @@ def run_backtest(
                         "stop_loss": result.buy_plan.get("stop_loss"),
                         "target_price": result.target_price,
                         "holding_style": result.buy_plan.get("holding_style"),
+                        # plan inputs, for param sweeps without re-replaying
+                        "signal_price": result.buy_plan.get("signal_price"),
+                        "atr_14": result.buy_plan.get("atr_14"),
+                        "fair_value": result.fair_value,
                     }
                 rows.append(BacktestRow(
                     ticker=ticker,
