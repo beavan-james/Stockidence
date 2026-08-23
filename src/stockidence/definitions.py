@@ -89,9 +89,12 @@ def monthly_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
-@schedule(job=weekdays_job, cron_schedule="0 0 * * 1-5")
+@schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5")
 def weekdays_schedule() -> dict:  # noqa: ANN401
-    """After market close: gainers/losers, IPO + earnings calendars."""
+    """21:30 UTC on trading days: right after the US close (20:00 UTC in
+    DST, 21:00 UTC in winter), so gainers/losers and IPO + earnings
+    calendars capture that day's session. The previous midnight-UTC cron
+    skipped Friday's session entirely and ran Monday against stale data."""
     return {}
 
 

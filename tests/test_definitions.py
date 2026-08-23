@@ -89,3 +89,101 @@ def test_ticker_data_asset_runs_with_fake_engine(tmp_path):
     assert ("quote", "AAPL") in engine.seen
     assert ("prices.daily", "AAPL") in engine.seen
     assert not any(endpoint == "earnings_call_transcript" for endpoint, _ in engine.seen)
+
+
+def test_sensor_ping_emits_run_request_and_drains_queue(tmp_path):
+    """The production loop the frontend depends on: a queued request must
+    become exactly one RunRequest on the next sensor ping, flip to launched,
+    and register its dynamic partition."""
+    from datetime import datetime, timezone
+
+    from dagster import DagsterInstance, build_sensor_context
+
+    from stockidence.definitions import IngestEngine, ticker_request_sensor
+    from stockidence.storage import Warehouse
+
+    wh = Warehouse(tmp_path / "test.duckdb")
+    wh.init_schema()
+    now = datetime.now(timezone.utc)
+    wh.request_ticker("AAPL", requested_at=now)
+    wh.request_ticker("NVDA", requested_at=now)
+
+    instance = DagsterInstance.ephemeral()
+    from stockidence.definitions import defs as _defs
+
+    with partition_loading_context(dynamic_partitions_store=instance):
+        context = build_sensor_context(
+            instance=instance,
+            resources={"engine": IngestEngine(wh)},
+            repository_def=_defs.get_repository_def(),
+        )
+        evaluation = ticker_request_sensor.evaluate_tick(context)
+
+    assert sorted(rr.partition_key for rr in evaluation.run_requests) == [
+        "AAPL", "NVDA"]
+    assert set(instance.get_dynamic_partitions("ticker")) == {"AAPL", "NVDA"}
+    assert wh.pending_ticker_requests() == []  # queue drained -> no re-pings
+
+    # a second ping with nothing pending emits no runs (no churn)
+    second = ticker_request_sensor.evaluate_tick(
+        build_sensor_context(instance=instance,
+                             resources={"engine": IngestEngine(wh)}))
+    assert second.run_requests == []
+
+
+def test_full_ticker_run_executes_green_for_partition(tmp_path):
+    """Sensor RunRequests launch the full per-ticker asset graph. Materialize
+    it end-to-end against a seeded warehouse (fake engine = no network) and
+    require success plus a persisted confidence rating."""
+    from dagster import ResourceDefinition, materialize
+
+    from stockidence.ingest.engine import IngestEngine
+    from stockidence.definitions import (
+        m_advanced_analytics,
+        m_prices_monthly,
+        m_prices_weekly,
+        m_technical_indicators,
+        stg_prices_daily,
+        ticker_data,
+        ticker_score,
+    )
+    from stockidence.storage import Warehouse
+    from test_scoring import _seed_bars, _seed_fundamentals, _seed_profile, _seed_quotes, _seed_sentiment
+
+    wh = Warehouse(tmp_path / "test.duckdb")
+    wh.init_schema()
+    for seed in (_seed_bars, _seed_fundamentals, _seed_profile,
+                 _seed_sentiment):
+        seed(wh, "UND1")
+    _seed_quotes(wh, "UND1", price=319.5)  # last bar close of the ramp
+
+    class FakeResult:
+        reason = "fake fetch"
+        rows_written = 0
+
+    class FakeEngine:
+        warehouse = wh
+
+        def ingest_on_demand(self, endpoint, dimension, now=None):
+            return FakeResult()
+
+    instance = DagsterInstance.ephemeral()
+    instance.add_dynamic_partitions("ticker", ["UND1"])
+    with partition_loading_context(dynamic_partitions_store=instance):
+        result = materialize(
+            [ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
+             m_advanced_analytics, m_technical_indicators, ticker_score],
+            resources={"engine": FakeEngine()},
+            partition_key="UND1",
+            instance=instance,
+            raise_on_error=True,
+        )
+    assert result.success
+
+    row = wh.connect(read_only=True).execute(
+        "SELECT rating, confidence_score FROM mart.m_confidence_ratings "
+        "WHERE ticker = 'UND1'"
+    ).fetchone()
+    assert row is not None
+    assert row[0] in ("Buy", "Strong Buy")
+    assert 55.0 <= row[1] <= 85.0

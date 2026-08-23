@@ -238,7 +238,7 @@ def normalize_gainers_losers(payload: dict[str, Any], symbol: str, now: datetime
     day = now.date()
     rows = [
         {"ticker": entry["ticker"], "date": day, "payload": {**entry, "bucket": bucket}}
-        for bucket in ("top_gainers", "top_losers", "top_most_active")
+        for bucket in ("top_gainers", "top_losers", "most_actively_traded")
         for entry in payload.get(bucket, [])
         if entry.get("ticker")
     ]

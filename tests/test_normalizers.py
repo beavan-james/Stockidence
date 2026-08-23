@@ -181,7 +181,7 @@ def test_gainers_losers():
     payload = {
         "top_gainers": [{"ticker": "AAA", "price": "10.0", "change_percentage": "5"}],
         "top_losers": [{"ticker": "BBB", "price": "1.0", "change_percentage": "-9"}],
-        "top_most_active": [{"ticker": "CCC", "price": "50.0"}],
+        "most_actively_traded": [{"ticker": "CCC", "price": "50.0"}],
     }
     rows = normalize_for("top_gainers_losers", payload, "top_gainers_losers", NOW)["raw_gainers_losers"]
     assert {r["ticker"] for r in rows} == {"AAA", "BBB", "CCC"}
