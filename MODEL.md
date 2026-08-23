@@ -105,13 +105,23 @@ Each category scores 0-100. Final confidence score = weighted sum. All sub-score
 
 ### Rating mapping (config-driven thresholds)
 
+v2 bounds (2026-08): recalibrated to the score range the composite actually
+produces (observed 43.7–69.1 over 431 replays — the original 75/60/40/25
+left Sell/Strong Sell unreachable and Strong Buy never firing).
+
 | Confidence score | Rating        |
 | ---------------- | ------------- |
-| >= 75            | Strong Buy    |
-| 60 - 74          | Buy           |
-| 40 - 59          | Hold          |
-| 25 - 39          | Sell          |
-| < 25             | Strong Sell   |
+| >= 66            | Strong Buy    |
+| 59 - 65          | Buy           |
+| 50 - 58          | Hold          |
+| 46 - 49          | Sell          |
+| < 46             | Strong Sell   |
+
+Train-window check (327 replays, 2025-06..2026-02): the Sell bucket realized
+−2.9% mean / −2.0% median 60d forward return (38% up) vs Hold +5.4% and Buy
++13.5% — the low bands mark genuinely below-market names. Held-out window
+was too regime-distorted to confirm; bounds provisional pending bear-market
+data.
 
 **Valuation override:** consistent with "valuation is king" — if the Valuation score < 35, cap the final rating at Hold no matter how good trend/sentiment are. If Valuation > 70, floor the final rating at Hold (a genuinely cheap stock can't be killed by weak short-term trend/sentiment). Ranges provisional.
 

@@ -44,6 +44,7 @@ class BacktestRow:
     category_scores: dict[str, float]
     fwd_returns: dict[int, float]
     fwd_vols: dict[int, float]
+    plan: dict[str, Any] | None = None  # {buy_price, stop_loss, target_price, holding_style}
 
 
 @dataclass
@@ -118,6 +119,14 @@ def run_backtest(
                     rets = [bars[i + k + 1][1] / bars[i + k][1] - 1.0
                             for k in range(h)]
                     fvol[h] = statistics.pstdev(rets) if h > 1 else 0.0
+                plan = None
+                if result.buy_plan:
+                    plan = {
+                        "buy_price": result.buy_plan.get("price"),
+                        "stop_loss": result.buy_plan.get("stop_loss"),
+                        "target_price": result.target_price,
+                        "holding_style": result.buy_plan.get("holding_style"),
+                    }
                 rows.append(BacktestRow(
                     ticker=ticker,
                     as_of=as_of,
@@ -128,6 +137,7 @@ def run_backtest(
                                      for c in result.categories},
                     fwd_returns=fwd,
                     fwd_vols=fvol,
+                    plan=plan,
                 ))
     return rows
 
@@ -220,6 +230,7 @@ def save_rows(rows: list[BacktestRow], path: str) -> None:
             "category_scores": r.category_scores,
             "fwd_returns": {str(k): v for k, v in r.fwd_returns.items()},
             "fwd_vols": {str(k): v for k, v in r.fwd_vols.items()},
+            "plan": r.plan,
         }
         for r in rows
     ]
@@ -241,6 +252,7 @@ def load_rows(path: str) -> list[BacktestRow]:
             category_scores=p["category_scores"],
             fwd_returns={int(k): v for k, v in p["fwd_returns"].items()},
             fwd_vols={int(k): v for k, v in p["fwd_vols"].items()},
+            plan=p.get("plan"),  # rows cached before the plan field default None
         )
         for p in payload
     ]

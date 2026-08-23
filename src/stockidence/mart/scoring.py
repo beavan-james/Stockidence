@@ -38,11 +38,17 @@ CONFIDENCE_WEIGHTS: dict[str, float] = {
 }
 
 # (minimum confidence, rating) — descending; confidence is on a 0..100 scale
+# v2 bounds (2026-08): calibrated to the model's achievable score range.
+# The original 75/60/40/25 assumed a spread the composite never produces
+# (observed 43.7..69.1 across 431 replays), so Sell/Strong Sell were
+# unreachable and Strong Buy never fired. Train-window replay returns under
+# the recalibrated bands: Sell bucket -2.9% mean 60d fwd / 38% P(up) vs
+# Hold +5.4% — the low bands mark genuinely below-market names. Provisional.
 RATING_BANDS: list[tuple[float, str]] = [
-    (75.0, "Strong Buy"),
-    (60.0, "Buy"),
-    (40.0, "Hold"),
-    (25.0, "Sell"),
+    (66.0, "Strong Buy"),
+    (59.0, "Buy"),
+    (50.0, "Hold"),
+    (46.0, "Sell"),
 ]
 FALLBACK_RATING = "Strong Sell"
 
