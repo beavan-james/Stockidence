@@ -48,6 +48,21 @@ def is_warehouse_reachable() -> bool:
         con.close()
 
 
+def _parse_holding_style(raw) -> HoldingStyle | None:
+    """Map mart.buy_plans.holding_style to the enum.
+
+    The scoring layer persists human-readable styles ('day trade',
+    'long-term hold'); the enum spells them snake_case. Accept both.
+    Unknown values return None so a bad style degrades the buy plan
+    instead of discarding the whole rating.
+    """
+    normalized = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
+    try:
+        return HoldingStyle(normalized)
+    except ValueError:
+        return None
+
+
 def load_rating_from_warehouse(ticker: str) -> Rating | None:
     """Read a rating from the mart layer.
 
@@ -140,11 +155,13 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
             [ticker],
         ).fetchone()
         if bp is not None and bp[2] is not None:
-            buy_plan = BuyPlan(
-                advised_buy_price=float(bp[0]),
-                stop_loss_price=float(bp[1]),
-                holding_style=HoldingStyle(bp[2]),
-            )
+            style = _parse_holding_style(bp[2])
+            if style is not None:
+                buy_plan = BuyPlan(
+                    advised_buy_price=float(bp[0]),
+                    stop_loss_price=float(bp[1]),
+                    holding_style=style,
+                )
 
         return Rating(
             ticker=ticker,

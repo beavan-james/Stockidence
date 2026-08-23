@@ -56,7 +56,7 @@ def _build_warehouse(tmp_path):
     )
     con.execute(
         "INSERT INTO mart.buy_plans VALUES (?, ?, ?, ?, ?)",
-        ["AAPL", as_of, 230.0, 220.0, "long_term_hold"],
+        ["AAPL", as_of, 230.0, 220.0, "long-term hold"],
     )
     con.close()
     return db
@@ -111,6 +111,34 @@ def test_returns_none_for_unknown_ticker(tmp_path, monkeypatch):
     db = _build_warehouse(tmp_path)
     monkeypatch.setenv("STOCKIDENCE_DB", str(db))
     assert warehouse.load_rating_from_warehouse("NOPE") is None
+
+
+def test_parses_pipeline_holding_style_spellings(tmp_path, monkeypatch):
+    """Regression: scoring writes 'day trade'/'swing trade'; the strict
+    enum lookup used to raise and the blanket except discarded the whole
+    rating, so freshly-scored tickers never appeared in the app."""
+    db = _build_warehouse(tmp_path)
+    con = duckdb.connect(str(db))
+    con.execute("UPDATE mart.buy_plans SET holding_style = 'day trade'")
+    con.close()
+    monkeypatch.setenv("STOCKIDENCE_DB", str(db))
+
+    rating = warehouse.load_rating_from_warehouse("AAPL")
+    assert rating is not None
+    assert rating.buy_plan.holding_style == "day_trade"
+
+
+def test_unknown_holding_style_drops_buy_plan_not_rating(tmp_path, monkeypatch):
+    db = _build_warehouse(tmp_path)
+    con = duckdb.connect(str(db))
+    con.execute("UPDATE mart.buy_plans SET holding_style = 'yolo'")
+    con.close()
+    monkeypatch.setenv("STOCKIDENCE_DB", str(db))
+
+    rating = warehouse.load_rating_from_warehouse("AAPL")
+    assert rating is not None
+    assert rating.confidence_score == 82.0
+    assert rating.buy_plan is None
 
 
 def test_returns_none_when_db_missing(tmp_path, monkeypatch):
