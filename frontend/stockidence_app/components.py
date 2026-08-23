@@ -1440,7 +1440,7 @@ def macro_metrics_section() -> rx.Component:
         section_header(
             "gauge",
             "Market snapshot",
-            "Headline macro indicators feeding the model context. Data is demo placeholder until the pipeline ingests these endpoints.",
+            "Headline macro indicators feeding the model context, read live from the warehouse. Macro series refresh monthly (inflation derived from CPI YoY), gold and silver on the monthly job.",
         ),
         rx.grid(
             rx.foreach(RatingState.macro_metrics, macro_metric_card),
