@@ -104,6 +104,8 @@ _REGISTRY: list[EndpointSpec] = [
         watermark=("indicator", "date"),
         artifacts=("raw_macro_indicators",),
         ttl=timedelta(days=31),
+        notes=("AV INFLATION is annual and frozen upstream at Jan 2024; "
+               "the frontend derives current YoY from the CPI series instead"),
     ),
     EndpointSpec(
         name="macro.cpi",

@@ -125,6 +125,40 @@ _MACRO_DEFS = [
 ]
 
 
+def _month_add(ym: str, months: int) -> str:
+    """Shift a 'YYYY-MM' string by N months."""
+    year, month = int(ym[:4]), int(ym[5:7])
+    idx = year * 12 + (month - 1) + months
+    return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
+
+
+def _inflation_from_cpi(points: int = 8) -> list[dict]:
+    """YoY inflation derived from the CPI monthly series we already ingest.
+
+    AV's INFLATION endpoint is an annual series that froze upstream at Jan
+    2024; CPI keeps updating monthly, so YoY = cpi_t / cpi_t-12 - 1 gives a
+    current 'Inflation' card without another API dependency.
+    """
+    rows = _latest_macro_series("cpi", points=points + 12)
+    by_month = {r["date"][:7]: r["value"] for r in rows}
+    out: list[dict] = []
+    for r in rows:
+        base = by_month.get(_month_add(r["date"][:7], -12))
+        if r["value"] is None or not base:
+            continue
+        out.append({"date": r["date"], "value": round((r["value"] / base - 1.0) * 100.0, 2)})
+    return out[-points:]
+
+
+def _series_stale(series: list[dict], reference: list[dict], months: int = 6) -> bool:
+    """True when `reference` runs >N months ahead of `series` (or series empty)."""
+    if not series:
+        return True
+    if not reference:
+        return False
+    return _month_add(series[-1]["date"][:7], months) < reference[-1]["date"][:7]
+
+
 def get_macro_metrics() -> list[dict]:
     """Latest quarterly/monthly macro indicators (inflation, CPI, etc.)."""
     rows = _read(
@@ -134,9 +168,14 @@ def get_macro_metrics() -> list[dict]:
         """
     )
     live = {r[0]: r for r in rows} if rows else {}
+    cpi_series = _latest_macro_series("cpi", points=8)
     out: list[dict] = []
     for indicator, label, unit, detail in _MACRO_DEFS:
         series = _latest_macro_series(indicator, points=8)
+        if indicator == "inflation" and _series_stale(series, cpi_series):
+            derived = _inflation_from_cpi()
+            if derived:
+                series, detail = derived, "Derived from CPI YoY"
         latest = series[-1] if series else None
         if latest is None or indicator not in live:
             continue  # untouched indicator: let the demo fill the grid
