@@ -15,7 +15,7 @@ import json
 import math
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Any, Iterable
 
 from ..storage import Warehouse
@@ -144,6 +144,18 @@ _BS_EQUITY = ("StockholdersEquity",
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _as_of_clause(as_of_date: date | None) -> tuple[str, list[Any]]:
+    """Point-in-time guard for bar-dated queries.
+
+    Appends 'AND date <= ?' plus its bind arg when backtesting at a past
+    date; empty otherwise, so live scoring runs the exact same SQL as
+    before.
+    """
+    if as_of_date is None:
+        return "", []
+    return " AND date <= ?", [as_of_date]
 
 
 def _num(value: Any) -> float | None:
@@ -437,9 +449,11 @@ def _valuation_components(con: Any, ticker: str, rows: list[dict[str, Any]],
 # Trend
 # ---------------------------------------------------------------------------
 
-def _trend_components(con: Any, ticker: str, price: float | None) -> list[Component]:
+def _trend_components(con: Any, ticker: str, price: float | None,
+                      as_of: date | None = None) -> list[Component]:
     # m_technical_indicators carries no close column (it's an adjacency join
     # on stg_prices_daily); closes for the volume window come from staging.
+    clause, args = _as_of_clause(as_of)
     cols = ("sma_20", "sma_50", "sma_200", "ema_12", "ema_26", "macd",
             "macd_signal", "macd_hist", "rsi_14", "atr_14", "adx_14",
             "plus_di_14", "minus_di_14", "stoch_k_14", "stoch_d_14", "cci_20",
@@ -448,9 +462,10 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
         f"""
         SELECT {", ".join(cols)}
         FROM mart.m_technical_indicators
-        WHERE ticker = ? ORDER BY date
+        WHERE ticker = ?{clause}
+        ORDER BY date
         """,
-        [ticker],
+        [ticker, *args],
     ).fetchall()
     neutral = [
         Component("trend", "price_vs_smas", 50.0, 0.30, "neutral"),
@@ -543,8 +558,10 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
     # 6. Volume confirmation (10%) — OBV/AD slope vs close slope, last ~20 bars
     window = rows[-21:]
     closes = [r[0] for r in con.execute(
-        "SELECT close FROM staging.stg_prices_daily WHERE ticker = ? ORDER BY date DESC LIMIT 21",
-        [ticker]).fetchall()][::-1]
+        f"SELECT close FROM staging.stg_prices_daily "
+        f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 21",
+        [ticker, *args],
+    ).fetchall()][::-1]
     ad_hist = [r[16] for r in window]
     obv_hist = [r[17] for r in window]
 
@@ -575,9 +592,10 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
 # Sentiment
 # ---------------------------------------------------------------------------
 
-def _news_components(con: Any, ticker: str) -> list[Component]:
+def _news_components(con: Any, ticker: str,
+                     anchor: datetime | None = None) -> list[Component]:
     components: list[Component] = []
-    cutoff = (int(datetime.now(timezone.utc).timestamp() * 1000)
+    cutoff = (int((anchor or datetime.now(timezone.utc)).timestamp() * 1000)
               - NEWS_WINDOW_DAYS * 86_400_000)
 
     # 1. news sentiment, last 14 days (30%)
@@ -791,18 +809,20 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
 # Volatility (separate score, higher = riskier)
 # ---------------------------------------------------------------------------
 
-def _volatility_components(con: Any, ticker: str, price: float | None) -> list[Component]:
+def _volatility_components(con: Any, ticker: str, price: float | None,
+                           as_of: date | None = None) -> list[Component]:
     components: list[Component] = []
     basic = _basic_rows(con, ticker)
+    clause, args = _as_of_clause(as_of)
 
     # 1. realized vol (30%) — annualized sigma of daily returns, last ~252 bars
     rets = [r[0] for r in con.execute(
-        """
+        f"""
         SELECT return_1d FROM staging.stg_prices_daily
-        WHERE ticker = ? AND return_1d IS NOT NULL
+        WHERE ticker = ? AND return_1d IS NOT NULL{clause}
         ORDER BY date DESC LIMIT 252
         """,
-        [ticker],
+        [ticker, *args],
     ).fetchall()]
     ann = None
     if len(rets) >= 20:
@@ -815,8 +835,9 @@ def _volatility_components(con: Any, ticker: str, price: float | None) -> list[C
 
     # 2. ATR% (30%)
     ind = con.execute(
-        "SELECT atr_14 FROM mart.m_technical_indicators WHERE ticker = ? ORDER BY date DESC LIMIT 1",
-        [ticker],
+        f"SELECT atr_14 FROM mart.m_technical_indicators "
+        f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 1",
+        [ticker, *args],
     ).fetchone()
     atr = ind[0] if ind else None
     if atr and price:
@@ -830,13 +851,13 @@ def _volatility_components(con: Any, ticker: str, price: float | None) -> list[C
     # 3. BBANDS bandwidth percentile vs own 1yr history (25%)
     bws: list[float] = []
     for r in con.execute(
-        """
+        f"""
         SELECT bb_lower_20, bb_mid_20, bb_upper_20
         FROM mart.m_technical_indicators
-        WHERE ticker = ? AND bb_mid_20 IS NOT NULL
+        WHERE ticker = ? AND bb_mid_20 IS NOT NULL{clause}
         ORDER BY date DESC LIMIT 252
         """,
-        [ticker],
+        [ticker, *args],
     ).fetchall():
         lo, mid, hi = r
         if lo and mid and hi:
@@ -1021,14 +1042,17 @@ def _holding_style(volatility_score: float) -> str:
 
 
 def _buy_plan(con: Any, ticker: str, rating: str, fair_value: float | None,
-              volatility_score: float, price: float | None) -> dict[str, Any] | None:
+              volatility_score: float, price: float | None,
+              as_of: date | None = None) -> dict[str, Any] | None:
     if rating not in ("Buy", "Strong Buy") or fair_value is None or price is None:
         return None
     buy_price = min(price, fair_value * (1.0 - BUY_PLAN["margin_of_safety"]))
     style = _holding_style(volatility_score)
+    clause, args = _as_of_clause(as_of)
     row = con.execute(
-        "SELECT atr_14 FROM mart.m_technical_indicators WHERE ticker = ? ORDER BY date DESC LIMIT 1",
-        [ticker],
+        f"SELECT atr_14 FROM mart.m_technical_indicators "
+        f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 1",
+        [ticker, *args],
     ).fetchone()
     atr = row[0] if row else None
     k = BUY_PLAN["atr_multiplier"][style]
@@ -1037,9 +1061,29 @@ def _buy_plan(con: Any, ticker: str, rating: str, fair_value: float | None,
     return {"price": buy_price, "stop_loss": stop, "holding_style": style}
 
 
-def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = None) -> ScoreResult:
-    """Compute + persist the full score set for one ticker (snapshot tables)."""
+def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = None,
+                 as_of: date | datetime | None = None,
+                 persist: bool = True) -> ScoreResult:
+    """Compute (+ persist by default) the full score set for one ticker.
+
+    as_of replays the score point-in-time: bar-dated inputs (price,
+    indicators, realized vol, news window) only see data on or before that
+    date, so a backtest can't leak future prices into past ratings. Slow
+    period-keyed inputs (quarterly fundamentals, monthly insider/analyst
+    snapshots) are used as-landed — an accepted approximation documented in
+    backtest.py. persist=False skips the mart snapshot upserts entirely.
+    """
     now = now or datetime.now(timezone.utc)
+    if isinstance(as_of, datetime):
+        as_of_date = as_of.date()
+        anchor = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+    elif as_of is not None:
+        as_of_date = as_of
+        # end of the replayed UTC day: news published ON as_of still counts
+        anchor = datetime.combine(as_of, time(23, 59), tzinfo=timezone.utc)
+    else:
+        as_of_date = None
+        anchor = None
     with warehouse.connect() as con:
         profile = _fetch_one(con, "raw_company_profile",
                              "ticker = ?", [ticker])
@@ -1048,13 +1092,16 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
         trailing = _trailing_eps(surprise_rows)
 
         price: float | None = None
-        q = _fetch_one(con, "raw_quotes", "ticker = ?", [ticker])
+        q = _fetch_one(con, "raw_quotes", "ticker = ?", [ticker]) \
+            if as_of_date is None else None
         if q:
             price = _num(q["payload"].get("c"))
+        clause, args = _as_of_clause(as_of_date)
         if price is None:
             row = con.execute(
-                "SELECT close FROM staging.stg_prices_daily WHERE ticker = ? ORDER BY date DESC LIMIT 1",
-                [ticker],
+                f"SELECT close FROM staging.stg_prices_daily "
+                f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 1",
+                [ticker, *args],
             ).fetchone()
             price = row[0] if row else None
 
@@ -1064,12 +1111,15 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
         valuation = _category_score("valuation", VALUATION_SUB_WEIGHTS,
                                     _valuation_components(con, ticker, surprise_rows, price, fair_value))
         trend = _category_score(
-            "trend", TREND_SUB_WEIGHTS, _trend_components(con, ticker, price))
+            "trend", TREND_SUB_WEIGHTS,
+            _trend_components(con, ticker, price, as_of=as_of_date))
         sentiment = _category_score(
-            "sentiment", SENTIMENT_SUB_WEIGHTS, _news_components(con, ticker))
+            "sentiment", SENTIMENT_SUB_WEIGHTS,
+            _news_components(con, ticker, anchor=anchor))
         moat = _category_score("moat", MOAT_SUB_WEIGHTS,
                                _moat_components(con, ticker))
-        vol_components = _volatility_components(con, ticker, price)
+        vol_components = _volatility_components(con, ticker, price,
+                                                as_of=as_of_date)
         volatility = _category_score(
             "volatility", VOLATILITY_SUB_WEIGHTS, vol_components)
 
@@ -1093,7 +1143,8 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
             target = fair_value * (
                 1.0 + _clamp(g_used, *FAIR_VALUE["growth_clamp"]))
         buy_plan = _buy_plan(con, ticker, rating,
-                             fair_value, volatility.score, price)
+                             fair_value, volatility.score, price,
+                             as_of=as_of_date)
 
         result = ScoreResult(
             ticker=ticker,
@@ -1109,7 +1160,8 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
             valuation_override_applied=override,
             buy_plan=buy_plan,
         )
-        _persist(con, result, valuation, volatility)
+        if persist:
+            _persist(con, result, valuation, volatility)
     return result
 
 
