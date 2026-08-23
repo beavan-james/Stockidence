@@ -108,7 +108,7 @@ def test_summarize_directional_semantics():
     def _row(rating: str, ret: float) -> BacktestRow:
         return BacktestRow(ticker="X", as_of=DAY0, rating=rating,
                            confidence=60.0, volatility=40.0,
-                           category_scores={}, fwd_returns={5: ret})
+                           category_scores={}, fwd_returns={5: ret}, fwd_vols={5: 0.01})
 
     rows = [
         *(_row("Buy", r) for r in (0.05, 0.10, -0.02)),   # 2/3 up
@@ -128,7 +128,7 @@ def test_render_smoke():
     def _row(rating: str, ret: float) -> BacktestRow:
         return BacktestRow(ticker="X", as_of=DAY0, rating=rating,
                            confidence=60.0, volatility=40.0,
-                           category_scores={}, fwd_returns={20: ret})
+                           category_scores={}, fwd_returns={20: ret}, fwd_vols={20: 0.02})
 
     text = render([_row("Buy", 0.04), _row("Strong Buy", 0.09)], (20,))
     assert "replays=2" in text

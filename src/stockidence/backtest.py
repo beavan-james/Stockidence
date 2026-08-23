@@ -43,6 +43,7 @@ class BacktestRow:
     volatility: float
     category_scores: dict[str, float]
     fwd_returns: dict[int, float]
+    fwd_vols: dict[int, float]
 
 
 @dataclass
@@ -107,9 +108,16 @@ def run_backtest(
                                                    tzinfo=timezone.utc),
                                       persist=False)
                 fwd = {}
+                fvol = {}
                 for h in horizons:
                     entry, exit_ = bars[i], bars[i + h]
                     fwd[h] = exit_[1] / entry[1] - 1.0
+                    # realized forward volatility: stdev of the daily returns
+                    # inside the horizon window (per-bar; scale-invariant to
+                    # annualization, which correlation ignores anyway)
+                    rets = [bars[i + k + 1][1] / bars[i + k][1] - 1.0
+                            for k in range(h)]
+                    fvol[h] = statistics.pstdev(rets) if h > 1 else 0.0
                 rows.append(BacktestRow(
                     ticker=ticker,
                     as_of=as_of,
@@ -119,6 +127,7 @@ def run_backtest(
                     category_scores={c.name: c.score
                                      for c in result.categories},
                     fwd_returns=fwd,
+                    fwd_vols=fvol,
                 ))
     return rows
 
@@ -197,6 +206,46 @@ def render(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)) -> 
     return "\n".join(lines)
 
 
+def save_rows(rows: list[BacktestRow], path: str) -> None:
+    """Persist replay rows as JSON so diagnostics/tuning iterate without
+    re-running the (expensive) score replays."""
+    import json
+    payload = [
+        {
+            "ticker": r.ticker,
+            "as_of": r.as_of.isoformat(),
+            "rating": r.rating,
+            "confidence": r.confidence,
+            "volatility": r.volatility,
+            "category_scores": r.category_scores,
+            "fwd_returns": {str(k): v for k, v in r.fwd_returns.items()},
+            "fwd_vols": {str(k): v for k, v in r.fwd_vols.items()},
+        }
+        for r in rows
+    ]
+    with open(path, "w") as f:
+        json.dump(payload, f)
+
+
+def load_rows(path: str) -> list[BacktestRow]:
+    import json
+    with open(path) as f:
+        payload = json.load(f)
+    return [
+        BacktestRow(
+            ticker=p["ticker"],
+            as_of=date.fromisoformat(p["as_of"]),
+            rating=p["rating"],
+            confidence=p["confidence"],
+            volatility=p["volatility"],
+            category_scores=p["category_scores"],
+            fwd_returns={int(k): v for k, v in p["fwd_returns"].items()},
+            fwd_vols={int(k): v for k, v in p["fwd_vols"].items()},
+        )
+        for p in payload
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--tickers", required=True,
@@ -206,6 +255,8 @@ def main() -> None:
     parser.add_argument("--step-days", type=int, default=7,
                         help="replay every Nth eligible trading bar")
     parser.add_argument("--db", default=None, help="warehouse path override")
+    parser.add_argument("--save", default=None,
+                        help="write replay rows to this JSON path")
     args = parser.parse_args()
     warehouse = Warehouse(args.db)
     rows = run_backtest(
@@ -214,6 +265,9 @@ def main() -> None:
         start=args.start, end=args.end, step_days=args.step_days,
     )
     print(render(rows))
+    if args.save:
+        save_rows(rows, args.save)
+        print(f"rows saved to {args.save}")
 
 
 if __name__ == "__main__":

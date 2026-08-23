@@ -17,14 +17,35 @@
 3. **Moat is tertiary**: A strong moat (competitive advantage) can make a stock more resilient to market fluctuations and give it a better long-term outlook.
 4. **Volatility is separate**: Volatility is important for risk management, but it doesn't directly affect the buy/sell confidence rating. Instead, it feeds into a separate volatility score that can help inform your position sizing and stop-loss levels.
 ---
-## Initial Model Weighting
+## Model Weighting
 
-| Category  | Weight |
-| --------- | ------ |
-| Valuation | 52%    |
-| Trend     | 21%    |
-| Sentiment | 21%    |
-| Moat      | 6%     |
+**Current: v2 (2026-08), first backtest-informed revision.**
+
+| Category  | v1 | v2 (current) |
+| --------- | ----- | ------------ |
+| Valuation | 52%   | **62%**      |
+| Trend     | 21%   | **24%**      |
+| Sentiment | 21%   | **10%**      |
+| Moat      | 6%    | **4%**       |
+
+v2 rationale — category sub-scores were correlated against realized 60d
+forward returns on 327 train-window replays (2025-06..2026-02, 13 tickers,
+date-block bootstrap CIs): valuation +0.38 [+0.31, +0.44], trend +0.05
+[-0.07, +0.15], sentiment -0.30 [-0.39, -0.20], moat -0.25 [-0.32, -0.15].
+Weight moved toward the only positive contributor; sentiment/moat halved,
+not zeroed (single window, single regime). Trend kept as a stabilizer.
+
+Honest limits of this evidence:
+- Held-out validation (2026-03..2026-05) showed ~zero score↔return
+  correlation under BOTH v1 and v2 — the edge is regime-dependent and no
+  reweighting within current category definitions fixes that.
+- The highest-confidence quintile underperforms quintile 4 in both windows
+  (value-trap signature). A trend-confirmation guard for top ratings is a
+  candidate scoring-logic change, not bundled into the weight pass.
+- No Sell/Strong Sell fires naturally in this bull window; reachability is
+  to be demonstrated via a documented stress case.
+
+All weights remain provisional pending more history and bear-market data.
 ---
 ## API's
 _(Marked "(not used)" when the endpoint has no ingestion path; see API.md for samples.)_
@@ -76,10 +97,10 @@ Each category scores 0-100. Final confidence score = weighted sum. All sub-score
 
 | Category   | Weight | Output role                              |
 | ---------- | ------ | ----------------------------------------- |
-| Valuation  | 52%    | Confidence rating (gating/override)       |
-| Trend      | 21%    | Confidence rating (entry/exit timing)     |
-| Sentiment  | 21%    | Confidence rating (market psychology)     |
-| Moat       | 6%     | Confidence rating (long-term resilience)  |
+| Valuation  | 62%    | Confidence rating (gating/override)       |
+| Trend      | 24%    | Confidence rating (entry/exit timing)     |
+| Sentiment  | 10%    | Confidence rating (market psychology)     |
+| Moat       | 4%     | Confidence rating (long-term resilience)  |
 | Volatility | —      | Separate score + stop-loss / holding style |
 
 ### Rating mapping (config-driven thresholds)
@@ -94,7 +115,7 @@ Each category scores 0-100. Final confidence score = weighted sum. All sub-score
 
 **Valuation override:** consistent with "valuation is king" — if the Valuation score < 35, cap the final rating at Hold no matter how good trend/sentiment are. If Valuation > 70, floor the final rating at Hold (a genuinely cheap stock can't be killed by weak short-term trend/sentiment). Ranges provisional.
 
-### Valuation (52%)
+### Valuation (62%)
 
 Fair value (below) is computed and shown to the user, but the **score is a slightly different composite** — how cheap/expensive the stock looks on its fundamentals, only partly driven by fair value.
 
@@ -107,7 +128,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Multiple quality vs own history   | Company Overview (P/S, EV/EBITDA, P/B, EV/Revenue), NetProfitMargin     | P/S vs margin + EV/EBITDA vs historical median → cheap on quality      | 10%    |
 | Recent EPS surprise momentum      | EPS Surprises (surprisePercent, last 4 quarters)                        | avg recent beats vs older → positive                                   | 5%     |
 
-### Trend (21%)
+### Trend (24%)
 
 | Sub-score                   | Sources                            | Direction (positive = buy-friendly)                                    | Weight |
 | --------------------------- | ---------------------------------- | ---------------------------------------------------------------------- | ------ |
@@ -118,7 +139,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Stochastic + CCI            | STOCH, CCI                         | 20-40 rising → +; > 80 → -                                           | 10%    |
 | Volume confirmation         | OBV, AD                            | OBV/AD trending with price → +; divergence → -                        | 10%    |
 
-### Sentiment (21%)
+### Sentiment (10%)
 
 | Sub-score                          | Sources                                                    | Weight |
 | ---------------------------------- | ----------------------------------------------------------- | ------ |
@@ -128,7 +149,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Earnings call transcript tone      | Earnings Call Transcript (avg segment sentiment)            | 15%    |
 | Earnings surprise trend            | EPS Surprises (reused from valuation, not double-counted)   | 10%    |
 
-### Moat (6%)
+### Moat (4%)
 
 Deterministic proxies, no manual judgment. Benchmark against Peers (Finnhub) where available, else vs the company's own history.
 

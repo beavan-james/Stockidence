@@ -25,10 +25,16 @@ from ..storage import Warehouse
 # ---------------------------------------------------------------------------
 
 CONFIDENCE_WEIGHTS: dict[str, float] = {
-    "valuation": 0.52,
-    "trend": 0.21,
-    "sentiment": 0.21,
-    "moat": 0.06,
+    # v2 (2026-08): rebalanced from train-window attribution on 327 replays
+    # (2025-06..2026-02). Valuation is the only category whose sub-score
+    # correlated positively with 60d forward returns (+0.38); sentiment
+    # (-0.30) and moat (-0.25) correlated negatively — crowded-optimism
+    # mean reversion. Weights moved toward valuation but NOT fully (one
+    # window, one regime; trend kept as stabilizer). Still provisional.
+    "valuation": 0.62,
+    "trend": 0.24,
+    "sentiment": 0.10,
+    "moat": 0.04,
 }
 
 # (minimum confidence, rating) — descending; confidence is on a 0..100 scale
