@@ -17,6 +17,8 @@ from typing import Any
 from dagster import (
     AssetExecutionContext,
     AssetSelection,
+    DefaultScheduleStatus,
+    DefaultSensorStatus,
     Definitions,
     DynamicPartitionsDefinition,
     RunRequest,
@@ -90,13 +92,15 @@ weekdays_job = _make_cadence_job(Cadence.WEEKDAYS)
 daily_job = _make_cadence_job(Cadence.DAILY)
 
 
-@schedule(job=monthly_job, cron_schedule="0 2 1 * *")
+@schedule(job=monthly_job, cron_schedule="0 2 1 * *",
+          default_status=DefaultScheduleStatus.RUNNING)
 def monthly_schedule() -> dict:  # noqa: ANN401
     """01:00 UTC on the 1st of each month: commodities, macro, symbols."""
     return {}
 
 
-@schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5")
+@schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5",
+          default_status=DefaultScheduleStatus.RUNNING)
 def weekdays_schedule() -> dict:  # noqa: ANN401
     """21:30 UTC on trading days: right after the US close (20:00 UTC in
     DST, 21:00 UTC in winter), so gainers/losers and IPO + earnings
@@ -105,7 +109,8 @@ def weekdays_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
-@schedule(job=daily_job, cron_schedule="0 1 * * *")
+@schedule(job=daily_job, cron_schedule="0 1 * * *",
+          default_status=DefaultScheduleStatus.RUNNING)
 def daily_schedule() -> dict:  # noqa: ANN401
     """Daily market-persistent news sentiment."""
     return {}
@@ -224,6 +229,7 @@ def ticker_score(context: AssetExecutionContext) -> None:
         "m_advanced_analytics", "m_technical_indicators", "ticker_score",
     ),
     minimum_interval_seconds=30,
+    default_status=DefaultSensorStatus.RUNNING,
     required_resource_keys={"engine"},
     description=(
         "Polls control.ticker_requests (written by the frontend), adds a dynamic "

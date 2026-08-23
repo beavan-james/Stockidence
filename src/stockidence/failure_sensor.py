@@ -10,7 +10,11 @@ scheduled jobs, sensor-triggered on-demand runs, and manual launches alike.
 
 from datetime import datetime, timedelta, timezone
 
-from dagster import RunFailureSensorContext, run_failure_sensor
+from dagster import (
+    DefaultSensorStatus,
+    RunFailureSensorContext,
+    run_failure_sensor,
+)
 
 from .storage import Warehouse
 
@@ -50,7 +54,7 @@ def _error_message(context: RunFailureSensorContext) -> str | None:
         return None
 
 
-@run_failure_sensor
+@run_failure_sensor(default_status=DefaultSensorStatus.RUNNING)
 def pipeline_failure_sensor(context: RunFailureSensorContext) -> None:
     """Daemon-side catch-all: write any failed run into the warehouse."""
     record_failure(
