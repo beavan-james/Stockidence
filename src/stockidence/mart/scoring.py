@@ -912,10 +912,15 @@ def _reported_latest(reported: list[dict[str, Any]], concepts: tuple[str, ...]) 
 
 
 def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]],
-                profile: dict[str, Any] | None) -> tuple[float | None, list[str]]:
-    """Blended DCF + history-multiple fair value; returns (value, provenance)."""
+                profile: dict[str, Any] | None) -> tuple[float | None, list[str], float]:
+    """Blended DCF + history-multiple fair value.
+
+    Returns (value, provenance, growth): the same clamped g_fwd feeds both the
+    valuation legs here and the 12-month target price (MODEL.md), so callers
+    never re-derive growth with a narrower fallback chain.
+    """
     if price <= 0:
-        return None, []
+        return None, [], 0.0
     sources: list[str] = []
     surprise_rows = _eps_surprise_rows(con, ticker)
     trailing = _trailing_eps(surprise_rows)
@@ -985,7 +990,7 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
         sources.append("comps")
 
     if dcf_ps is None and comps_ps is None:
-        return None, []
+        return None, [], g_fwd
     fair = (FAIR_VALUE["dcf_weight"] * (dcf_ps or comps_ps)
             + (1.0 - FAIR_VALUE["dcf_weight"]) * (comps_ps or dcf_ps))
 
@@ -994,7 +999,7 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
     hi_52 = _latest_series(basic, "52WeekHigh") or (price * 2.0)
     lo = min(price * FAIR_VALUE["clamp_floor_scale"], lo_52)
     hi = max(price * FAIR_VALUE["clamp_multiplier"], hi_52)
-    return _clamp(fair, lo, hi), sources
+    return _clamp(fair, lo, hi), sources, g_fwd
 
 
 # ---------------------------------------------------------------------------
@@ -1053,9 +1058,8 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
             ).fetchone()
             price = row[0] if row else None
 
-        g_fwd = _eps_growth(con, ticker, surprise_rows)
-        fair_value, fair_sources = _fair_value(
-            con, ticker, price, basic, profile) if price else (None, [])
+        fair_value, fair_sources, g_used = _fair_value(
+            con, ticker, price, basic, profile) if price else (None, [], 0.0)
 
         valuation = _category_score("valuation", VALUATION_SUB_WEIGHTS,
                                     _valuation_components(con, ticker, surprise_rows, price, fair_value))
@@ -1083,9 +1087,11 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
 
         target = None
         if fair_value is not None:
-            g = _clamp(g_fwd if g_fwd is not None else 0.0,
-                       *FAIR_VALUE["growth_clamp"])
-            target = fair_value * (1.0 + g)
+            # MODEL.md: target = fairValue x (1 + g_fwd), the same resolved
+            # growth (estimate -> trailing-EPS fallback -> proxy) that fair
+            # value used -- not a narrower estimate-only lookup.
+            target = fair_value * (
+                1.0 + _clamp(g_used, *FAIR_VALUE["growth_clamp"]))
         buy_plan = _buy_plan(con, ticker, rating,
                              fair_value, volatility.score, price)
 

@@ -238,6 +238,27 @@ def test_scoring_rerun_is_idempotent(rich_warehouse):
     ).fetchone()[0] == 1
 
 
+def test_target_uses_trailing_eps_growth_when_no_estimate(rich_warehouse):
+    """MODEL.md: target growth = estimate OR trailing-EPS fallback.
+
+    With the earnings-calendar estimate removed, _eps_growth returns None —
+    the old code silently scored target = fair_value x 1.0 instead of using
+    the same trailing-EPS annualized growth that fair value resolved."""
+    import duckdb
+
+    con = rich_warehouse.connect()
+    con.execute("DELETE FROM raw.raw_earnings_calendar WHERE symbol = 'UND1'")
+    con.close()
+
+    result = score_ticker(rich_warehouse, "UND1")
+    assert result.fair_value is not None
+    assert "growth=trailing_eps" in result.fair_value_sources
+    # 8 quarters of actuals 2.00..2.35 → annualized CAGR over 7 quarters
+    growth = (2.35 / 2.00) ** (4.0 / 7) - 1.0
+    assert result.target_price / result.fair_value == pytest.approx(
+        1.0 + growth, rel=1e-2)
+
+
 def test_bar_only_ticker_degrades_to_neutral(warehouse):
     # Bars exist (so trend/volatility are live), but no fundamentals or
     # sentiment: valuation/moat/sentiment collapse to neutral 50s, and the
