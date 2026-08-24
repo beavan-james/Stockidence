@@ -905,37 +905,6 @@ def price_reference_card() -> rx.Component:
                     spacing="4",
                     width="100%",
                 ),
-                rx.cond(
-                    (RatingState.is_buy & RatingState.has_buy_plan),
-                    rx.grid(
-                        rx.vstack(
-                            rx.text("Advised buy price", size="2", color=rx.color("slate", 10)),
-                            rx.heading(RatingState.buy_price_text, size="6", weight="bold"),
-                            align="start",
-                            spacing="1",
-                        ),
-                        rx.vstack(
-                            rx.text("Stop-loss price", size="2", color=rx.color("slate", 10)),
-                            rx.heading(
-                                RatingState.stop_loss_text,
-                                size="6",
-                                weight="bold",
-                                color=rx.color("tomato", 9),
-                            ),
-                            align="start",
-                            spacing="1",
-                        ),
-                        rx.vstack(
-                            rx.text("Holding style", size="2", color=rx.color("slate", 10)),
-                            _holding_style_heading(),
-                            align="start",
-                            spacing="1",
-                        ),
-                        columns=rx.breakpoints(initial="1", md="3"),
-                        spacing="4",
-                        width="100%",
-                    ),
-                ),
                 width="100%",
                 spacing="3",
             ),
