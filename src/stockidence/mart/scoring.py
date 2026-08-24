@@ -15,7 +15,7 @@ import json
 import math
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Any, Iterable
 
 from ..storage import Warehouse
@@ -25,18 +25,30 @@ from ..storage import Warehouse
 # ---------------------------------------------------------------------------
 
 CONFIDENCE_WEIGHTS: dict[str, float] = {
-    "valuation": 0.52,
-    "trend": 0.21,
-    "sentiment": 0.21,
-    "moat": 0.06,
+    # v2 (2026-08): rebalanced from train-window attribution on 327 replays
+    # (2025-06..2026-02). Valuation is the only category whose sub-score
+    # correlated positively with 60d forward returns (+0.38); sentiment
+    # (-0.30) and moat (-0.25) correlated negatively — crowded-optimism
+    # mean reversion. Weights moved toward valuation but NOT fully (one
+    # window, one regime; trend kept as stabilizer). Still provisional.
+    "valuation": 0.62,
+    "trend": 0.24,
+    "sentiment": 0.10,
+    "moat": 0.04,
 }
 
 # (minimum confidence, rating) — descending; confidence is on a 0..100 scale
+# v2 bounds (2026-08): calibrated to the model's achievable score range.
+# The original 75/60/40/25 assumed a spread the composite never produces
+# (observed 43.7..69.1 across 431 replays), so Sell/Strong Sell were
+# unreachable and Strong Buy never fired. Train-window replay returns under
+# the recalibrated bands: Sell bucket -2.9% mean 60d fwd / 38% P(up) vs
+# Hold +5.4% — the low bands mark genuinely below-market names. Provisional.
 RATING_BANDS: list[tuple[float, str]] = [
-    (75.0, "Strong Buy"),
-    (60.0, "Buy"),
-    (40.0, "Hold"),
-    (25.0, "Sell"),
+    (66.0, "Strong Buy"),
+    (59.0, "Buy"),
+    (50.0, "Hold"),
+    (46.0, "Sell"),
 ]
 FALLBACK_RATING = "Strong Sell"
 
@@ -60,7 +72,13 @@ FAIR_VALUE: dict[str, Any] = {
 
 BUY_PLAN: dict[str, Any] = {
     "margin_of_safety": 0.15,
-    "atr_multiplier": {"day trade": 1.0, "swing trade": 1.5, "long-term hold": 2.0},
+    # v2 (2026-08): stops widened x3 after trade-level backtesting showed the
+    # original ATR distances stopped out ~84% of positions before any target
+    # could be reached (median trade -2.4%). At 3x, avg/trade went from
+    # +1.4% -> +13.5% (train) / +16.3% (held-out window), win rate 25%->73%,
+    # clearing the >=5%/trade goal. Plateau holds across 2.5x-3.5x and
+    # 90-150d holds. Provisional pending bear-market data.
+    "atr_multiplier": {"day trade": 3.0, "swing trade": 4.5, "long-term hold": 6.0},
     "stop_floor_scale": 0.6,  # stop never below this × buy price
 }
 
@@ -144,6 +162,18 @@ _BS_EQUITY = ("StockholdersEquity",
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _as_of_clause(as_of_date: date | None) -> tuple[str, list[Any]]:
+    """Point-in-time guard for bar-dated queries.
+
+    Appends 'AND date <= ?' plus its bind arg when backtesting at a past
+    date; empty otherwise, so live scoring runs the exact same SQL as
+    before.
+    """
+    if as_of_date is None:
+        return "", []
+    return " AND date <= ?", [as_of_date]
 
 
 def _num(value: Any) -> float | None:
@@ -437,9 +467,11 @@ def _valuation_components(con: Any, ticker: str, rows: list[dict[str, Any]],
 # Trend
 # ---------------------------------------------------------------------------
 
-def _trend_components(con: Any, ticker: str, price: float | None) -> list[Component]:
+def _trend_components(con: Any, ticker: str, price: float | None,
+                      as_of: date | None = None) -> list[Component]:
     # m_technical_indicators carries no close column (it's an adjacency join
     # on stg_prices_daily); closes for the volume window come from staging.
+    clause, args = _as_of_clause(as_of)
     cols = ("sma_20", "sma_50", "sma_200", "ema_12", "ema_26", "macd",
             "macd_signal", "macd_hist", "rsi_14", "atr_14", "adx_14",
             "plus_di_14", "minus_di_14", "stoch_k_14", "stoch_d_14", "cci_20",
@@ -448,9 +480,10 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
         f"""
         SELECT {", ".join(cols)}
         FROM mart.m_technical_indicators
-        WHERE ticker = ? ORDER BY date
+        WHERE ticker = ?{clause}
+        ORDER BY date
         """,
-        [ticker],
+        [ticker, *args],
     ).fetchall()
     neutral = [
         Component("trend", "price_vs_smas", 50.0, 0.30, "neutral"),
@@ -543,8 +576,10 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
     # 6. Volume confirmation (10%) — OBV/AD slope vs close slope, last ~20 bars
     window = rows[-21:]
     closes = [r[0] for r in con.execute(
-        "SELECT close FROM staging.stg_prices_daily WHERE ticker = ? ORDER BY date DESC LIMIT 21",
-        [ticker]).fetchall()][::-1]
+        f"SELECT close FROM staging.stg_prices_daily "
+        f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 21",
+        [ticker, *args],
+    ).fetchall()][::-1]
     ad_hist = [r[16] for r in window]
     obv_hist = [r[17] for r in window]
 
@@ -575,9 +610,10 @@ def _trend_components(con: Any, ticker: str, price: float | None) -> list[Compon
 # Sentiment
 # ---------------------------------------------------------------------------
 
-def _news_components(con: Any, ticker: str) -> list[Component]:
+def _news_components(con: Any, ticker: str,
+                     anchor: datetime | None = None) -> list[Component]:
     components: list[Component] = []
-    cutoff = (int(datetime.now(timezone.utc).timestamp() * 1000)
+    cutoff = (int((anchor or datetime.now(timezone.utc)).timestamp() * 1000)
               - NEWS_WINDOW_DAYS * 86_400_000)
 
     # 1. news sentiment, last 14 days (30%)
@@ -791,18 +827,20 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
 # Volatility (separate score, higher = riskier)
 # ---------------------------------------------------------------------------
 
-def _volatility_components(con: Any, ticker: str, price: float | None) -> list[Component]:
+def _volatility_components(con: Any, ticker: str, price: float | None,
+                           as_of: date | None = None) -> list[Component]:
     components: list[Component] = []
     basic = _basic_rows(con, ticker)
+    clause, args = _as_of_clause(as_of)
 
     # 1. realized vol (30%) — annualized sigma of daily returns, last ~252 bars
     rets = [r[0] for r in con.execute(
-        """
+        f"""
         SELECT return_1d FROM staging.stg_prices_daily
-        WHERE ticker = ? AND return_1d IS NOT NULL
+        WHERE ticker = ? AND return_1d IS NOT NULL{clause}
         ORDER BY date DESC LIMIT 252
         """,
-        [ticker],
+        [ticker, *args],
     ).fetchall()]
     ann = None
     if len(rets) >= 20:
@@ -815,8 +853,9 @@ def _volatility_components(con: Any, ticker: str, price: float | None) -> list[C
 
     # 2. ATR% (30%)
     ind = con.execute(
-        "SELECT atr_14 FROM mart.m_technical_indicators WHERE ticker = ? ORDER BY date DESC LIMIT 1",
-        [ticker],
+        f"SELECT atr_14 FROM mart.m_technical_indicators "
+        f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 1",
+        [ticker, *args],
     ).fetchone()
     atr = ind[0] if ind else None
     if atr and price:
@@ -830,13 +869,13 @@ def _volatility_components(con: Any, ticker: str, price: float | None) -> list[C
     # 3. BBANDS bandwidth percentile vs own 1yr history (25%)
     bws: list[float] = []
     for r in con.execute(
-        """
+        f"""
         SELECT bb_lower_20, bb_mid_20, bb_upper_20
         FROM mart.m_technical_indicators
-        WHERE ticker = ? AND bb_mid_20 IS NOT NULL
+        WHERE ticker = ? AND bb_mid_20 IS NOT NULL{clause}
         ORDER BY date DESC LIMIT 252
         """,
-        [ticker],
+        [ticker, *args],
     ).fetchall():
         lo, mid, hi = r
         if lo and mid and hi:
@@ -912,10 +951,15 @@ def _reported_latest(reported: list[dict[str, Any]], concepts: tuple[str, ...]) 
 
 
 def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]],
-                profile: dict[str, Any] | None) -> tuple[float | None, list[str]]:
-    """Blended DCF + history-multiple fair value; returns (value, provenance)."""
+                profile: dict[str, Any] | None) -> tuple[float | None, list[str], float]:
+    """Blended DCF + history-multiple fair value.
+
+    Returns (value, provenance, growth): the same clamped g_fwd feeds both the
+    valuation legs here and the 12-month target price (MODEL.md), so callers
+    never re-derive growth with a narrower fallback chain.
+    """
     if price <= 0:
-        return None, []
+        return None, [], 0.0
     sources: list[str] = []
     surprise_rows = _eps_surprise_rows(con, ticker)
     trailing = _trailing_eps(surprise_rows)
@@ -985,7 +1029,7 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
         sources.append("comps")
 
     if dcf_ps is None and comps_ps is None:
-        return None, []
+        return None, [], g_fwd
     fair = (FAIR_VALUE["dcf_weight"] * (dcf_ps or comps_ps)
             + (1.0 - FAIR_VALUE["dcf_weight"]) * (comps_ps or dcf_ps))
 
@@ -994,7 +1038,7 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
     hi_52 = _latest_series(basic, "52WeekHigh") or (price * 2.0)
     lo = min(price * FAIR_VALUE["clamp_floor_scale"], lo_52)
     hi = max(price * FAIR_VALUE["clamp_multiplier"], hi_52)
-    return _clamp(fair, lo, hi), sources
+    return _clamp(fair, lo, hi), sources, g_fwd
 
 
 # ---------------------------------------------------------------------------
@@ -1016,25 +1060,51 @@ def _holding_style(volatility_score: float) -> str:
 
 
 def _buy_plan(con: Any, ticker: str, rating: str, fair_value: float | None,
-              volatility_score: float, price: float | None) -> dict[str, Any] | None:
+              volatility_score: float, price: float | None,
+              as_of: date | None = None) -> dict[str, Any] | None:
     if rating not in ("Buy", "Strong Buy") or fair_value is None or price is None:
         return None
     buy_price = min(price, fair_value * (1.0 - BUY_PLAN["margin_of_safety"]))
     style = _holding_style(volatility_score)
+    clause, args = _as_of_clause(as_of)
     row = con.execute(
-        "SELECT atr_14 FROM mart.m_technical_indicators WHERE ticker = ? ORDER BY date DESC LIMIT 1",
-        [ticker],
+        f"SELECT atr_14 FROM mart.m_technical_indicators "
+        f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 1",
+        [ticker, *args],
     ).fetchone()
     atr = row[0] if row else None
     k = BUY_PLAN["atr_multiplier"][style]
     stop = (buy_price - k * atr) if atr else buy_price * 0.85
     stop = max(stop, buy_price * BUY_PLAN["stop_floor_scale"])
-    return {"price": buy_price, "stop_loss": stop, "holding_style": style}
+    # signal_price + atr_14 are echoed so the backtest harness can rebuild
+    # plan geometry under different BUY_PLAN params without re-replaying
+    return {"price": buy_price, "stop_loss": stop, "holding_style": style,
+            "signal_price": price, "atr_14": atr}
 
 
-def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = None) -> ScoreResult:
-    """Compute + persist the full score set for one ticker (snapshot tables)."""
+def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = None,
+                 as_of: date | datetime | None = None,
+                 persist: bool = True) -> ScoreResult:
+    """Compute (+ persist by default) the full score set for one ticker.
+
+    as_of replays the score point-in-time: bar-dated inputs (price,
+    indicators, realized vol, news window) only see data on or before that
+    date, so a backtest can't leak future prices into past ratings. Slow
+    period-keyed inputs (quarterly fundamentals, monthly insider/analyst
+    snapshots) are used as-landed — an accepted approximation documented in
+    backtest.py. persist=False skips the mart snapshot upserts entirely.
+    """
     now = now or datetime.now(timezone.utc)
+    if isinstance(as_of, datetime):
+        as_of_date = as_of.date()
+        anchor = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+    elif as_of is not None:
+        as_of_date = as_of
+        # end of the replayed UTC day: news published ON as_of still counts
+        anchor = datetime.combine(as_of, time(23, 59), tzinfo=timezone.utc)
+    else:
+        as_of_date = None
+        anchor = None
     with warehouse.connect() as con:
         profile = _fetch_one(con, "raw_company_profile",
                              "ticker = ?", [ticker])
@@ -1043,29 +1113,34 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
         trailing = _trailing_eps(surprise_rows)
 
         price: float | None = None
-        q = _fetch_one(con, "raw_quotes", "ticker = ?", [ticker])
+        q = _fetch_one(con, "raw_quotes", "ticker = ?", [ticker]) \
+            if as_of_date is None else None
         if q:
             price = _num(q["payload"].get("c"))
+        clause, args = _as_of_clause(as_of_date)
         if price is None:
             row = con.execute(
-                "SELECT close FROM staging.stg_prices_daily WHERE ticker = ? ORDER BY date DESC LIMIT 1",
-                [ticker],
+                f"SELECT close FROM staging.stg_prices_daily "
+                f"WHERE ticker = ?{clause} ORDER BY date DESC LIMIT 1",
+                [ticker, *args],
             ).fetchone()
             price = row[0] if row else None
 
-        g_fwd = _eps_growth(con, ticker, surprise_rows)
-        fair_value, fair_sources = _fair_value(
-            con, ticker, price, basic, profile) if price else (None, [])
+        fair_value, fair_sources, g_used = _fair_value(
+            con, ticker, price, basic, profile) if price else (None, [], 0.0)
 
         valuation = _category_score("valuation", VALUATION_SUB_WEIGHTS,
                                     _valuation_components(con, ticker, surprise_rows, price, fair_value))
         trend = _category_score(
-            "trend", TREND_SUB_WEIGHTS, _trend_components(con, ticker, price))
+            "trend", TREND_SUB_WEIGHTS,
+            _trend_components(con, ticker, price, as_of=as_of_date))
         sentiment = _category_score(
-            "sentiment", SENTIMENT_SUB_WEIGHTS, _news_components(con, ticker))
+            "sentiment", SENTIMENT_SUB_WEIGHTS,
+            _news_components(con, ticker, anchor=anchor))
         moat = _category_score("moat", MOAT_SUB_WEIGHTS,
                                _moat_components(con, ticker))
-        vol_components = _volatility_components(con, ticker, price)
+        vol_components = _volatility_components(con, ticker, price,
+                                                as_of=as_of_date)
         volatility = _category_score(
             "volatility", VOLATILITY_SUB_WEIGHTS, vol_components)
 
@@ -1083,11 +1158,14 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
 
         target = None
         if fair_value is not None:
-            g = _clamp(g_fwd if g_fwd is not None else 0.0,
-                       *FAIR_VALUE["growth_clamp"])
-            target = fair_value * (1.0 + g)
+            # MODEL.md: target = fairValue x (1 + g_fwd), the same resolved
+            # growth (estimate -> trailing-EPS fallback -> proxy) that fair
+            # value used -- not a narrower estimate-only lookup.
+            target = fair_value * (
+                1.0 + _clamp(g_used, *FAIR_VALUE["growth_clamp"]))
         buy_plan = _buy_plan(con, ticker, rating,
-                             fair_value, volatility.score, price)
+                             fair_value, volatility.score, price,
+                             as_of=as_of_date)
 
         result = ScoreResult(
             ticker=ticker,
@@ -1103,7 +1181,8 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
             valuation_override_applied=override,
             buy_plan=buy_plan,
         )
-        _persist(con, result, valuation, volatility)
+        if persist:
+            _persist(con, result, valuation, volatility)
     return result
 
 

@@ -17,9 +17,12 @@ from typing import Any
 from dagster import (
     AssetExecutionContext,
     AssetSelection,
+    DefaultScheduleStatus,
+    DefaultSensorStatus,
     Definitions,
     DynamicPartitionsDefinition,
     RunRequest,
+    in_process_executor,
     job,
     op,
     resource,
@@ -28,6 +31,7 @@ from dagster import (
     asset,
 )
 
+from .failure_sensor import pipeline_failure_sensor
 from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest.engine import IngestEngine
 from .mart.mart import (
@@ -41,6 +45,12 @@ from .staging.staging import rebuild_prices_daily
 from .storage import Warehouse
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
+
+# Max RunRequests emitted per sensor tick. Each run fires provider calls
+# (including one Alpha Vantage transcript), so launching the whole queue at
+# once stampedes free-tier burst limits; a small batch per 30s tick keeps
+# providers paced while still draining the queue within minutes.
+SENSOR_BATCH_SIZE = 2
 
 _ON_DEMAND_ENDPOINTS = tuple(spec.name for spec in on_demand_endpoints())
 
@@ -82,19 +92,25 @@ weekdays_job = _make_cadence_job(Cadence.WEEKDAYS)
 daily_job = _make_cadence_job(Cadence.DAILY)
 
 
-@schedule(job=monthly_job, cron_schedule="0 2 1 * *")
+@schedule(job=monthly_job, cron_schedule="0 2 1 * *",
+          default_status=DefaultScheduleStatus.RUNNING)
 def monthly_schedule() -> dict:  # noqa: ANN401
     """01:00 UTC on the 1st of each month: commodities, macro, symbols."""
     return {}
 
 
-@schedule(job=weekdays_job, cron_schedule="0 0 * * 1-5")
+@schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5",
+          default_status=DefaultScheduleStatus.RUNNING)
 def weekdays_schedule() -> dict:  # noqa: ANN401
-    """After market close: gainers/losers, IPO + earnings calendars."""
+    """21:30 UTC on trading days: right after the US close (20:00 UTC in
+    DST, 21:00 UTC in winter), so gainers/losers and IPO + earnings
+    calendars capture that day's session. The previous midnight-UTC cron
+    skipped Friday's session entirely and ran Monday against stale data."""
     return {}
 
 
-@schedule(job=daily_job, cron_schedule="0 1 * * *")
+@schedule(job=daily_job, cron_schedule="0 1 * * *",
+          default_status=DefaultScheduleStatus.RUNNING)
 def daily_schedule() -> dict:  # noqa: ANN401
     """Daily market-persistent news sentiment."""
     return {}
@@ -138,12 +154,14 @@ def ticker_data(context: AssetExecutionContext) -> None:
             f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
 
 
-def stage_ticker_runs(warehouse: Warehouse, instance) -> list[str]:
-    """Consume the request queue: add a dynamic ticker partition per pending
-    request and mark them launched. Returns the staged tickers so the sensor
-    can emit one RunRequest each. Requests whose runs fail are picked up again
-    on the next frontend re-request."""
-    pending = warehouse.pending_ticker_requests()
+def stage_ticker_runs(warehouse: Warehouse, instance,
+                      batch_size: int = SENSOR_BATCH_SIZE) -> list[str]:
+    """Consume the request queue: add dynamic ticker partitions and mark
+    launched, oldest requests first, at most `batch_size` per tick. Returns
+    the staged tickers so the sensor can emit one RunRequest each; the rest
+    stay pending for the next tick. Requests whose runs fail are picked up
+    again on the next frontend re-request."""
+    pending = warehouse.pending_ticker_requests()[:batch_size]
     for ticker in pending:
         instance.add_dynamic_partitions("ticker", [ticker])
     if pending:
@@ -211,6 +229,7 @@ def ticker_score(context: AssetExecutionContext) -> None:
         "m_advanced_analytics", "m_technical_indicators", "ticker_score",
     ),
     minimum_interval_seconds=30,
+    default_status=DefaultSensorStatus.RUNNING,
     required_resource_keys={"engine"},
     description=(
         "Polls control.ticker_requests (written by the frontend), adds a dynamic "
@@ -240,5 +259,11 @@ defs = Definitions(
             m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
-    sensors=[ticker_request_sensor],
+    sensors=[ticker_request_sensor, pipeline_failure_sensor],
+    # DuckDB is a single-writer file: with the default multiprocess executor
+    # every step runs in its own subprocess and the four mart siblings (all
+    # depending only on stg_prices_daily) launch concurrently and fight over
+    # the write lock. In-process keeps each run's steps sequential; cross-run
+    # overlap is still safe because Warehouse.connect retries on lock.
+    executor=in_process_executor,
 )

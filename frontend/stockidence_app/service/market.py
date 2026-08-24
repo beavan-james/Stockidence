@@ -125,18 +125,67 @@ _MACRO_DEFS = [
 ]
 
 
+def _month_add(ym: str, months: int) -> str:
+    """Shift a 'YYYY-MM' string by N months."""
+    year, month = int(ym[:4]), int(ym[5:7])
+    idx = year * 12 + (month - 1) + months
+    return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
+
+
+def _inflation_from_cpi(points: int = 8) -> list[dict]:
+    """YoY inflation derived from the CPI monthly series we already ingest.
+
+    AV's INFLATION endpoint is an annual series that froze upstream at Jan
+    2024; CPI keeps updating monthly, so YoY = cpi_t / cpi_t-12 - 1 gives a
+    current 'Inflation' card without another API dependency.
+    """
+    rows = _latest_macro_series("cpi", points=points + 12)
+    by_month = {r["date"][:7]: r["value"] for r in rows}
+    out: list[dict] = []
+    for r in rows:
+        base = by_month.get(_month_add(r["date"][:7], -12))
+        if r["value"] is None or not base:
+            continue
+        out.append({"date": r["date"], "value": round((r["value"] / base - 1.0) * 100.0, 2)})
+    return out[-points:]
+
+
+def _series_stale(series: list[dict], reference: list[dict], months: int = 6) -> bool:
+    """True when `reference` runs >N months ahead of `series` (or series empty)."""
+    if not series:
+        return True
+    if not reference:
+        return False
+    return _month_add(series[-1]["date"][:7], months) < reference[-1]["date"][:7]
+
+
+def _fmt_fetched(ts) -> str:
+    """TIMESTAMPTZ -> 'Aug 20, 2026'; '' for missing/demo values."""
+    try:
+        return ts.strftime("%b %d, %Y")
+    except AttributeError:
+        return ""
+
+
 def get_macro_metrics() -> list[dict]:
     """Latest quarterly/monthly macro indicators (inflation, CPI, etc.)."""
     rows = _read(
         """
-        SELECT indicator, min(date), max(date)
+        SELECT indicator, min(date), max(date), max(fetched_at)
         FROM raw.raw_macro_indicators GROUP BY 1
         """
     )
     live = {r[0]: r for r in rows} if rows else {}
+    cpi_series = _latest_macro_series("cpi", points=8)
     out: list[dict] = []
     for indicator, label, unit, detail in _MACRO_DEFS:
         series = _latest_macro_series(indicator, points=8)
+        derived_from_cpi = False
+        if indicator == "inflation" and _series_stale(series, cpi_series):
+            derived = _inflation_from_cpi()
+            if derived:
+                series, detail, derived_from_cpi = (
+                    derived, "Derived from CPI YoY", True)
         latest = series[-1] if series else None
         if latest is None or indicator not in live:
             continue  # untouched indicator: let the demo fill the grid
@@ -145,8 +194,12 @@ def get_macro_metrics() -> list[dict]:
             value = round(value) if value is not None else None
         else:
             value = round(value, 2) if value is not None else None
+        # 'as_of' is the data period (BLS lags a month); 'fetched' is when
+        # our pipeline landed it. Derived inflation credits CPI's fetch time.
+        fetched_key = "cpi" if derived_from_cpi else indicator
+        fetched = _fmt_fetched((live.get(fetched_key) or (None,) * 4)[3])
         out.append({"label": label, "value": value, "unit": unit, "detail": detail,
-                    "as_of": latest["date"], "series": series})
+                    "as_of": latest["date"], "series": series, "fetched": fetched})
     if out:
         return out
     return _DEMO_MACRO
@@ -180,7 +233,12 @@ def get_commodities() -> list[dict]:
 
 
 def get_market_movers() -> dict:
-    """Top gainers, losers, and most actively traded, bucket-aggregated."""
+    """Top gainers, losers, and most actively traded, bucket-aggregated.
+
+    movers_as_of is the trading day the snapshot represents (max land date
+    in raw_gainers_losers) so the UI can show how fresh the table is; ''
+    for the demo fallback.
+    """
     rows = _read(
         """
         SELECT ticker,
@@ -199,10 +257,15 @@ def get_market_movers() -> dict:
         return {
             "metadata": "Top gainers, losers, and most actively traded US tickers (demo)",
             "last_updated": _now() + " US/Eastern",
+            "movers_as_of": "",
             "top_gainers": _decorate(_DEMO_MOVERS["top_gainers"]),
             "top_losers": _decorate(_DEMO_MOVERS["top_losers"]),
             "most_actively_traded": _decorate(_DEMO_MOVERS["most_actively_traded"]),
         }
+    as_of_rows = _read("SELECT max(date) FROM raw.raw_gainers_losers")
+    movers_as_of = (
+        _fmt_fetched(as_of_rows[0][0]) if as_of_rows and as_of_rows[0][0] else ""
+    )
     movers: dict[str, list[dict]] = {"top_gainers": [], "top_losers": [], "most_actively_traded": []}
     for ticker, bucket, price, change_amount, change_percentage, volume in rows:
         if bucket in movers and price is not None:
@@ -213,6 +276,7 @@ def get_market_movers() -> dict:
     return {
         "metadata": "Top gainers, losers, and most actively traded US tickers",
         "last_updated": _now() + " US/Eastern",
+        "movers_as_of": movers_as_of,
         "top_gainers": _decorate(movers["top_gainers"]),
         "top_losers": _decorate(movers["top_losers"]),
         "most_actively_traded": _decorate(movers["most_actively_traded"]),
@@ -373,17 +437,17 @@ def _str_list(v) -> list[str]:
 # --- deterministic demo placeholders (kept in sync with API.md schemas) ---
 
 _DEMO_MACRO = [
-    {"label": "Inflation", "value": 2.95, "unit": "%", "detail": "YoY annual rate", "as_of": "2026-07-01",
+    {"label": "Inflation", "value": 2.95, "unit": "%", "detail": "YoY annual rate", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2024-01-01", "value": 2.95}, {"date": "2025-01-01", "value": 3.41}, {"date": "2026-01-01", "value": 2.85}, {"date": "2026-07-01", "value": 2.62}]},
-    {"label": "CPI", "value": 333.918, "unit": "index", "detail": "Consumer price index", "as_of": "2026-07-01",
+    {"label": "CPI", "value": 333.918, "unit": "index", "detail": "Consumer price index", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-01-01", "value": 318.2}, {"date": "2026-01-01", "value": 329.1}, {"date": "2026-07-01", "value": 333.9}]},
-    {"label": "Unemployment Rate", "value": 4.1, "unit": "%", "detail": "Seasonally adjusted", "as_of": "2026-07-01",
+    {"label": "Unemployment Rate", "value": 4.1, "unit": "%", "detail": "Seasonally adjusted", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-07-01", "value": 4.3}, {"date": "2026-01-01", "value": 4.2}, {"date": "2026-07-01", "value": 4.1}]},
-    {"label": "Federal Funds Rate", "value": 3.63, "unit": "%", "detail": "Effective rate", "as_of": "2026-07-01",
+    {"label": "Federal Funds Rate", "value": 3.63, "unit": "%", "detail": "Effective rate", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-01-01", "value": 4.33}, {"date": "2026-01-01", "value": 3.84}, {"date": "2026-07-01", "value": 3.63}]},
-    {"label": "Real GDP per Capita", "value": 88698, "unit": "$", "detail": "Quarterly, USD", "as_of": "2026-06-30",
+    {"label": "Real GDP per Capita", "value": 88698, "unit": "$", "detail": "Quarterly, USD", "as_of": "2026-06-30", "fetched": "",
      "series": [{"date": "2025-06-30", "value": 86410}, {"date": "2026-06-30", "value": 88698}]},
-    {"label": "Natural Gas", "value": 2.89, "unit": "$/MMBtu", "detail": "Henry Hub spot price", "as_of": "2026-07-01",
+    {"label": "Natural Gas", "value": 2.89, "unit": "$/MMBtu", "detail": "Henry Hub spot price", "as_of": "2026-07-01", "fetched": "",
      "series": [{"date": "2025-11-01", "value": 3.28}, {"date": "2026-03-01", "value": 2.54}, {"date": "2026-07-01", "value": 2.89}]},
 ]
 

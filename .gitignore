@@ -9,3 +9,7 @@ AGENTS.md
 __pycache__/
 *.pyc
 .tmp_dagster_home_*/
+Jupyter/
+*.ipynb_checkpoints
+*.ipynb
+tests/

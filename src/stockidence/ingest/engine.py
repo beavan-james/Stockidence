@@ -37,6 +37,11 @@ _PROVIDER_CLIENTS = {
 
 _SCHEDULED_DEFAULT_WINDOW_DAYS = 45
 
+# First-fetch lookback for daily bars. Providers default to ~1 month, which
+# starves the SMA200-based trend components and makes backtesting impossible;
+# two years covers MIN_BARS replay plus slack while staying one API call.
+_PRICE_BACKFILL_DAYS = 730
+
 
 @dataclass(frozen=True)
 class IngestResult:
@@ -112,6 +117,12 @@ class IngestEngine:
             kwargs: dict[str, Any] = {"symbol": sym}
             if watermark is not None and watermark.high_watermark:
                 kwargs["start_date"] = watermark.high_watermark  # incremental since last fetch
+            else:
+                # first fetch: pull enough history for SMA200 trend scoring
+                # and point-in-time backtests, not the provider's ~1 month
+                kwargs["start_date"] = (
+                    now.date() - timedelta(days=_PRICE_BACKFILL_DAYS)
+                ).isoformat()
             return kwargs
         if spec.name not in by_name:
             raise ValueError(f"{spec.name}: no on-demand call signature (use ingest_scheduled)")

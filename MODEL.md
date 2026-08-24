@@ -17,14 +17,35 @@
 3. **Moat is tertiary**: A strong moat (competitive advantage) can make a stock more resilient to market fluctuations and give it a better long-term outlook.
 4. **Volatility is separate**: Volatility is important for risk management, but it doesn't directly affect the buy/sell confidence rating. Instead, it feeds into a separate volatility score that can help inform your position sizing and stop-loss levels.
 ---
-## Initial Model Weighting
+## Model Weighting
 
-| Category  | Weight |
-| --------- | ------ |
-| Valuation | 52%    |
-| Trend     | 21%    |
-| Sentiment | 21%    |
-| Moat      | 6%     |
+**Current: v2 (2026-08), first backtest-informed revision.**
+
+| Category  | v1 | v2 (current) |
+| --------- | ----- | ------------ |
+| Valuation | 52%   | **62%**      |
+| Trend     | 21%   | **24%**      |
+| Sentiment | 21%   | **10%**      |
+| Moat      | 6%    | **4%**       |
+
+v2 rationale — category sub-scores were correlated against realized 60d
+forward returns on 327 train-window replays (2025-06..2026-02, 13 tickers,
+date-block bootstrap CIs): valuation +0.38 [+0.31, +0.44], trend +0.05
+[-0.07, +0.15], sentiment -0.30 [-0.39, -0.20], moat -0.25 [-0.32, -0.15].
+Weight moved toward the only positive contributor; sentiment/moat halved,
+not zeroed (single window, single regime). Trend kept as a stabilizer.
+
+Honest limits of this evidence:
+- Held-out validation (2026-03..2026-05) showed ~zero score↔return
+  correlation under BOTH v1 and v2 — the edge is regime-dependent and no
+  reweighting within current category definitions fixes that.
+- The highest-confidence quintile underperforms quintile 4 in both windows
+  (value-trap signature). A trend-confirmation guard for top ratings is a
+  candidate scoring-logic change, not bundled into the weight pass.
+- No Sell/Strong Sell fires naturally in this bull window; reachability is
+  to be demonstrated via a documented stress case.
+
+All weights remain provisional pending more history and bear-market data.
 ---
 ## API's
 _(Marked "(not used)" when the endpoint has no ingestion path; see API.md for samples.)_
@@ -76,25 +97,35 @@ Each category scores 0-100. Final confidence score = weighted sum. All sub-score
 
 | Category   | Weight | Output role                              |
 | ---------- | ------ | ----------------------------------------- |
-| Valuation  | 52%    | Confidence rating (gating/override)       |
-| Trend      | 21%    | Confidence rating (entry/exit timing)     |
-| Sentiment  | 21%    | Confidence rating (market psychology)     |
-| Moat       | 6%     | Confidence rating (long-term resilience)  |
+| Valuation  | 62%    | Confidence rating (gating/override)       |
+| Trend      | 24%    | Confidence rating (entry/exit timing)     |
+| Sentiment  | 10%    | Confidence rating (market psychology)     |
+| Moat       | 4%     | Confidence rating (long-term resilience)  |
 | Volatility | —      | Separate score + stop-loss / holding style |
 
 ### Rating mapping (config-driven thresholds)
 
+v2 bounds (2026-08): recalibrated to the score range the composite actually
+produces (observed 43.7–69.1 over 431 replays — the original 75/60/40/25
+left Sell/Strong Sell unreachable and Strong Buy never firing).
+
 | Confidence score | Rating        |
 | ---------------- | ------------- |
-| >= 75            | Strong Buy    |
-| 60 - 74          | Buy           |
-| 40 - 59          | Hold          |
-| 25 - 39          | Sell          |
-| < 25             | Strong Sell   |
+| >= 66            | Strong Buy    |
+| 59 - 65          | Buy           |
+| 50 - 58          | Hold          |
+| 46 - 49          | Sell          |
+| < 46             | Strong Sell   |
+
+Train-window check (327 replays, 2025-06..2026-02): the Sell bucket realized
+−2.9% mean / −2.0% median 60d forward return (38% up) vs Hold +5.4% and Buy
++13.5% — the low bands mark genuinely below-market names. Held-out window
+was too regime-distorted to confirm; bounds provisional pending bear-market
+data.
 
 **Valuation override:** consistent with "valuation is king" — if the Valuation score < 35, cap the final rating at Hold no matter how good trend/sentiment are. If Valuation > 70, floor the final rating at Hold (a genuinely cheap stock can't be killed by weak short-term trend/sentiment). Ranges provisional.
 
-### Valuation (52%)
+### Valuation (62%)
 
 Fair value (below) is computed and shown to the user, but the **score is a slightly different composite** — how cheap/expensive the stock looks on its fundamentals, only partly driven by fair value.
 
@@ -107,7 +138,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Multiple quality vs own history   | Company Overview (P/S, EV/EBITDA, P/B, EV/Revenue), NetProfitMargin     | P/S vs margin + EV/EBITDA vs historical median → cheap on quality      | 10%    |
 | Recent EPS surprise momentum      | EPS Surprises (surprisePercent, last 4 quarters)                        | avg recent beats vs older → positive                                   | 5%     |
 
-### Trend (21%)
+### Trend (24%)
 
 | Sub-score                   | Sources                            | Direction (positive = buy-friendly)                                    | Weight |
 | --------------------------- | ---------------------------------- | ---------------------------------------------------------------------- | ------ |
@@ -118,7 +149,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Stochastic + CCI            | STOCH, CCI                         | 20-40 rising → +; > 80 → -                                           | 10%    |
 | Volume confirmation         | OBV, AD                            | OBV/AD trending with price → +; divergence → -                        | 10%    |
 
-### Sentiment (21%)
+### Sentiment (10%)
 
 | Sub-score                          | Sources                                                    | Weight |
 | ---------------------------------- | ----------------------------------------------------------- | ------ |
@@ -128,7 +159,7 @@ Fair value (below) is computed and shown to the user, but the **score is a sligh
 | Earnings call transcript tone      | Earnings Call Transcript (avg segment sentiment)            | 15%    |
 | Earnings surprise trend            | EPS Surprises (reused from valuation, not double-counted)   | 10%    |
 
-### Moat (6%)
+### Moat (4%)
 
 Deterministic proxies, no manual judgment. Benchmark against Peers (Finnhub) where available, else vs the company's own history.
 
@@ -190,7 +221,9 @@ target = fairValue × (1 + g_fwd)
 ### Advised Buy Price, Stop-Loss & Holding Style (Buy/Strong Buy only)
 
 1. **Advised buy price** = min(current price, fairValue × (1 − margin_of_safety)) — margin of safety default 15% (config). Price ≤ buy price → buy now; above → wait for pullback to that level.
-2. **Stop-loss** = advised buy price − k × ATR, k scaled by holding style: day trade 1.0, swing 1.5, long-term 2.0 (provisional; floored so low-priced stocks don't get absurdly tight stops).
-3. **Holding style** from the volatility bands above. Long-term holdings track the 12m target; swing/day trades are managed off the stop/ATR, not fair value.
+2. **Stop-loss** = advised buy price − k × ATR, k scaled by holding style: day trade 3.0, swing 4.5, long-term 6.0 (v2 2026-08: widened ×3 after trade-level backtesting — the original 1.0/1.5/2.0 stopped out ~84% of positions before any target could be reached, median trade −2.4%; at 3× the avg/trade went +1.4% → +13.5% train / +16.3% held-out with win rate 25%→73%. Floored so low-priced stocks don't get absurdly tight stops.)
+3. **Holding style** from the volatility bands above. Long-term holdings track the 12m target; swing/day trades are managed off the stop/ATR, not fair value. Expected holding window for plan-based exits is up to ~120 trading days (~6 months) per the backtest's timeout horizon.
+
+Backtesting further found that exiting at **fair value itself** (instead of the growth-extended target price) adds roughly +10pp avg/trade on top of the stop widening (+18.1% vs +13.5% train). Not yet adopted — it changes what "target price" means downstream. Candidate for v3.
 
 All weights, thresholds, growth caps, margins of safety, and ATR multipliers are **provisional spec, not locked** — centralize them as constants so backtesting can tune them without touching scoring logic.

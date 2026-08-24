@@ -103,6 +103,7 @@ class RatingState(rx.State):
     ]
     buy_plan: dict = {}
     source: str = ""
+    sub_scores_open: bool = True
 
     ticker_search: str = ""
     ticker_suggestions: list[dict] = []
@@ -124,6 +125,11 @@ class RatingState(rx.State):
     @rx.var
     def is_buy(self) -> bool:
         return self.advice in ("STRONG_BUY", "BUY")
+
+    @rx.var
+    def is_loading(self) -> bool:
+        """True while a compute is in flight (first rating or refresh)."""
+        return self.source in ("pending", "refreshing")
 
     @rx.var
     def list_names(self) -> list[str]:
@@ -151,8 +157,29 @@ class RatingState(rx.State):
         return len(self.sub_score_rows) > 0
 
     @rx.var
+    def model_weight_rows(self) -> list[dict]:
+        """Landing-page weight tiles from the warehouse's live model spec."""
+        labels = {
+            "valuation": "Valuation",
+            "trend": "Trend",
+            "sentiment": "Sentiment",
+            "moat": "Moat",
+        }
+        return [
+            {
+                "label": labels.get(w["category"], w["category"]),
+                "weight_text": f"{round(w['weight'] * 100)}% weight",
+            }
+            for w in warehouse.get_model_weights()
+        ]
+
+    @rx.var
     def has_fair_value(self) -> bool:
         return self.fair_value > 0
+
+    @rx.var
+    def has_buy_plan(self) -> bool:
+        return len(self.buy_plan) > 0
 
     @rx.var
     def fair_value_text(self) -> str:
@@ -161,6 +188,16 @@ class RatingState(rx.State):
     @rx.var
     def target_price_text(self) -> str:
         return f"${self.target_price:,.2f}"
+
+    @rx.var
+    def buy_price_text(self) -> str:
+        price = self.buy_plan.get("advised_buy_price") or 0.0
+        return f"${float(price):,.2f}"
+
+    @rx.var
+    def stop_loss_text(self) -> str:
+        stop = self.buy_plan.get("stop_loss_price") or 0.0
+        return f"${float(stop):,.2f}"
 
     @rx.var
     def quote(self) -> dict:
@@ -189,8 +226,17 @@ class RatingState(rx.State):
         return market.get_commodities()
 
     @rx.var
+    def pipeline_failures(self) -> list[dict]:
+        return warehouse.get_recent_failures()
+
+    @rx.var
     def market_movers(self) -> dict:
         return market.get_market_movers()
+
+    @rx.var
+    def movers_as_of(self) -> str:
+        """Trading day the gainers/losers snapshot represents ('' if demo)."""
+        return self.market_movers.get("movers_as_of", "")
 
     @rx.var
     def top_gainers(self) -> list[dict]:
@@ -255,6 +301,10 @@ class RatingState(rx.State):
     @rx.event
     def toggle_sidebar(self):
         self.sidebar_collapsed_str = "0" if self.sidebar_collapsed_str == "1" else "1"
+
+    @rx.event
+    def toggle_sub_scores(self):
+        self.sub_scores_open = not self.sub_scores_open
 
     @rx.event
     def toggle_new_list(self):
@@ -424,8 +474,8 @@ class RatingState(rx.State):
         """Wait for the Dagster run to land a fresh mart snapshot.
 
         Runs while the current search shows pending/refreshing: re-reads
-        m_confidence_ratings every POLL_INTERVAL_SECONDS and swaps the UI to
-        the fresh rating as soon as the snapshot's as_of changes. Bails out
+        the confidence_ratings view every POLL_INTERVAL_SECONDS and swaps
+        the UI to the fresh rating as soon as as_of changes. Bails out
         after POLL_MAX_ATTEMPTS so a failing pipeline doesn't poll forever.
         """
         ticker: str = ""

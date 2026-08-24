@@ -143,12 +143,22 @@ def top_nav() -> rx.Component:
     )
 
 
+def _weight_tile(item: rx.Var) -> rx.Component:
+    return rx.vstack(
+        rx.heading(item["label"], size="2", weight="bold"),
+        rx.text(item["weight_text"], size="1", color=rx.color("slate", 10)),
+        align="center",
+        spacing="1",
+    )
+
+
 def hero() -> rx.Component:
     return rx.vstack(
         rx.badge(
             rx.hstack(
                 rx.icon("shield_check", size=12),
-                rx.text("Deterministic model — transparent, never a black box", size="1"),
+                rx.text(
+                    "Deterministic model — transparent, never a black box", size="1"),
                 spacing="1",
             ),
             color_scheme="iris",
@@ -171,30 +181,7 @@ def hero() -> rx.Component:
             max_width="34em",
         ),
         rx.grid(
-            rx.vstack(
-                rx.heading("Valuation", size="2", weight="bold"),
-                rx.text("52% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Trend", size="2", weight="bold"),
-                rx.text("21% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Sentiment", size="2", weight="bold"),
-                rx.text("21% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Moat", size="2", weight="bold"),
-                rx.text("6% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
+            rx.foreach(RatingState.model_weight_rows, _weight_tile),
             columns=rx.breakpoints(initial="2", md="4"),
             spacing="6",
             width="100%",
@@ -216,8 +203,10 @@ def hero() -> rx.Component:
 def suggestion_row(item: rx.Var) -> rx.Component:
     return rx.button(
         rx.hstack(
-            rx.text(item["symbol"], size="2", weight="bold", font_family="monospace"),
-            rx.text(item["description"], size="1", color=rx.color("slate", 10)),
+            rx.text(item["symbol"], size="2",
+                    weight="bold", font_family="monospace"),
+            rx.text(item["description"], size="1",
+                    color=rx.color("slate", 10)),
             width="100%",
             spacing="2",
             align="center",
@@ -302,6 +291,67 @@ def error_callout() -> rx.Component:
     )
 
 
+def failure_row(item: rx.Var) -> rx.Component:
+    return rx.hstack(
+        rx.badge(
+            item["job_name"],
+            color_scheme="red",
+            variant="soft",
+            radius="full",
+            size="1",
+            flex_shrink="0",
+        ),
+        rx.text(
+            item["failed_at_display"],
+            size="1",
+            color=rx.color("slate", 9),
+            flex_shrink="0",
+        ),
+        rx.text(
+            item["error"],
+            size="1",
+            color=rx.color("slate", 10),
+            overflow="hidden",
+            text_overflow="ellipsis",
+            white_space="nowrap",
+            flex_grow="1",
+        ),
+        spacing="3",
+        align="center",
+        width="100%",
+    )
+
+
+def pipeline_health_strip() -> rx.Component:
+    """Compact ops strip: green when no recent failures, red list otherwise."""
+    return rx.cond(
+        RatingState.pipeline_failures.length() == 0,
+        rx.callout(
+            rx.text(
+                "All pipelines operational (no failed runs in the last 7 days)", size="2"),
+            icon="circle_check",
+            color_scheme="grass",
+            size="1",
+            width="100%",
+            variant="surface",
+        ),
+        rx.card(
+            rx.vstack(
+                section_header(
+                    "triangle_alert",
+                    "Pipeline failures (last 7 days)",
+                    "Recorded by the Dagster failure sensor into control.pipeline_failures. Check the webserver for full run logs.",
+                ),
+                rx.foreach(RatingState.pipeline_failures, failure_row),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+            padding="4",
+        ),
+    )
+
+
 def advice_badge() -> rx.Component:
     return rx.badge(
         _advice_label(),
@@ -319,7 +369,8 @@ def source_badge() -> rx.Component:
         rx.hstack(
             rx.cond(
                 RatingState.source == "refreshing",
-                rx.spinner(size="1", color=rx.match(RatingState.source, ("refreshing", "blue"), "blue")),
+                rx.spinner(size="1", color=rx.match(
+                    RatingState.source, ("refreshing", "blue"), "blue")),
             ),
             rx.text(
                 rx.match(
@@ -405,7 +456,8 @@ def stock_header() -> rx.Component:
             align="center",
             width="100%",
         ),
-        rx.text(RatingState.result_company, size="3", color=rx.color("slate", 10)),
+        rx.text(RatingState.result_company, size="3",
+                color=rx.color("slate", 10)),
         rx.text(
             f"As of {RatingState.result_as_of}",
             size="1",
@@ -427,13 +479,15 @@ def score_panel() -> rx.Component:
             color=_advice_color(),
             letter_spacing="-0.02em",
         ),
-        rx.text("Confidence score", size="2", weight="medium", color=rx.color("slate", 10)),
+        rx.text("Confidence score", size="2",
+                weight="medium", color=rx.color("slate", 10)),
         rx.text("out of 100", size="1", color=rx.color("slate", 9)),
         rx.separator(width="70%"),
         rx.vstack(
             rx.hstack(
                 rx.icon("activity", size=16, color=rx.color("purple", 9)),
-                rx.text("Volatility", size="2", weight="medium", color=rx.color("slate", 10)),
+                rx.text("Volatility", size="2", weight="medium",
+                        color=rx.color("slate", 10)),
                 spacing="2",
                 align="center",
             ),
@@ -443,7 +497,8 @@ def score_panel() -> rx.Component:
                 weight="bold",
                 color=rx.color("purple", 9),
             ),
-            rx.text("reported separately", size="1", color=rx.color("slate", 9)),
+            rx.text("reported separately", size="1",
+                    color=rx.color("slate", 9)),
             align="center",
             spacing="1",
         ),
@@ -727,14 +782,36 @@ def sub_score_row(item: rx.Var) -> rx.Component:
 def sub_score_card() -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.heading("Sub-score detail", size="5", weight="bold"),
-            rx.text(
-                "The sub-scores behind each category. Volatility is reported "
-                "as a separate score and is never blended into the rating.",
-                size="1",
-                color=rx.color("slate", 9),
+            rx.hstack(
+                rx.vstack(
+                    rx.heading("Sub-score detail", size="5", weight="bold"),
+                    rx.text(
+                        "The sub-scores behind each category. Volatility is reported "
+                        "as a separate score and is never blended into the rating.",
+                        size="1",
+                        color=rx.color("slate", 9),
+                    ),
+                    align="start",
+                    spacing="1",
+                ),
+                rx.cond(
+                    RatingState.sub_scores_open,
+                    rx.icon("chevron-up", size=18,
+                            color=rx.color("slate", 10)),
+                    rx.icon("chevron-down", size=18,
+                            color=rx.color("slate", 10)),
+                ),
+                spacing="3",
+                align="start",
+                width="100%",
+                justify="between",
+                cursor_pointer="pointer",
+                on_click=RatingState.toggle_sub_scores,
             ),
-            rx.foreach(RatingState.sub_score_rows, sub_score_row),
+            rx.cond(
+                RatingState.sub_scores_open,
+                rx.foreach(RatingState.sub_score_rows, sub_score_row),
+            ),
             align="start",
             width="100%",
             spacing="4",
@@ -745,7 +822,21 @@ def sub_score_card() -> rx.Component:
     )
 
 
-def buy_plan_card(plan: rx.Var) -> rx.Component:
+def _holding_style_heading() -> rx.Component:
+    return rx.heading(
+        rx.match(
+            RatingState.buy_plan["holding_style"],
+            ("long_term_hold", HOLDING_LABELS["long_term_hold"]),
+            ("swing_trade", HOLDING_LABELS["swing_trade"]),
+            ("day_trade", HOLDING_LABELS["day_trade"]),
+            "Other",
+        ),
+        size="6",
+        weight="bold",
+    )
+
+
+def buy_plan_card() -> rx.Component:
     return rx.card(
         rx.vstack(
             rx.hstack(
@@ -756,15 +847,18 @@ def buy_plan_card(plan: rx.Var) -> rx.Component:
             ),
             rx.grid(
                 rx.vstack(
-                    rx.text("Advised buy price", size="2", color=rx.color("slate", 10)),
-                    rx.heading(plan["advised_buy_price"], size="6", weight="bold"),
+                    rx.text("Advised buy price", size="2",
+                            color=rx.color("slate", 10)),
+                    rx.heading(RatingState.buy_price_text,
+                               size="6", weight="bold"),
                     align="start",
                     spacing="1",
                 ),
                 rx.vstack(
-                    rx.text("Stop-loss price", size="2", color=rx.color("slate", 10)),
+                    rx.text("Stop-loss price", size="2",
+                            color=rx.color("slate", 10)),
                     rx.heading(
-                        plan["stop_loss_price"],
+                        RatingState.stop_loss_text,
                         size="6",
                         weight="bold",
                         color=rx.color("tomato", 9),
@@ -773,18 +867,9 @@ def buy_plan_card(plan: rx.Var) -> rx.Component:
                     spacing="1",
                 ),
                 rx.vstack(
-                    rx.text("Holding style", size="2", color=rx.color("slate", 10)),
-                    rx.heading(
-                        rx.match(
-                            plan["holding_style"],
-                            ("long_term_hold", HOLDING_LABELS["long_term_hold"]),
-                            ("swing_trade", HOLDING_LABELS["swing_trade"]),
-                            ("day_trade", HOLDING_LABELS["day_trade"]),
-                            "Other",
-                        ),
-                        size="4",
-                        weight="bold",
-                    ),
+                    rx.text("Holding style", size="2",
+                            color=rx.color("slate", 10)),
+                    _holding_style_heading(),
                     align="start",
                     spacing="1",
                 ),
@@ -797,6 +882,7 @@ def buy_plan_card(plan: rx.Var) -> rx.Component:
         ),
         width="100%",
         padding=BODY_CARD_PADDING,
+        class_name="sk-fade sk-delay-2",
     )
 
 
@@ -811,21 +897,20 @@ def price_reference_card() -> rx.Component:
                     spacing="2",
                     width="100%",
                 ),
-                rx.text(
-                    "Model fair value and the price target implied by it, computed for every rating.",
-                    size="1",
-                    color=rx.color("slate", 9),
-                ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("Fair value", size="2", color=rx.color("slate", 10)),
-                        rx.heading(RatingState.fair_value_text, size="6", weight="bold"),
+                        rx.text("Fair value", size="2",
+                                color=rx.color("slate", 10)),
+                        rx.heading(RatingState.fair_value_text,
+                                   size="6", weight="bold"),
                         align="start",
                         spacing="1",
                     ),
                     rx.vstack(
-                        rx.text("Target price (12m)", size="2", color=rx.color("slate", 10)),
-                        rx.heading(RatingState.target_price_text, size="6", weight="bold"),
+                        rx.text("Target price (12m)", size="2",
+                                color=rx.color("slate", 10)),
+                        rx.heading(RatingState.target_price_text,
+                                   size="6", weight="bold"),
                         align="start",
                         spacing="1",
                     ),
@@ -850,25 +935,25 @@ def result_section() -> rx.Component:
         price_reference_card(),
         breakdown_card(),
         rx.cond(
-            RatingState.is_buy,
-            buy_plan_card(RatingState.buy_plan),
-            rx.cond(
-                RatingState.has_sub_scores,
-                sub_score_card(),
-                rx.card(
-                    rx.vstack(
-                        rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
-                        rx.text(
-                            "Volatility is reported as a separate score and is not blended into the confidence rating.",
-                            size="2",
-                            color=rx.color("slate", 10),
-                        ),
-                        align="center",
-                        spacing="2",
+            RatingState.is_buy & RatingState.has_buy_plan,
+            buy_plan_card(),
+        ),
+        rx.cond(
+            RatingState.has_sub_scores,
+            sub_score_card(),
+            rx.card(
+                rx.vstack(
+                    rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
+                    rx.text(
+                        "Volatility is reported as a separate score and is not blended into the confidence rating.",
+                        size="2",
+                        color=rx.color("slate", 10),
                     ),
-                    width="100%",
-                    padding=BODY_CARD_PADDING,
+                    align="center",
+                    spacing="2",
                 ),
+                width="100%",
+                padding=BODY_CARD_PADDING,
             ),
         ),
         width="100%",
@@ -1141,7 +1226,8 @@ def side_panel() -> rx.Component:
             rx.card(
                 rx.vstack(
                     rx.hstack(
-                        rx.icon("bookmark", size=16, color=rx.color("iris", 9)),
+                        rx.icon("bookmark", size=16,
+                                color=rx.color("iris", 9)),
                         rx.heading("My Lists", size="3", weight="bold"),
                         rx.spacer(),
                         rx.icon_button(
@@ -1178,6 +1264,7 @@ def main_panel() -> rx.Component:
     return rx.vstack(
         hero(),
         macro_metrics_section(),
+        pipeline_health_strip(),
         rx.cond(
             RatingState.error != "",
             error_callout(),
@@ -1188,54 +1275,139 @@ def main_panel() -> rx.Component:
     )
 
 
-def computing_card() -> rx.Component:
-    step = lambda text: rx.hstack(
-        rx.spinner(size="1", color=rx.color("iris", 9)),
-        rx.text(text, size="2", color=rx.color("slate", 11)),
-        spacing="2",
-        align="center",
+def _computing_gauge() -> rx.Component:
+    return rx.html(
+        """
+        <div class="cg-gauge-wrap">
+          <svg viewBox="0 0 200 120" width="210" height="126" aria-hidden="true">
+            <defs>
+              <linearGradient id="cg-arc" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#818cf8"/>
+                <stop offset="100%" stop-color="#4f46e5"/>
+              </linearGradient>
+            </defs>
+            <path d="M20 105 A80 80 0 0 1 180 105" fill="none"
+                  stroke="url(#cg-arc)" stroke-width="6"
+                  stroke-linecap="round" opacity="0.35"/>
+            <path d="M30 105 A70 70 0 0 1 170 105" fill="none"
+                  stroke="#94a3b8" stroke-width="11" opacity="0.55"
+                  stroke-dasharray="1.5 12.62"/>
+            <g class="cg-needle">
+              <line x1="100" y1="105" x2="100" y2="40"
+                    stroke="#4f46e5" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <circle cx="100" cy="105" r="5.5" fill="#4f46e5"/>
+          </svg>
+          <span class="cg-gauge-label">Confidence &middot; calibrating</span>
+        </div>
+        """,
+        width="100%",
     )
+
+
+def _computing_stage(label: str, idx: int) -> rx.Component:
+    return rx.hstack(
+        rx.box(class_name=f"cg-stage-dot"),
+        rx.text(label, size="1", weight="medium"),
+        class_name=f"cg-stage cg-stage-{idx}",
+    )
+
+
+def _computing_tenets() -> rx.Component:
+    tenets = [
+        "Valuation is king — everything else times the entry.",
+        "Volatility is reported separately, never blended into your rating.",
+        "Every score is deterministic: same data, same answer.",
+        "Slow inputs are normal — fundamentals update quarterly.",
+    ]
+    return rx.box(
+        rx.foreach(tenets, lambda t, i: rx.text(
+            t,
+            size="2",
+            color=rx.color("slate", 10),
+            font_style="italic",
+            text_align="center",
+            width="100%",
+            class_name=f"cg-tenet cg-tenet-{i}",
+        )),
+        class_name="cg-tenets",
+        width="100%",
+    )
+
+
+def computing_card() -> rx.Component:
+    ticker = RatingState.ticker
+    named = rx.cond(
+        ticker == "",
+        "Computing your first rating",
+        f"First rating for {ticker}",
+    )
+    refreshing = rx.cond(ticker == "", "Refreshing", f"Refreshing {ticker}")
+    generic = rx.cond(ticker == "", "Computing a rating",
+                      f"Computing a rating for {ticker}")
+    headline = rx.match(
+        RatingState.source,
+        ("pending", named),
+        ("refreshing", refreshing),
+        generic,
+    )
+    subtitle = rx.match(
+        RatingState.source,
+        (
+            "pending",
+            "Assembling its full history from scratch — this is the slow path.",
+        ),
+        (
+            "refreshing",
+            "The stored snapshot is over a day old — updating market inputs.",
+        ),
+        "The pipeline was queued.",
+    )
+    stages = [
+        "Queued",
+        "Fetching market data",
+        "Cleaning & staging",
+        "Deriving indicators",
+        "Scoring",
+    ]
     return rx.card(
         rx.vstack(
+            rx.heading(headline, size="5", weight="bold", text_align="center",
+                       width="100%"),
+            rx.text(subtitle, size="1", color=rx.color("slate", 9),
+                    text_align="center", width="100%"),
+            _computing_gauge(),
             rx.hstack(
-                rx.icon("loader_circle", size=22, color=rx.color("iris", 9)),
-                rx.heading(
-                    f"Computing a rating for {RatingState.ticker}",
-                    size="4",
-                    weight="bold",
+                rx.foreach(
+                    stages,
+                    lambda label, i: rx.fragment(
+                        _computing_stage(label, i),
+                        rx.cond(i < 4, rx.icon("chevron-right", size=12,
+                                               color=rx.color("slate", 8))),
+                    ),
                 ),
-                spacing="2",
-                align="center",
+                justify="center",
+                wrap="wrap",
+                spacing="1",
                 width="100%",
             ),
+            _computing_tenets(),
             rx.text(
-                "The pipeline was queued. Steps being run in the warehouse:",
-                size="1",
-                color=rx.color("slate", 9),
-                width="100%",
-            ),
-            rx.vstack(
-                step("Fetching quote, profile, and fundamentals"),
-                step("Deriving indicators and technical context"),
-                step("Scoring valuation, trend, sentiment, moat"),
-                step("Writing the mart snapshot"),
-                align="start",
-                width="100%",
-                spacing="2",
-            ),
-            rx.text(
-                "This page refreshes once the rating lands. If the warehouse is offline, "
-                "a deterministic demo rating is shown instead.",
+                "Still working — fundamentals are the slow part. "
+                "This page updates itself the moment the rating lands.",
                 size="1",
                 color=rx.color("slate", 10),
+                text_align="center",
                 width="100%",
+                class_name="cg-reassure",
             ),
-            align="start",
+            align="center",
             width="100%",
-            spacing="3",
+            spacing="4",
         ),
         width="100%",
         padding=BODY_CARD_PADDING,
+        class_name="sk-fade",
     )
 
 
@@ -1253,7 +1425,7 @@ def profile_panel() -> rx.Component:
             _hover={"color": rx.color("iris", 9)},
         ),
         rx.cond(
-            RatingState.has_result,
+            RatingState.has_result & ~RatingState.is_loading,
             result_section(),
             rx.cond(
                 RatingState.error != "",
@@ -1307,6 +1479,14 @@ def macro_metric_card(item: rx.Var) -> rx.Component:
                 f"{item['unit']} · {item['detail']}",
                 size="1",
                 color=rx.color("slate", 10),
+            ),
+            rx.cond(
+                item["fetched"] != "",
+                rx.text(
+                    f"fetched {item['fetched']}",
+                    size="1",
+                    color=rx.color("slate", 9),
+                ),
             ),
             macro_metric_chart(item),
             align="start",
@@ -1379,7 +1559,7 @@ def macro_metrics_section() -> rx.Component:
         section_header(
             "gauge",
             "Market snapshot",
-            "Headline macro indicators feeding the model context. Data is demo placeholder until the pipeline ingests these endpoints.",
+            "Headline macro indicators feeding the model context, read live from the warehouse. Macro series refresh monthly (inflation derived from CPI YoY), gold and silver on the monthly job.",
         ),
         rx.grid(
             rx.foreach(RatingState.macro_metrics, macro_metric_card),
@@ -1420,16 +1600,32 @@ def mover_row(item: rx.Var) -> rx.Component:
             ),
         ),
         rx.table.cell(
-            rx.text(item["volume_display"], size="2", color=rx.color("slate", 10)),
+            rx.text(item["volume_display"], size="2",
+                    color=rx.color("slate", 10)),
         ),
         _hover={"bg": rx.color("slate", 3)},
     )
 
 
-def movers_table(title: str, data: rx.Var) -> rx.Component:
+def movers_table(title: str, data: rx.Var, as_of: rx.Var) -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.heading(title, size="4", weight="bold"),
+            rx.hstack(
+                rx.heading(title, size="4", weight="bold"),
+                rx.cond(
+                    as_of != "",
+                    rx.badge(
+                        "Market close · ", as_of,
+                        variant="soft",
+                        radius="full",
+                        color_scheme="gray",
+                    ),
+                    rx.fragment(),
+                ),
+                align="center",
+                spacing="3",
+                width="100%",
+            ),
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
@@ -1646,14 +1842,17 @@ def discover_panel() -> rx.Component:
                 "Biggest movers in the last session.",
             ),
             rx.hstack(
-                limit_select(RatingState.movers_limit, RatingState.set_movers_limit),
+                limit_select(RatingState.movers_limit,
+                             RatingState.set_movers_limit),
                 align="center",
                 justify="end",
                 width="100%",
             ),
             rx.grid(
-                movers_table("Top gainers", RatingState.top_gainers),
-                movers_table("Top losers", RatingState.top_losers),
+                movers_table("Top gainers", RatingState.top_gainers,
+                             RatingState.movers_as_of),
+                movers_table("Top losers", RatingState.top_losers,
+                             RatingState.movers_as_of),
                 columns=rx.breakpoints(initial="1", md="2"),
                 spacing="4",
                 width="100%",
@@ -1702,7 +1901,8 @@ def discover_panel() -> rx.Component:
                     spacing="1",
                     align="center",
                 ),
-                limit_select(RatingState.news_limit, RatingState.set_news_limit),
+                limit_select(RatingState.news_limit,
+                             RatingState.set_news_limit),
                 justify="between",
                 width="100%",
                 align="center",
@@ -1719,7 +1919,8 @@ def discover_panel() -> rx.Component:
                 "Upcoming IPOs and earnings with consensus estimates.",
             ),
             rx.hstack(
-                limit_select(RatingState.calendar_limit, RatingState.set_calendar_limit),
+                limit_select(RatingState.calendar_limit,
+                             RatingState.set_calendar_limit),
                 align="center",
                 justify="end",
                 width="100%",
@@ -1731,62 +1932,77 @@ def discover_panel() -> rx.Component:
                         rx.table.root(
                             rx.table.header(
                                 rx.table.row(
-                                    rx.table.column_header_cell("Symbol", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Company", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Exchange", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Date", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Price", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Status", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Symbol", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Company", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Exchange", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Date", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Price", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Status", bg=rx.color("slate", 3)),
+                                ),
                             ),
-                        ),
-                        rx.table.body(
-                            rx.foreach(RatingState.ipo_calendar, ipo_row),
-                        ),
-                        width="100%",
-                    ),
-                    align="stretch",
-                    width="100%",
-                    spacing="3",
-                ),
-                width="100%",
-                padding=BODY_CARD_PADDING,
-            ),
-            rx.card(
-                rx.vstack(
-                    rx.heading("Earnings calendar", size="4", weight="bold"),
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                rx.table.column_header_cell("Symbol", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Date", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Hour", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Period", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("EPS actual", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("EPS est.", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Rev. est.", bg=rx.color("slate", 3)),
+                            rx.table.body(
+                                rx.foreach(RatingState.ipo_calendar, ipo_row),
                             ),
+                            width="100%",
                         ),
-                        rx.table.body(
-                            rx.foreach(RatingState.earnings_calendar, earnings_row),
-                        ),
+                        align="stretch",
                         width="100%",
+                        spacing="3",
                     ),
-                    align="stretch",
                     width="100%",
-                    spacing="3",
+                    padding=BODY_CARD_PADDING,
                 ),
+                rx.card(
+                    rx.vstack(
+                        rx.heading("Earnings calendar",
+                                   size="4", weight="bold"),
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    rx.table.column_header_cell(
+                                        "Symbol", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Date", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Hour", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Period", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "EPS actual", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "EPS est.", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Rev. est.", bg=rx.color("slate", 3)),
+                                ),
+                            ),
+                            rx.table.body(
+                                rx.foreach(
+                                    RatingState.earnings_calendar, earnings_row),
+                            ),
+                            width="100%",
+                        ),
+                        align="stretch",
+                        width="100%",
+                        spacing="3",
+                    ),
+                    width="100%",
+                    padding=BODY_CARD_PADDING,
+                ),
+                columns=rx.breakpoints(initial="1", md="2"),
+                spacing="4",
                 width="100%",
-                padding=BODY_CARD_PADDING,
+                align="start",
             ),
-            columns=rx.breakpoints(initial="1", md="2"),
-            spacing="4",
+            align="stretch",
             width="100%",
-            align="start",
+            spacing="4",
         ),
-        align="stretch",
-        width="100%",
-        spacing="4",
-    ),
         align="stretch",
         width="100%",
         spacing="6",

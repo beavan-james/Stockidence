@@ -189,18 +189,17 @@ class Warehouse:
     ) -> duckdb.DuckDBPyConnection:
         """Open a connection to the DuckDB file.
 
-        DuckDB allows a single writer process per file. Parallel Dagster steps
-        (and the frontend) all funnel through this store, so a write-open can
-        transiently hit "Could not set lock on file" while a sibling step
-        holds the write lock. Reading never contends; write-opens retry with
+        DuckDB's file lock is exclusive per process: while ANY process holds
+        the file open read-write, even read_only opens are refused, and while
+        any process holds it read-only, writers are refused. Parallel Dagster
+        steps (and the frontend) all funnel through this store, so opens can
+        transiently hit "Could not set lock on file". Both modes retry with
         backoff until the lock frees instead of crashing the run.
         """
-        if read_only:
-            return duckdb.connect(str(self.path), read_only=True)
         last_error: Exception | None = None
         for attempt in range(max_attempts):
             try:
-                return duckdb.connect(str(self.path))
+                return duckdb.connect(str(self.path), read_only=read_only)
             except duckdb.IOException as exc:  # lock held by another process
                 last_error = exc
                 time.sleep(base_delay * (attempt + 1))
@@ -229,6 +228,17 @@ class Warehouse:
                     requested_at TIMESTAMPTZ NOT NULL,
                     status       VARCHAR NOT NULL DEFAULT 'pending',
                     PRIMARY KEY (ticker)
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS control.pipeline_failures (
+                    run_id        VARCHAR NOT NULL,
+                    job_name      VARCHAR NOT NULL,
+                    failed_at     TIMESTAMPTZ NOT NULL,
+                    error_message VARCHAR,
+                    PRIMARY KEY (run_id)
                 )
                 """
             )
@@ -294,7 +304,9 @@ class Warehouse:
                        p.logo,
                        cr.computed_at AS as_of,
                        cr.confidence_score,
-                       UPPER(cr.rating) AS advice,
+                       -- ratings are stored as 'Strong Buy' etc.; the read
+                       -- contract is UPPER_SNAKE (frontend Advice enum)
+                       REPLACE(UPPER(cr.rating), ' ', '_') AS advice,
                        cr.volatility_score,
                        cr.fair_value,
                        cr.target_price
@@ -334,10 +346,18 @@ class Warehouse:
             # per MODEL.md, held in the warehouse so the frontend never
             # hardcodes the scoring spec.
             con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
+            # CONFIDENCE_WEIGHTS (mart.scoring) is the single source of truth;
+            # seeded here via a lazy import because scoring imports this module.
+            # Upsert on every schema init so an already-provisioned warehouse
+            # tracks the current spec instead of serving a stale snapshot.
+            from .mart.scoring import CONFIDENCE_WEIGHTS
+
+            _seed_rows = ", ".join(
+                f"('{cat}', {float(w)!r})" for cat, w in CONFIDENCE_WEIGHTS.items()
+            )
             con.execute(
-                """
-                INSERT INTO mart.model_weights (category, weight) VALUES
-                    ('valuation', 0.52), ('trend', 0.21), ('sentiment', 0.21), ('moat', 0.06)
+                f"""
+                INSERT INTO mart.model_weights (category, weight) VALUES {_seed_rows}
                 ON CONFLICT (category) DO UPDATE SET weight = excluded.weight
                 """
             )

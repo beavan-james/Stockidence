@@ -48,6 +48,21 @@ def is_warehouse_reachable() -> bool:
         con.close()
 
 
+def _parse_holding_style(raw) -> HoldingStyle | None:
+    """Map mart.buy_plans.holding_style to the enum.
+
+    The scoring layer persists human-readable styles ('day trade',
+    'long-term hold'); the enum spells them snake_case. Accept both.
+    Unknown values return None so a bad style degrades the buy plan
+    instead of discarding the whole rating.
+    """
+    normalized = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
+    try:
+        return HoldingStyle(normalized)
+    except ValueError:
+        return None
+
+
 def load_rating_from_warehouse(ticker: str) -> Rating | None:
     """Read a rating from the mart layer.
 
@@ -140,11 +155,13 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
             [ticker],
         ).fetchone()
         if bp is not None and bp[2] is not None:
-            buy_plan = BuyPlan(
-                advised_buy_price=float(bp[0]),
-                stop_loss_price=float(bp[1]),
-                holding_style=HoldingStyle(bp[2]),
-            )
+            style = _parse_holding_style(bp[2])
+            if style is not None:
+                buy_plan = BuyPlan(
+                    advised_buy_price=float(bp[0]),
+                    stop_loss_price=float(bp[1]),
+                    holding_style=style,
+                )
 
         return Rating(
             ticker=ticker,
@@ -245,3 +262,121 @@ def enqueue_ticker_request(ticker: str) -> bool | None:
         return True
     except Exception:
         return None
+
+
+def get_model_weights() -> list[dict]:
+    """Category weights of the confidence blend, heaviest first.
+
+    Reads mart.model_weights (kept in sync with scoring.CONFIDENCE_WEIGHTS
+    by the pipeline's schema init). Falls back to the current spec inline
+    when the warehouse is absent so the landing page still renders.
+    """
+    defaults = [
+        {"category": "valuation", "weight": 0.62},
+        {"category": "trend", "weight": 0.24},
+        {"category": "sentiment", "weight": 0.10},
+        {"category": "moat", "weight": 0.04},
+    ]
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return defaults
+    try:
+        import duckdb
+    except ImportError:
+        return defaults
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return defaults
+    try:
+        rows = con.execute(
+            "SELECT category, weight FROM mart.model_weights ORDER BY weight DESC"
+        ).fetchall()
+        if not rows:
+            return defaults
+        return [{"category": r[0], "weight": float(r[1])} for r in rows]
+    except Exception:
+        return defaults
+    finally:
+        con.close()
+
+
+def ticker_exists(ticker: str) -> bool | None:
+    """Coverage check against raw_stock_symbols (same US venue filter as
+    the autocomplete, so suggestions and validation always agree).
+
+    Returns None when existence can't be determined (no DB or table not
+    landed yet) — callers should skip validation in that case rather than
+    block every search.
+    """
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return None
+    try:
+        import duckdb
+    except ImportError:
+        return None
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return None
+    try:
+        row = con.execute(
+            """
+            SELECT 1 FROM raw.raw_stock_symbols
+            WHERE symbol = ? AND mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
+            LIMIT 1
+            """,
+            [ticker.upper()],
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return None
+    finally:
+        con.close()
+
+
+def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
+    """Recent failed pipeline runs from control.pipeline_failures.
+
+    Written by the daemon-run failure sensor; empty list when the table is
+    missing/empty or the warehouse is unavailable — the UI treats that as
+    'no recent failures' rather than an error.
+    """
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return []
+    try:
+        import duckdb
+    except ImportError:
+        return []
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return []
+    try:
+        rows = con.execute(
+            """
+            SELECT job_name, failed_at, error_message
+            FROM control.pipeline_failures
+            WHERE failed_at >= CURRENT_TIMESTAMP - INTERVAL (?) DAY
+            ORDER BY failed_at DESC
+            LIMIT ?
+            """,
+            [days, limit],
+        ).fetchall()
+        return [
+            {
+                "job_name": r[0],
+                "failed_at": r[1].isoformat() if r[1] else "",
+                "failed_at_display": (
+                    r[1].strftime("%Y-%m-%d %H:%M") + " UTC" if r[1] else ""
+                ),
+                "error": (r[2] or "").splitlines()[0][:160],
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+    finally:
+        con.close()

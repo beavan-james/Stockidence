@@ -42,6 +42,15 @@ def get_rating(ticker: str) -> dict:
     if not TICKER_RE.match(normalized):
         raise ValueError(f"Invalid ticker: {ticker}")
 
+    # Coverage gate: reject tickers outside the landed symbol universe so
+    # a typo can't enqueue a doomed pipeline run. Skipped when the symbol
+    # listing isn't available (offline dev / fresh warehouse).
+    if warehouse.ticker_exists(normalized) is False:
+        raise ValueError(
+            f"{normalized} isn't in our coverage universe — "
+            "pick one of the suggested symbols."
+        )
+
     rating = warehouse.load_rating_from_warehouse(normalized)
     if rating is not None:
         result = rating.to_dict()
