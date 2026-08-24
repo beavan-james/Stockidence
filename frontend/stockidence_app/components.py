@@ -920,11 +920,11 @@ def result_section() -> rx.Component:
         stock_header(),
         the_big_picture(),
         price_reference_card(),
-        breakdown_card(),
         rx.cond(
             RatingState.is_buy & RatingState.has_buy_plan,
             buy_plan_card(),
         ),
+        breakdown_card(),
         rx.cond(
             RatingState.has_sub_scores,
             sub_score_card(),
