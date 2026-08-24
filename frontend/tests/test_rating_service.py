@@ -32,6 +32,36 @@ def _build_pending_db(tmp_path) -> str:
     return str(db)
 
 
+def test_unknown_ticker_rejected_before_queueing(tmp_path, monkeypatch):
+    """A typo must raise, not enqueue a doomed pipeline run."""
+    import duckdb
+
+    db = tmp_path / "coverage.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute("CREATE SCHEMA raw")
+    con.execute(
+        "CREATE TABLE raw.raw_stock_symbols "
+        "(symbol VARCHAR, mic VARCHAR, payload JSON)"
+    )
+    con.execute("INSERT INTO raw.raw_stock_symbols VALUES ('AAPL', 'XNAS', '{}')")
+    con.execute("CREATE SCHEMA control")
+    con.execute(
+        "CREATE TABLE control.ticker_requests "
+        "(ticker VARCHAR NOT NULL, requested_at TIMESTAMPTZ NOT NULL, "
+        " status VARCHAR NOT NULL DEFAULT 'pending', PRIMARY KEY (ticker))"
+    )
+    con.close()
+    monkeypatch.setenv("STOCKIDENCE_DB", str(db))
+
+    with pytest.raises(ValueError, match="coverage universe"):
+        rating_service.get_rating("ZZZZ")
+
+    con = duckdb.connect(str(db), read_only=True)
+    queued = con.execute("SELECT count(*) FROM control.ticker_requests").fetchone()[0]
+    con.close()
+    assert queued == 0
+
+
 def test_valid_ticker_returns_rating(monkeypatch):
     rating = rating_service.get_rating("AAPL")
     assert rating["ticker"] == "AAPL"
