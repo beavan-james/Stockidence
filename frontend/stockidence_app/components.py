@@ -825,6 +825,52 @@ def _holding_style_heading() -> rx.Component:
     )
 
 
+def buy_plan_card() -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.icon("target", size=18, color=rx.color("iris", 9)),
+                rx.heading("Execution plan", size="4", weight="bold"),
+                spacing="2",
+                width="100%",
+            ),
+            rx.grid(
+                rx.vstack(
+                    rx.text("Advised buy price", size="2", color=rx.color("slate", 10)),
+                    rx.heading(RatingState.buy_price_text, size="6", weight="bold"),
+                    align="start",
+                    spacing="1",
+                ),
+                rx.vstack(
+                    rx.text("Stop-loss price", size="2", color=rx.color("slate", 10)),
+                    rx.heading(
+                        RatingState.stop_loss_text,
+                        size="6",
+                        weight="bold",
+                        color=rx.color("tomato", 9),
+                    ),
+                    align="start",
+                    spacing="1",
+                ),
+                rx.vstack(
+                    rx.text("Holding style", size="2", color=rx.color("slate", 10)),
+                    _holding_style_heading(),
+                    align="start",
+                    spacing="1",
+                ),
+                columns=rx.breakpoints(initial="1", md="3"),
+                spacing="4",
+                width="100%",
+            ),
+            width="100%",
+            spacing="3",
+        ),
+        width="100%",
+        padding=BODY_CARD_PADDING,
+        class_name="sk-fade sk-delay-2",
+    )
+
+
 def price_reference_card() -> rx.Component:
     return rx.cond(
         RatingState.has_fair_value,
@@ -906,6 +952,10 @@ def result_section() -> rx.Component:
         the_big_picture(),
         price_reference_card(),
         breakdown_card(),
+        rx.cond(
+            RatingState.is_buy & RatingState.has_buy_plan,
+            buy_plan_card(),
+        ),
         rx.cond(
             RatingState.has_sub_scores,
             sub_score_card(),
