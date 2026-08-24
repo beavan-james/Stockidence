@@ -304,7 +304,9 @@ class Warehouse:
                        p.logo,
                        cr.computed_at AS as_of,
                        cr.confidence_score,
-                       UPPER(cr.rating) AS advice,
+                       -- ratings are stored as 'Strong Buy' etc.; the read
+                       -- contract is UPPER_SNAKE (frontend Advice enum)
+                       REPLACE(UPPER(cr.rating), ' ', '_') AS advice,
                        cr.volatility_score,
                        cr.fair_value,
                        cr.target_price

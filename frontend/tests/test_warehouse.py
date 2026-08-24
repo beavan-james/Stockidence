@@ -169,6 +169,31 @@ def test_get_model_weights_falls_back_when_db_missing(tmp_path, monkeypatch):
     assert by_cat == {"valuation": 0.62, "trend": 0.24, "sentiment": 0.10, "moat": 0.04}
 
 
+def test_ticker_exists_against_symbol_universe(tmp_path, monkeypatch):
+    db = tmp_path / "symbols.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute("CREATE SCHEMA raw")
+    con.execute(
+        "CREATE TABLE raw.raw_stock_symbols "
+        "(symbol VARCHAR, mic VARCHAR, payload JSON)"
+    )
+    con.executemany(
+        "INSERT INTO raw.raw_stock_symbols VALUES (?, ?, ?)",
+        [("MSFT", "XNAS", "{}"), ("SHEL", "XLON", "{}")],
+    )
+    con.close()
+    monkeypatch.setenv("STOCKIDENCE_DB", str(db))
+
+    assert warehouse.ticker_exists("msft") is True   # case-insensitive
+    assert warehouse.ticker_exists("ZZZZ") is False  # unknown symbol
+    assert warehouse.ticker_exists("SHEL") is False  # non-US venue, like autocomplete
+
+
+def test_ticker_exists_none_when_db_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("STOCKIDENCE_DB", str(tmp_path / "nope.duckdb"))
+    assert warehouse.ticker_exists("MSFT") is None
+
+
 def test_returns_none_when_db_missing(tmp_path, monkeypatch):
     monkeypatch.setenv("STOCKIDENCE_DB", str(tmp_path / "nope.duckdb"))
     assert warehouse.load_rating_from_warehouse("AAPL") is None

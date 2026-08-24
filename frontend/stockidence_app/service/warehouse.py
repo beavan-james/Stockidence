@@ -301,6 +301,41 @@ def get_model_weights() -> list[dict]:
         con.close()
 
 
+def ticker_exists(ticker: str) -> bool | None:
+    """Coverage check against raw_stock_symbols (same US venue filter as
+    the autocomplete, so suggestions and validation always agree).
+
+    Returns None when existence can't be determined (no DB or table not
+    landed yet) — callers should skip validation in that case rather than
+    block every search.
+    """
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return None
+    try:
+        import duckdb
+    except ImportError:
+        return None
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return None
+    try:
+        row = con.execute(
+            """
+            SELECT 1 FROM raw.raw_stock_symbols
+            WHERE symbol = ? AND mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
+            LIMIT 1
+            """,
+            [ticker.upper()],
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return None
+    finally:
+        con.close()
+
+
 def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
     """Recent failed pipeline runs from control.pipeline_failures.
 

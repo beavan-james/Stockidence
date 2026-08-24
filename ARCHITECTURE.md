@@ -102,6 +102,13 @@ flowchart TD
 ```
 
 > Notes on the loop:
+> - The unprefixed mart objects the UI reads (`confidence_ratings`,
+>   `category_scores`, `buy_plans`, `rating_components`) are **presentation
+>   views** over the `m_*` snapshot tables — they rename storage columns to
+>   the read contract (`computed_at → as_of`, `rating → UPPER_SNAKE advice`,
+>   `stop_loss → stop_loss_price`) and join the company profile for name/logo.
+>   `mart.model_weights` is seeded from the scoring module's weight spec at
+>   schema init, so displayed weights can't drift from applied weights.
 > - The quote path is **not** a direct frontend→Finnhub call — the UI reads
 >   `raw.raw_quotes` from the warehouse; the sensor-driven run refreshes it
 >   (TTL ~1 min) whenever the ticker is recomputed.
