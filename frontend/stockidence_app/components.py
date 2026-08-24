@@ -1242,54 +1242,130 @@ def main_panel() -> rx.Component:
     )
 
 
-def computing_card() -> rx.Component:
-    step = lambda text: rx.hstack(
-        rx.spinner(size="1", color=rx.color("iris", 9)),
-        rx.text(text, size="2", color=rx.color("slate", 11)),
-        spacing="2",
-        align="center",
+def _computing_gauge() -> rx.Component:
+    return rx.html(
+        """
+        <div class="cg-gauge-wrap">
+          <svg viewBox="0 0 200 120" width="210" height="126" aria-hidden="true">
+            <defs>
+              <linearGradient id="cg-arc" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#818cf8"/>
+                <stop offset="100%" stop-color="#4f46e5"/>
+              </linearGradient>
+            </defs>
+            <path d="M20 105 A80 80 0 0 1 180 105" fill="none"
+                  stroke="url(#cg-arc)" stroke-width="6"
+                  stroke-linecap="round" opacity="0.35"/>
+            <path d="M30 105 A70 70 0 0 1 170 105" fill="none"
+                  stroke="#94a3b8" stroke-width="11" opacity="0.55"
+                  stroke-dasharray="1.5 12.62"/>
+            <g class="cg-needle">
+              <line x1="100" y1="105" x2="100" y2="40"
+                    stroke="#4f46e5" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <circle cx="100" cy="105" r="5.5" fill="#4f46e5"/>
+          </svg>
+          <span class="cg-gauge-label">Confidence &middot; calibrating</span>
+        </div>
+        """,
+        width="100%",
     )
+
+
+def _computing_stage(label: str, idx: int) -> rx.Component:
+    return rx.hstack(
+        rx.box(class_name=f"cg-stage-dot"),
+        rx.text(label, size="1", weight="medium"),
+        class_name=f"cg-stage cg-stage-{idx}",
+    )
+
+
+def _computing_tenets() -> rx.Component:
+    tenets = [
+        "Valuation is king — everything else times the entry.",
+        "Volatility is reported separately, never blended into your rating.",
+        "Every score is deterministic: same data, same answer.",
+        "Slow inputs are normal — fundamentals update quarterly.",
+    ]
+    return rx.box(
+        rx.foreach(tenets, lambda t, i: rx.text(
+            t,
+            size="2",
+            color=rx.color("slate", 10),
+            font_style="italic",
+            text_align="center",
+            width="100%",
+            class_name=f"cg-tenet cg-tenet-{i}",
+        )),
+        class_name="cg-tenets",
+        width="100%",
+    )
+
+
+def computing_card() -> rx.Component:
+    headline = rx.match(
+        RatingState.source,
+        ("pending", f"First rating for {RatingState.ticker}"),
+        ("refreshing", f"Refreshing {RatingState.ticker}"),
+        f"Computing a rating for {RatingState.ticker}",
+    )
+    subtitle = rx.match(
+        RatingState.source,
+        (
+            "pending",
+            "Assembling its full history from scratch — this is the slow path.",
+        ),
+        (
+            "refreshing",
+            "The stored snapshot is over a day old — updating market inputs.",
+        ),
+        "The pipeline was queued.",
+    )
+    stages = [
+        "Queued",
+        "Fetching market data",
+        "Cleaning & staging",
+        "Deriving indicators",
+        "Scoring",
+    ]
     return rx.card(
         rx.vstack(
+            rx.heading(headline, size="5", weight="bold", text_align="center",
+                       width="100%"),
+            rx.text(subtitle, size="1", color=rx.color("slate", 9),
+                    text_align="center", width="100%"),
+            _computing_gauge(),
             rx.hstack(
-                rx.icon("loader_circle", size=22, color=rx.color("iris", 9)),
-                rx.heading(
-                    f"Computing a rating for {RatingState.ticker}",
-                    size="4",
-                    weight="bold",
+                rx.foreach(
+                    stages,
+                    lambda label, i: rx.fragment(
+                        _computing_stage(label, i),
+                        rx.cond(i < 4, rx.icon("chevron-right", size=12,
+                                               color=rx.color("slate", 8))),
+                    ),
                 ),
-                spacing="2",
-                align="center",
+                justify="center",
+                wrap="wrap",
+                spacing="1",
                 width="100%",
             ),
+            _computing_tenets(),
             rx.text(
-                "The pipeline was queued. Steps being run in the warehouse:",
-                size="1",
-                color=rx.color("slate", 9),
-                width="100%",
-            ),
-            rx.vstack(
-                step("Fetching quote, profile, and fundamentals"),
-                step("Deriving indicators and technical context"),
-                step("Scoring valuation, trend, sentiment, moat"),
-                step("Writing the mart snapshot"),
-                align="start",
-                width="100%",
-                spacing="2",
-            ),
-            rx.text(
-                "This page refreshes once the rating lands. If the warehouse is offline, "
-                "a deterministic demo rating is shown instead.",
+                "Still working — fundamentals are the slow part. "
+                "This page updates itself the moment the rating lands.",
                 size="1",
                 color=rx.color("slate", 10),
+                text_align="center",
                 width="100%",
+                class_name="cg-reassure",
             ),
-            align="start",
+            align="center",
             width="100%",
-            spacing="3",
+            spacing="4",
         ),
         width="100%",
         padding=BODY_CARD_PADDING,
+        class_name="sk-fade",
     )
 
 
