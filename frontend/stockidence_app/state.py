@@ -127,6 +127,11 @@ class RatingState(rx.State):
         return self.advice in ("STRONG_BUY", "BUY")
 
     @rx.var
+    def is_loading(self) -> bool:
+        """True while a compute is in flight (first rating or refresh)."""
+        return self.source in ("pending", "refreshing")
+
+    @rx.var
     def list_names(self) -> list[str]:
         return [l["name"] for l in self._parse_lists()]
 

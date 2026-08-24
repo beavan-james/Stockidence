@@ -1303,11 +1303,19 @@ def _computing_tenets() -> rx.Component:
 
 
 def computing_card() -> rx.Component:
+    ticker = RatingState.ticker
+    named = rx.cond(
+        ticker == "",
+        "Computing your first rating",
+        f"First rating for {ticker}",
+    )
+    refreshing = rx.cond(ticker == "", "Refreshing", f"Refreshing {ticker}")
+    generic = rx.cond(ticker == "", "Computing a rating", f"Computing a rating for {ticker}")
     headline = rx.match(
         RatingState.source,
-        ("pending", f"First rating for {RatingState.ticker}"),
-        ("refreshing", f"Refreshing {RatingState.ticker}"),
-        f"Computing a rating for {RatingState.ticker}",
+        ("pending", named),
+        ("refreshing", refreshing),
+        generic,
     )
     subtitle = rx.match(
         RatingState.source,
@@ -1383,7 +1391,7 @@ def profile_panel() -> rx.Component:
             _hover={"color": rx.color("iris", 9)},
         ),
         rx.cond(
-            RatingState.has_result,
+            RatingState.has_result & ~RatingState.is_loading,
             result_section(),
             rx.cond(
                 RatingState.error != "",
