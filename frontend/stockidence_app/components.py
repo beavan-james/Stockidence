@@ -157,7 +157,8 @@ def hero() -> rx.Component:
         rx.badge(
             rx.hstack(
                 rx.icon("shield_check", size=12),
-                rx.text("Deterministic model — transparent, never a black box", size="1"),
+                rx.text(
+                    "Deterministic model — transparent, never a black box", size="1"),
                 spacing="1",
             ),
             color_scheme="iris",
@@ -202,8 +203,10 @@ def hero() -> rx.Component:
 def suggestion_row(item: rx.Var) -> rx.Component:
     return rx.button(
         rx.hstack(
-            rx.text(item["symbol"], size="2", weight="bold", font_family="monospace"),
-            rx.text(item["description"], size="1", color=rx.color("slate", 10)),
+            rx.text(item["symbol"], size="2",
+                    weight="bold", font_family="monospace"),
+            rx.text(item["description"], size="1",
+                    color=rx.color("slate", 10)),
             width="100%",
             spacing="2",
             align="center",
@@ -324,7 +327,8 @@ def pipeline_health_strip() -> rx.Component:
     return rx.cond(
         RatingState.pipeline_failures.length() == 0,
         rx.callout(
-            rx.text("All pipelines operational (no failed runs in the last 7 days)", size="2"),
+            rx.text(
+                "All pipelines operational (no failed runs in the last 7 days)", size="2"),
             icon="circle_check",
             color_scheme="grass",
             size="1",
@@ -365,7 +369,8 @@ def source_badge() -> rx.Component:
         rx.hstack(
             rx.cond(
                 RatingState.source == "refreshing",
-                rx.spinner(size="1", color=rx.match(RatingState.source, ("refreshing", "blue"), "blue")),
+                rx.spinner(size="1", color=rx.match(
+                    RatingState.source, ("refreshing", "blue"), "blue")),
             ),
             rx.text(
                 rx.match(
@@ -451,7 +456,8 @@ def stock_header() -> rx.Component:
             align="center",
             width="100%",
         ),
-        rx.text(RatingState.result_company, size="3", color=rx.color("slate", 10)),
+        rx.text(RatingState.result_company, size="3",
+                color=rx.color("slate", 10)),
         rx.text(
             f"As of {RatingState.result_as_of}",
             size="1",
@@ -473,13 +479,15 @@ def score_panel() -> rx.Component:
             color=_advice_color(),
             letter_spacing="-0.02em",
         ),
-        rx.text("Confidence score", size="2", weight="medium", color=rx.color("slate", 10)),
+        rx.text("Confidence score", size="2",
+                weight="medium", color=rx.color("slate", 10)),
         rx.text("out of 100", size="1", color=rx.color("slate", 9)),
         rx.separator(width="70%"),
         rx.vstack(
             rx.hstack(
                 rx.icon("activity", size=16, color=rx.color("purple", 9)),
-                rx.text("Volatility", size="2", weight="medium", color=rx.color("slate", 10)),
+                rx.text("Volatility", size="2", weight="medium",
+                        color=rx.color("slate", 10)),
                 spacing="2",
                 align="center",
             ),
@@ -489,7 +497,8 @@ def score_panel() -> rx.Component:
                 weight="bold",
                 color=rx.color("purple", 9),
             ),
-            rx.text("reported separately", size="1", color=rx.color("slate", 9)),
+            rx.text("reported separately", size="1",
+                    color=rx.color("slate", 9)),
             align="center",
             spacing="1",
         ),
@@ -787,8 +796,10 @@ def sub_score_card() -> rx.Component:
                 ),
                 rx.cond(
                     RatingState.sub_scores_open,
-                    rx.icon("chevron-up", size=18, color=rx.color("slate", 10)),
-                    rx.icon("chevron-down", size=18, color=rx.color("slate", 10)),
+                    rx.icon("chevron-up", size=18,
+                            color=rx.color("slate", 10)),
+                    rx.icon("chevron-down", size=18,
+                            color=rx.color("slate", 10)),
                 ),
                 spacing="3",
                 align="start",
@@ -836,13 +847,16 @@ def buy_plan_card() -> rx.Component:
             ),
             rx.grid(
                 rx.vstack(
-                    rx.text("Advised buy price", size="2", color=rx.color("slate", 10)),
-                    rx.heading(RatingState.buy_price_text, size="6", weight="bold"),
+                    rx.text("Advised buy price", size="2",
+                            color=rx.color("slate", 10)),
+                    rx.heading(RatingState.buy_price_text,
+                               size="6", weight="bold"),
                     align="start",
                     spacing="1",
                 ),
                 rx.vstack(
-                    rx.text("Stop-loss price", size="2", color=rx.color("slate", 10)),
+                    rx.text("Stop-loss price", size="2",
+                            color=rx.color("slate", 10)),
                     rx.heading(
                         RatingState.stop_loss_text,
                         size="6",
@@ -853,7 +867,8 @@ def buy_plan_card() -> rx.Component:
                     spacing="1",
                 ),
                 rx.vstack(
-                    rx.text("Holding style", size="2", color=rx.color("slate", 10)),
+                    rx.text("Holding style", size="2",
+                            color=rx.color("slate", 10)),
                     _holding_style_heading(),
                     align="start",
                     spacing="1",
@@ -882,22 +897,20 @@ def price_reference_card() -> rx.Component:
                     spacing="2",
                     width="100%",
                 ),
-                rx.text(
-                    "Model fair value and the price target implied by it, computed "
-                    "for every rating. Buy-rated tickers also get an execution plan.",
-                    size="1",
-                    color=rx.color("slate", 9),
-                ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("Fair value", size="2", color=rx.color("slate", 10)),
-                        rx.heading(RatingState.fair_value_text, size="6", weight="bold"),
+                        rx.text("Fair value", size="2",
+                                color=rx.color("slate", 10)),
+                        rx.heading(RatingState.fair_value_text,
+                                   size="6", weight="bold"),
                         align="start",
                         spacing="1",
                     ),
                     rx.vstack(
-                        rx.text("Target price (12m)", size="2", color=rx.color("slate", 10)),
-                        rx.heading(RatingState.target_price_text, size="6", weight="bold"),
+                        rx.text("Target price (12m)", size="2",
+                                color=rx.color("slate", 10)),
+                        rx.heading(RatingState.target_price_text,
+                                   size="6", weight="bold"),
                         align="start",
                         spacing="1",
                     ),
@@ -920,11 +933,11 @@ def result_section() -> rx.Component:
         stock_header(),
         the_big_picture(),
         price_reference_card(),
+        breakdown_card(),
         rx.cond(
             RatingState.is_buy & RatingState.has_buy_plan,
             buy_plan_card(),
         ),
-        breakdown_card(),
         rx.cond(
             RatingState.has_sub_scores,
             sub_score_card(),
@@ -1213,7 +1226,8 @@ def side_panel() -> rx.Component:
             rx.card(
                 rx.vstack(
                     rx.hstack(
-                        rx.icon("bookmark", size=16, color=rx.color("iris", 9)),
+                        rx.icon("bookmark", size=16,
+                                color=rx.color("iris", 9)),
                         rx.heading("My Lists", size="3", weight="bold"),
                         rx.spacer(),
                         rx.icon_button(
@@ -1329,7 +1343,8 @@ def computing_card() -> rx.Component:
         f"First rating for {ticker}",
     )
     refreshing = rx.cond(ticker == "", "Refreshing", f"Refreshing {ticker}")
-    generic = rx.cond(ticker == "", "Computing a rating", f"Computing a rating for {ticker}")
+    generic = rx.cond(ticker == "", "Computing a rating",
+                      f"Computing a rating for {ticker}")
     headline = rx.match(
         RatingState.source,
         ("pending", named),
@@ -1585,7 +1600,8 @@ def mover_row(item: rx.Var) -> rx.Component:
             ),
         ),
         rx.table.cell(
-            rx.text(item["volume_display"], size="2", color=rx.color("slate", 10)),
+            rx.text(item["volume_display"], size="2",
+                    color=rx.color("slate", 10)),
         ),
         _hover={"bg": rx.color("slate", 3)},
     )
@@ -1826,7 +1842,8 @@ def discover_panel() -> rx.Component:
                 "Biggest movers in the last session.",
             ),
             rx.hstack(
-                limit_select(RatingState.movers_limit, RatingState.set_movers_limit),
+                limit_select(RatingState.movers_limit,
+                             RatingState.set_movers_limit),
                 align="center",
                 justify="end",
                 width="100%",
@@ -1884,7 +1901,8 @@ def discover_panel() -> rx.Component:
                     spacing="1",
                     align="center",
                 ),
-                limit_select(RatingState.news_limit, RatingState.set_news_limit),
+                limit_select(RatingState.news_limit,
+                             RatingState.set_news_limit),
                 justify="between",
                 width="100%",
                 align="center",
@@ -1901,7 +1919,8 @@ def discover_panel() -> rx.Component:
                 "Upcoming IPOs and earnings with consensus estimates.",
             ),
             rx.hstack(
-                limit_select(RatingState.calendar_limit, RatingState.set_calendar_limit),
+                limit_select(RatingState.calendar_limit,
+                             RatingState.set_calendar_limit),
                 align="center",
                 justify="end",
                 width="100%",
@@ -1913,62 +1932,77 @@ def discover_panel() -> rx.Component:
                         rx.table.root(
                             rx.table.header(
                                 rx.table.row(
-                                    rx.table.column_header_cell("Symbol", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Company", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Exchange", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Date", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Price", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Status", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Symbol", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Company", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Exchange", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Date", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Price", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Status", bg=rx.color("slate", 3)),
+                                ),
                             ),
-                        ),
-                        rx.table.body(
-                            rx.foreach(RatingState.ipo_calendar, ipo_row),
-                        ),
-                        width="100%",
-                    ),
-                    align="stretch",
-                    width="100%",
-                    spacing="3",
-                ),
-                width="100%",
-                padding=BODY_CARD_PADDING,
-            ),
-            rx.card(
-                rx.vstack(
-                    rx.heading("Earnings calendar", size="4", weight="bold"),
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                rx.table.column_header_cell("Symbol", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Date", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Hour", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Period", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("EPS actual", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("EPS est.", bg=rx.color("slate", 3)),
-                                rx.table.column_header_cell("Rev. est.", bg=rx.color("slate", 3)),
+                            rx.table.body(
+                                rx.foreach(RatingState.ipo_calendar, ipo_row),
                             ),
+                            width="100%",
                         ),
-                        rx.table.body(
-                            rx.foreach(RatingState.earnings_calendar, earnings_row),
-                        ),
+                        align="stretch",
                         width="100%",
+                        spacing="3",
                     ),
-                    align="stretch",
                     width="100%",
-                    spacing="3",
+                    padding=BODY_CARD_PADDING,
                 ),
+                rx.card(
+                    rx.vstack(
+                        rx.heading("Earnings calendar",
+                                   size="4", weight="bold"),
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    rx.table.column_header_cell(
+                                        "Symbol", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Date", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Hour", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Period", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "EPS actual", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "EPS est.", bg=rx.color("slate", 3)),
+                                    rx.table.column_header_cell(
+                                        "Rev. est.", bg=rx.color("slate", 3)),
+                                ),
+                            ),
+                            rx.table.body(
+                                rx.foreach(
+                                    RatingState.earnings_calendar, earnings_row),
+                            ),
+                            width="100%",
+                        ),
+                        align="stretch",
+                        width="100%",
+                        spacing="3",
+                    ),
+                    width="100%",
+                    padding=BODY_CARD_PADDING,
+                ),
+                columns=rx.breakpoints(initial="1", md="2"),
+                spacing="4",
                 width="100%",
-                padding=BODY_CARD_PADDING,
+                align="start",
             ),
-            columns=rx.breakpoints(initial="1", md="2"),
-            spacing="4",
+            align="stretch",
             width="100%",
-            align="start",
+            spacing="4",
         ),
-        align="stretch",
-        width="100%",
-        spacing="4",
-    ),
         align="stretch",
         width="100%",
         spacing="6",
