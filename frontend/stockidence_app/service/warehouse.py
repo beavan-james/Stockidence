@@ -264,6 +264,43 @@ def enqueue_ticker_request(ticker: str) -> bool | None:
         return None
 
 
+def get_model_weights() -> list[dict]:
+    """Category weights of the confidence blend, heaviest first.
+
+    Reads mart.model_weights (kept in sync with scoring.CONFIDENCE_WEIGHTS
+    by the pipeline's schema init). Falls back to the current spec inline
+    when the warehouse is absent so the landing page still renders.
+    """
+    defaults = [
+        {"category": "valuation", "weight": 0.62},
+        {"category": "trend", "weight": 0.24},
+        {"category": "sentiment", "weight": 0.10},
+        {"category": "moat", "weight": 0.04},
+    ]
+    db_path = Path(_config_db_path())
+    if not db_path.exists():
+        return defaults
+    try:
+        import duckdb
+    except ImportError:
+        return defaults
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+    except Exception:
+        return defaults
+    try:
+        rows = con.execute(
+            "SELECT category, weight FROM mart.model_weights ORDER BY weight DESC"
+        ).fetchall()
+        if not rows:
+            return defaults
+        return [{"category": r[0], "weight": float(r[1])} for r in rows]
+    except Exception:
+        return defaults
+    finally:
+        con.close()
+
+
 def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
     """Recent failed pipeline runs from control.pipeline_failures.
 

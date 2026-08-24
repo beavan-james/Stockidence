@@ -141,6 +141,34 @@ def test_unknown_holding_style_drops_buy_plan_not_rating(tmp_path, monkeypatch):
     assert rating.buy_plan is None
 
 
+def test_get_model_weights_reads_warehouse(tmp_path, monkeypatch):
+    db = tmp_path / "weights.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute("CREATE SCHEMA mart")
+    con.execute(
+        "CREATE TABLE mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)"
+    )
+    con.executemany(
+        "INSERT INTO mart.model_weights VALUES (?, ?)",
+        [("moat", 0.04), ("trend", 0.24), ("sentiment", 0.10), ("valuation", 0.62)],
+    )
+    con.close()
+    monkeypatch.setenv("STOCKIDENCE_DB", str(db))
+
+    weights = warehouse.get_model_weights()
+    assert weights[0] == {"category": "valuation", "weight": 0.62}
+    assert [w["category"] for w in weights] == [
+        "valuation", "trend", "sentiment", "moat",
+    ]
+
+
+def test_get_model_weights_falls_back_when_db_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("STOCKIDENCE_DB", str(tmp_path / "nope.duckdb"))
+    weights = warehouse.get_model_weights()
+    by_cat = {w["category"]: w["weight"] for w in weights}
+    assert by_cat == {"valuation": 0.62, "trend": 0.24, "sentiment": 0.10, "moat": 0.04}
+
+
 def test_returns_none_when_db_missing(tmp_path, monkeypatch):
     monkeypatch.setenv("STOCKIDENCE_DB", str(tmp_path / "nope.duckdb"))
     assert warehouse.load_rating_from_warehouse("AAPL") is None

@@ -344,10 +344,18 @@ class Warehouse:
             # per MODEL.md, held in the warehouse so the frontend never
             # hardcodes the scoring spec.
             con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
+            # CONFIDENCE_WEIGHTS (mart.scoring) is the single source of truth;
+            # seeded here via a lazy import because scoring imports this module.
+            # Upsert on every schema init so an already-provisioned warehouse
+            # tracks the current spec instead of serving a stale snapshot.
+            from .mart.scoring import CONFIDENCE_WEIGHTS
+
+            _seed_rows = ", ".join(
+                f"('{cat}', {float(w)!r})" for cat, w in CONFIDENCE_WEIGHTS.items()
+            )
             con.execute(
-                """
-                INSERT INTO mart.model_weights (category, weight) VALUES
-                    ('valuation', 0.52), ('trend', 0.21), ('sentiment', 0.21), ('moat', 0.06)
+                f"""
+                INSERT INTO mart.model_weights (category, weight) VALUES {_seed_rows}
                 ON CONFLICT (category) DO UPDATE SET weight = excluded.weight
                 """
             )

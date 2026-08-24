@@ -103,6 +103,7 @@ class RatingState(rx.State):
     ]
     buy_plan: dict = {}
     source: str = ""
+    sub_scores_open: bool = True
 
     ticker_search: str = ""
     ticker_suggestions: list[dict] = []
@@ -149,6 +150,23 @@ class RatingState(rx.State):
     @rx.var
     def has_sub_scores(self) -> bool:
         return len(self.sub_score_rows) > 0
+
+    @rx.var
+    def model_weight_rows(self) -> list[dict]:
+        """Landing-page weight tiles from the warehouse's live model spec."""
+        labels = {
+            "valuation": "Valuation",
+            "trend": "Trend",
+            "sentiment": "Sentiment",
+            "moat": "Moat",
+        }
+        return [
+            {
+                "label": labels.get(w["category"], w["category"]),
+                "weight_text": f"{round(w['weight'] * 100)}% weight",
+            }
+            for w in warehouse.get_model_weights()
+        ]
 
     @rx.var
     def has_fair_value(self) -> bool:
@@ -264,6 +282,10 @@ class RatingState(rx.State):
     @rx.event
     def toggle_sidebar(self):
         self.sidebar_collapsed_str = "0" if self.sidebar_collapsed_str == "1" else "1"
+
+    @rx.event
+    def toggle_sub_scores(self):
+        self.sub_scores_open = not self.sub_scores_open
 
     @rx.event
     def toggle_new_list(self):

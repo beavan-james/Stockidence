@@ -143,6 +143,15 @@ def top_nav() -> rx.Component:
     )
 
 
+def _weight_tile(item: rx.Var) -> rx.Component:
+    return rx.vstack(
+        rx.heading(item["label"], size="2", weight="bold"),
+        rx.text(item["weight_text"], size="1", color=rx.color("slate", 10)),
+        align="center",
+        spacing="1",
+    )
+
+
 def hero() -> rx.Component:
     return rx.vstack(
         rx.badge(
@@ -171,30 +180,7 @@ def hero() -> rx.Component:
             max_width="34em",
         ),
         rx.grid(
-            rx.vstack(
-                rx.heading("Valuation", size="2", weight="bold"),
-                rx.text("52% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Trend", size="2", weight="bold"),
-                rx.text("21% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Sentiment", size="2", weight="bold"),
-                rx.text("21% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
-            rx.vstack(
-                rx.heading("Moat", size="2", weight="bold"),
-                rx.text("6% weight", size="1", color=rx.color("slate", 10)),
-                align="center",
-                spacing="1",
-            ),
+            rx.foreach(RatingState.model_weight_rows, _weight_tile),
             columns=rx.breakpoints(initial="2", md="4"),
             spacing="6",
             width="100%",
@@ -787,14 +773,34 @@ def sub_score_row(item: rx.Var) -> rx.Component:
 def sub_score_card() -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.heading("Sub-score detail", size="5", weight="bold"),
-            rx.text(
-                "The sub-scores behind each category. Volatility is reported "
-                "as a separate score and is never blended into the rating.",
-                size="1",
-                color=rx.color("slate", 9),
+            rx.hstack(
+                rx.vstack(
+                    rx.heading("Sub-score detail", size="5", weight="bold"),
+                    rx.text(
+                        "The sub-scores behind each category. Volatility is reported "
+                        "as a separate score and is never blended into the rating.",
+                        size="1",
+                        color=rx.color("slate", 9),
+                    ),
+                    align="start",
+                    spacing="1",
+                ),
+                rx.cond(
+                    RatingState.sub_scores_open,
+                    rx.icon("chevron-up", size=18, color=rx.color("slate", 10)),
+                    rx.icon("chevron-down", size=18, color=rx.color("slate", 10)),
+                ),
+                spacing="3",
+                align="start",
+                width="100%",
+                justify="between",
+                cursor_pointer="pointer",
+                on_click=RatingState.toggle_sub_scores,
             ),
-            rx.foreach(RatingState.sub_score_rows, sub_score_row),
+            rx.cond(
+                RatingState.sub_scores_open,
+                rx.foreach(RatingState.sub_score_rows, sub_score_row),
+            ),
             align="start",
             width="100%",
             spacing="4",
@@ -912,23 +918,23 @@ def result_section() -> rx.Component:
         rx.cond(
             RatingState.is_buy,
             buy_plan_card(RatingState.buy_plan),
-            rx.cond(
-                RatingState.has_sub_scores,
-                sub_score_card(),
-                rx.card(
-                    rx.vstack(
-                        rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
-                        rx.text(
-                            "Volatility is reported as a separate score and is not blended into the confidence rating.",
-                            size="2",
-                            color=rx.color("slate", 10),
-                        ),
-                        align="center",
-                        spacing="2",
+        ),
+        rx.cond(
+            RatingState.has_sub_scores,
+            sub_score_card(),
+            rx.card(
+                rx.vstack(
+                    rx.icon("volleyball", size=18, color=rx.color("slate", 9)),
+                    rx.text(
+                        "Volatility is reported as a separate score and is not blended into the confidence rating.",
+                        size="2",
+                        color=rx.color("slate", 10),
                     ),
-                    width="100%",
-                    padding=BODY_CARD_PADDING,
+                    align="center",
+                    spacing="2",
                 ),
+                width="100%",
+                padding=BODY_CARD_PADDING,
             ),
         ),
         width="100%",
