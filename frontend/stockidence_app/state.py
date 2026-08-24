@@ -173,12 +173,26 @@ class RatingState(rx.State):
         return self.fair_value > 0
 
     @rx.var
+    def has_buy_plan(self) -> bool:
+        return len(self.buy_plan) > 0
+
+    @rx.var
     def fair_value_text(self) -> str:
         return f"${self.fair_value:,.2f}"
 
     @rx.var
     def target_price_text(self) -> str:
         return f"${self.target_price:,.2f}"
+
+    @rx.var
+    def buy_price_text(self) -> str:
+        price = self.buy_plan.get("advised_buy_price") or 0.0
+        return f"${float(price):,.2f}"
+
+    @rx.var
+    def stop_loss_text(self) -> str:
+        stop = self.buy_plan.get("stop_loss_price") or 0.0
+        return f"${float(stop):,.2f}"
 
     @rx.var
     def quote(self) -> dict:
@@ -455,8 +469,8 @@ class RatingState(rx.State):
         """Wait for the Dagster run to land a fresh mart snapshot.
 
         Runs while the current search shows pending/refreshing: re-reads
-        m_confidence_ratings every POLL_INTERVAL_SECONDS and swaps the UI to
-        the fresh rating as soon as the snapshot's as_of changes. Bails out
+        the confidence_ratings view every POLL_INTERVAL_SECONDS and swaps
+        the UI to the fresh rating as soon as as_of changes. Bails out
         after POLL_MAX_ATTEMPTS so a failing pipeline doesn't poll forever.
         """
         ticker: str = ""

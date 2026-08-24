@@ -811,58 +811,17 @@ def sub_score_card() -> rx.Component:
     )
 
 
-def buy_plan_card(plan: rx.Var) -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            rx.hstack(
-                rx.icon("target", size=18, color=rx.color("iris", 9)),
-                rx.heading("Execution plan", size="4", weight="bold"),
-                spacing="2",
-                width="100%",
-            ),
-            rx.grid(
-                rx.vstack(
-                    rx.text("Advised buy price", size="2", color=rx.color("slate", 10)),
-                    rx.heading(plan["advised_buy_price"], size="6", weight="bold"),
-                    align="start",
-                    spacing="1",
-                ),
-                rx.vstack(
-                    rx.text("Stop-loss price", size="2", color=rx.color("slate", 10)),
-                    rx.heading(
-                        plan["stop_loss_price"],
-                        size="6",
-                        weight="bold",
-                        color=rx.color("tomato", 9),
-                    ),
-                    align="start",
-                    spacing="1",
-                ),
-                rx.vstack(
-                    rx.text("Holding style", size="2", color=rx.color("slate", 10)),
-                    rx.heading(
-                        rx.match(
-                            plan["holding_style"],
-                            ("long_term_hold", HOLDING_LABELS["long_term_hold"]),
-                            ("swing_trade", HOLDING_LABELS["swing_trade"]),
-                            ("day_trade", HOLDING_LABELS["day_trade"]),
-                            "Other",
-                        ),
-                        size="4",
-                        weight="bold",
-                    ),
-                    align="start",
-                    spacing="1",
-                ),
-                columns=rx.breakpoints(initial="1", md="3"),
-                spacing="4",
-                width="100%",
-            ),
-            width="100%",
-            spacing="3",
+def _holding_style_heading() -> rx.Component:
+    return rx.heading(
+        rx.match(
+            RatingState.buy_plan["holding_style"],
+            ("long_term_hold", HOLDING_LABELS["long_term_hold"]),
+            ("swing_trade", HOLDING_LABELS["swing_trade"]),
+            ("day_trade", HOLDING_LABELS["day_trade"]),
+            "Other",
         ),
-        width="100%",
-        padding=BODY_CARD_PADDING,
+        size="6",
+        weight="bold",
     )
 
 
@@ -878,7 +837,8 @@ def price_reference_card() -> rx.Component:
                     width="100%",
                 ),
                 rx.text(
-                    "Model fair value and the price target implied by it, computed for every rating.",
+                    "Model fair value and the price target implied by it, computed "
+                    "for every rating. Buy-rated tickers also get an execution plan.",
                     size="1",
                     color=rx.color("slate", 9),
                 ),
@@ -899,6 +859,37 @@ def price_reference_card() -> rx.Component:
                     spacing="4",
                     width="100%",
                 ),
+                rx.cond(
+                    (RatingState.is_buy & RatingState.has_buy_plan),
+                    rx.grid(
+                        rx.vstack(
+                            rx.text("Advised buy price", size="2", color=rx.color("slate", 10)),
+                            rx.heading(RatingState.buy_price_text, size="6", weight="bold"),
+                            align="start",
+                            spacing="1",
+                        ),
+                        rx.vstack(
+                            rx.text("Stop-loss price", size="2", color=rx.color("slate", 10)),
+                            rx.heading(
+                                RatingState.stop_loss_text,
+                                size="6",
+                                weight="bold",
+                                color=rx.color("tomato", 9),
+                            ),
+                            align="start",
+                            spacing="1",
+                        ),
+                        rx.vstack(
+                            rx.text("Holding style", size="2", color=rx.color("slate", 10)),
+                            _holding_style_heading(),
+                            align="start",
+                            spacing="1",
+                        ),
+                        columns=rx.breakpoints(initial="1", md="3"),
+                        spacing="4",
+                        width="100%",
+                    ),
+                ),
                 width="100%",
                 spacing="3",
             ),
@@ -915,10 +906,6 @@ def result_section() -> rx.Component:
         the_big_picture(),
         price_reference_card(),
         breakdown_card(),
-        rx.cond(
-            RatingState.is_buy,
-            buy_plan_card(RatingState.buy_plan),
-        ),
         rx.cond(
             RatingState.has_sub_scores,
             sub_score_card(),
