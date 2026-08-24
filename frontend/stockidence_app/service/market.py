@@ -390,13 +390,15 @@ def _fmt_money(v) -> str | None:
 def get_market_news() -> list[dict]:
     """Market-wide news items with sentiment labels.
 
-    Capped at 1000 — the daily pipeline fetch size — so on-demand paging in
-    the UI has a real window to move through without re-hitting the API.
+    Reads the full accumulated raw_news_articles table (the daily pipeline
+    upserts on article_id, so history persists and grows) and lets the UI's
+    ticker filter + pager handle volume. If the table ever outgrows a
+    single-state-var read, move paging into this query.
     """
     rows = _read(
         """
         SELECT payload FROM raw.raw_news_articles
-        ORDER BY (payload->>'time_published') DESC LIMIT 1000
+        ORDER BY (payload->>'time_published') DESC
         """
     )
     if not rows:
