@@ -42,6 +42,11 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_earnings_calendar": [("symbol", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER")],
     "raw_news_articles": [("article_id", "VARCHAR")],
     "news_ticker_sentiment": [("article_id", "VARCHAR"), ("ticker", "VARCHAR")],
+    # one row per ticker whose deep news history has been backfilled; the
+    # staleness gate reads it as the ticker_news watermark (the shared
+    # article/junction tables can't serve that role — their leading key is
+    # article_id, and the daily market_news job writes into them too)
+    "ticker_news_fetches": [("ticker", "VARCHAR")],
     "raw_company_profile": [("ticker", "VARCHAR")],
     # /stock/metrics lands one row PER metric per period: the metric is part
     # of the natural grain, otherwise rows in the same (quarter, year) would

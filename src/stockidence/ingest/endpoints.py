@@ -293,6 +293,20 @@ _REGISTRY: list[EndpointSpec] = [
         notes="immutable once published; never refetch",
     ),
     EndpointSpec(
+        name="ticker_news",
+        provider=Provider.ALPHA_VANTAGE,
+        method="market_news",
+        trigger=Trigger.ON_DEMAND_STALE,
+        cadence=Cadence.IMMUTABLE,
+        watermark=("ticker",),
+        artifacts=("ticker_news_fetches", "raw_news_articles", "news_ticker_sentiment"),
+        ttl=None,
+        notes="one-time deep-history backfill per ticker (tickers=<sym>, limit=1000); "
+        "the gate fetches once and never again — ongoing freshness comes from the "
+        "daily market_news job landing into the same tables; force=True re-runs; "
+        "ticker_news_fetches is the watermark marker, not API response data",
+    ),
+    EndpointSpec(
         name="insider_sentiment",
         provider=Provider.FINNHUB,
         method="insider_sentiment",

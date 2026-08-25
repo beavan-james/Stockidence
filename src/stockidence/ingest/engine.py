@@ -107,6 +107,7 @@ class IngestEngine:
                 "to_date": now.date().isoformat(),
             },
             "market_news": {"limit": 1000, "sort": "LATEST"},
+            "ticker_news": {"tickers": sym, "limit": 1000, "sort": "LATEST"},
         }
         if spec.name == "earnings_call_transcript":
             parts = dimension_key.split("|")
