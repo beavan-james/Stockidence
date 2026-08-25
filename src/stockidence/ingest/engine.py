@@ -40,7 +40,7 @@ _SCHEDULED_DEFAULT_WINDOW_DAYS = 45
 # First-fetch lookback for daily bars. Providers default to ~1 month, which
 # starves the SMA200-based trend components and makes backtesting impossible;
 # two years covers MIN_BARS replay plus slack while staying one API call.
-_PRICE_BACKFILL_DAYS = 730
+_PRICE_BACKFILL_DAYS = 5500
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ class IngestEngine:
             "quote": {"symbol": sym},
             "company_profile2": {"symbol": sym},
             "basic_financials": {"symbol": sym, "metric": "all"},
-            "financials_reported": {"symbol": sym, "freq": "annual"},
+            "financials_reported": {"symbol": sym, "freq": "quarterly"},
             "eps_surprises": {"symbol": sym},
             "recommendation_trends": {"symbol": sym},
             "peers": {"symbol": sym},
@@ -107,6 +107,8 @@ class IngestEngine:
                 "to_date": now.date().isoformat(),
             },
             "market_news": {"limit": 1000, "sort": "LATEST"},
+            "ticker_news": {"tickers": sym, "limit": 1000, "sort": "LATEST"},
+            "ticker_news": {"tickers": sym, "limit": 1000, "sort": "LATEST"},
         }
         if spec.name == "earnings_call_transcript":
             parts = dimension_key.split("|")

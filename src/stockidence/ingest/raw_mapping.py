@@ -281,6 +281,17 @@ def normalize_market_news(payload: dict[str, Any], symbol: str, now: datetime) -
     return {"raw_news_articles": articles, "news_ticker_sentiment": ticker_rows}
 
 
+def normalize_ticker_news(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+    """Per-ticker deep-history pull: same fan-out as market_news, plus the
+    one-row fetch marker that serves as the ticker_news watermark. The marker
+    leads the dict so it lands before the fan-out tables: Alpha Vantage calls
+    are the scarce resource, so once the response is in hand we must record
+    progress even if a later land step crashes — a slightly incomplete
+    history beats re-spending quota on every retry."""
+    rows = normalize_market_news(payload, symbol, now)
+    return {"ticker_news_fetches": [{"ticker": symbol}], **rows}
+
+
 NORMALIZERS: dict[str, Normalizer] = {
     "quote": normalize_quote,
     "prices.daily": normalize_prices_daily,
@@ -305,6 +316,7 @@ NORMALIZERS: dict[str, Normalizer] = {
     "ipo_calendar": normalize_ipo_calendar,
     "earnings_calendar": normalize_earnings_calendar,
     "market_news": normalize_market_news,
+    "ticker_news": normalize_ticker_news,
 }
 
 

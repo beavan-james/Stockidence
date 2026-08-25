@@ -293,6 +293,19 @@ _REGISTRY: list[EndpointSpec] = [
         notes="immutable once published; never refetch",
     ),
     EndpointSpec(
+        name="ticker_news",
+        provider=Provider.ALPHA_VANTAGE,
+        method="market_news",
+        trigger=Trigger.ON_DEMAND_STALE,
+        cadence=Cadence.MONTHLY,
+        watermark=("ticker",),
+        artifacts=("ticker_news_fetches", "raw_news_articles", "news_ticker_sentiment"),
+        ttl=timedelta(days=30),
+        notes="per-ticker news sentiment (tickers=<sym>, limit=1000); "
+        "refreshes monthly on ticker lookup; ongoing freshness also "
+        "comes from the daily market_news job landing into the same tables",
+    ),
+    EndpointSpec(
         name="insider_sentiment",
         provider=Provider.FINNHUB,
         method="insider_sentiment",

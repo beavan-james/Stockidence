@@ -1,2 +1,0 @@
-duckdb>=1.5
-reflex==0.9.8

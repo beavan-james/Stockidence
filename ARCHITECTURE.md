@@ -77,7 +77,7 @@ flowchart TD
         M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
     end
 
-    UI["Frontend service<br/>reads mart/raw · writes control"]
+    UI["FastAPI + React SPA<br/>reads mart/raw · writes control"]
 
     SCHED -->|"ingest_scheduled<br/>market-wide"| RAW
     UI -->|"enqueue ticker<br/>(pending) when no snapshot"| Q
@@ -120,3 +120,9 @@ flowchart TD
 > - Scheduled jobs and on-demand runs are independent: schedules warm the
 >   persistent universe (news, calendars, movers, macro); on-demand runs
 >   compute per-ticker ratings.
+>
+> **Serving & UI.** The service layer (`stockidence.service`) is plain Python
+> over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a read-only REST
+> surface (one exception: rating lookups enqueue to `control.ticker_requests`).
+> The React SPA (`frontend-react/`) consumes that API with TanStack Query,
+> polling every 10s while a rating is pending/refreshing.

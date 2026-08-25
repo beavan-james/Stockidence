@@ -29,6 +29,9 @@ ticker:
 - **Warehouse:** DuckDB, three-layer schema `raw → staging → mart`.
 - **Caching:** staleness-aware cache in front of API calls; policy differs by
   data type (a quote is stale in minutes, an income statement in months).
+- **Serving & UI:** FastAPI (`src/stockidence/api/`) exposes the mart layer as
+  a typed REST API; a React + TypeScript SPA (`frontend-react/`) renders it.
+  The UI reads the warehouse through that API — never the providers directly.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full data flow.
 
