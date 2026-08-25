@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .models import (
@@ -233,11 +233,11 @@ def search_tickers(query: str, limit: int = 8) -> list[dict]:
         con.close()
 
 
-def enqueue_ticker_request(ticker: str) -> bool | None:
+def enqueue_ticker_request(ticker: str, cooldown_minutes: int = 5) -> bool | None:
     """Ask the Dagster sensor to compute this ticker.
 
-    Returns True when the warehouse is reachable and the request was queued
-    (or re-queued), None when the warehouse itself is unavailable.
+    Returns True when the request was (re-)queued, False if already queued
+    within the cooldown window, None when the warehouse itself is unavailable.
     """
     db_path = Path(_config_db_path())
     if not db_path.exists():
@@ -248,6 +248,21 @@ def enqueue_ticker_request(ticker: str) -> bool | None:
         return None
     try:
         con = duckdb.connect(str(db_path))
+        row = con.execute(
+            "SELECT status, requested_at FROM control.ticker_requests WHERE ticker = ?",
+            [ticker.upper()],
+        ).fetchone()
+        if row is not None:
+            status, requested_at = row
+            if status in ("pending", "launched"):
+                now = datetime.now(timezone.utc)
+                if isinstance(requested_at, str):
+                    requested_at = datetime.fromisoformat(requested_at)
+                if requested_at.tzinfo is None:
+                    requested_at = requested_at.replace(tzinfo=timezone.utc)
+                if now - requested_at < timedelta(minutes=cooldown_minutes):
+                    con.close()
+                    return False
         con.execute(
             """
             INSERT INTO control.ticker_requests (ticker, requested_at, status)
