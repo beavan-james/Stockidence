@@ -1,0 +1,48 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Surfaces: near-black canvas, layered panels, hairline borders */
+  --color-bg: #0a0a0b;
+  --color-surface: #131316;
+  --color-raised: #1a1a1f;
+  --color-line: #26262b;
+
+  /* Iris accent */
+  --color-accent: #818cf8;
+  --color-accent-strong: #a5b4fc;
+  --color-accent-dim: rgba(129, 140, 248, 0.14);
+
+  /* Text ramp */
+  --color-ink: #f4f4f5;
+  --color-ink-secondary: #a1a1aa;
+  --color-ink-muted: #71717a;
+
+  /* Data colors — reserved for numbers and sentiment, never decoration */
+  --color-gain: #34d399;
+  --color-loss: #f87171;
+  --color-neutral-data: #94a3b8;
+}
+
+html {
+  background-color: var(--color-bg);
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* All figures render tabular so columns of prices align */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
