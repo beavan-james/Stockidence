@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import duckdb
 import pytest
 
-from stockidence_app.service import market
+from stockidence.service import market
 
 
 @pytest.fixture(autouse=True)

@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import duckdb
 import pytest
 
-from stockidence_app.service import market
+from stockidence.service import market
 
 _TODAY = date.today()
 

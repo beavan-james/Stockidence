@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from stockidence_app.service import rating_service
+from stockidence.service import rating_service
 
 
 @pytest.fixture(autouse=True)

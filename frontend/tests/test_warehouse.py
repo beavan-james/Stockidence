@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import duckdb
 
-from stockidence_app.service import warehouse
+from stockidence.service import warehouse
 
 
 def _build_warehouse(tmp_path):

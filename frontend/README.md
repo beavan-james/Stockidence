@@ -1,35 +1,38 @@
 # Stockidence Frontend
 
-Reflex app for the stock **confidence rating pipeline**. Lets a user enter any ticker and get a confidence rating, advice (strong buy / buy / hold / sell / strong sell), a separate volatility score, and — for buy-rated tickers — an advised buy price, stop-loss price, and holding-style advice.
+React SPA for the stock **confidence rating pipeline**. Enter any ticker and get a confidence rating, advice (strong buy / buy / hold / sell / strong sell), a separate volatility score, and — for buy-rated tickers — an advised buy price, stop-loss price, and holding-style advice.
+
+## Stack
+
+- **UI:** Vite + React 19 + TypeScript, Tailwind CSS v4 (dark token set in `frontend-react/src/index.css`), TanStack Query for data fetching/polling
+- **API:** FastAPI (`src/stockidence/api/`) — thin HTTP layer over `stockidence.service`, which reads the DuckDB warehouse
 
 ## Run
 
 ```bash
-cd frontend
-uv venv --system-site-packages
-uv pip install -r requirements.txt
-uv run reflex run --env prod
+# terminal 1 — API
+uv run uvicorn stockidence.api.app:app --reload
+
+# terminal 2 — UI (dev server proxies /api to :8000)
+cd frontend-react
+npm install
+npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:5173.
 
-`--env prod` compiles the production bundle and serves it directly — the
-recommended mode for day-to-day local use. `--env dev` enables hot reload for
-UI iteration, but is slower and less stable (frequent recompiles, page
-reloads while assets rebuild).
+## Data flow
 
-## Data layer
+The UI never talks to the API providers directly. FastAPI reads the **mart** layer of the DuckDB warehouse via the service functions:
 
-The UI never talks to the API providers directly. It reads from the **mart** layer of the DuckDB warehouse:
+- `src/stockidence/service/warehouse.py` — reads the presentation views `mart.confidence_ratings`, `mart.rating_components`, `mart.buy_plans`, `mart.category_scores` (thin views over the pipeline's `m_*` snapshot tables, created by the pipeline's `init_schema`). Configure the DB path with the `STOCKIDENCE_DB` env var (default: the repo's `data/stockidence.duckdb`).
+- `src/stockidence/service/sub_scores.py` — human-readable sub-score labels/sources/direction rules, served via `/api/component-spec`.
+- `src/stockidence/service/market.py` — market-wide widgets (macro, commodities, movers, calendars, news) read from the raw layer, which doubles as the staleness-aware cache.
+- `src/stockidence/service/demo.py` — deterministic sample generator, fallback only when the warehouse is entirely absent.
 
-- `frontend/stockidence_app/service/warehouse.py` — reads the presentation views `mart.confidence_ratings`, `mart.rating_components`, `mart.buy_plans`, and `mart.category_scores` (thin views over the pipeline's `m_*` snapshot tables, created by the pipeline's `init_schema`). Configure the DB path with the `STOCKIDENCE_DB` env var (default: the repo's `data/stockidence.duckdb`).
-- `frontend/stockidence_app/service/sub_scores.py` — human-readable sub-score labels/sources/direction rules (display text only; scores and weights always come from the mart).
-- `frontend/stockidence_app/service/market.py` — market-wide widgets (macro, commodities, movers, calendars, news) read from the raw layer, which doubles as the staleness-aware cache.
-- `frontend/stockidence_app/service/demo.py` — deterministic sample generator, fallback only when the warehouse is entirely absent.
+Lookup flow: a ticker with a warehouse rating renders it immediately; if the snapshot is >1 day old it re-renders from the old data while flagging "Refreshing" and requeueing compute. An unknown-but-covered ticker is **enqueued** in `control.ticker_requests` ("pending") — the Dagster sensor consumes that queue, runs the pipeline, and the SPA polls every 10s until the rating lands. Demo data appears only when no warehouse file exists at all.
 
-Lookup flow: a ticker with a warehouse rating renders it (source badge "Warehouse data"). An unknown ticker is **enqueued** in `control.ticker_requests` (source "Computing…") — the Dagster sensor consumes that queue, runs the pipeline, and the rating appears on the next lookup. Demo data appears only when no warehouse file exists at all.
-
-Scoring/weight changes live in the pipeline, not the frontend; the frontend just renders whatever the mart returns. The one exception is display labeling (category names, sub-score labels/sources), which lives in `sub_scores.py` and `state.py` — the numeric weights and scores themselves always come from the mart (`model_weights`, `category_scores`, `rating_components`).
+Scoring/weight changes live in the pipeline, not the frontend; the frontend just renders whatever the mart returns.
 
 ## Tests
 

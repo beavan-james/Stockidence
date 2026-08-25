@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from stockidence.api.app import app
-from stockidence_app.service import market
+from stockidence.service import market
 
 client = TestClient(app)
 

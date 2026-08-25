@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from stockidence_app.service import sub_scores
+from stockidence.service import sub_scores
 
 
 def test_spec_has_entries_for_known_components():

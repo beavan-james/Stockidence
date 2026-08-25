@@ -3,7 +3,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from stockidence_app.service import warehouse
+from stockidence.service import warehouse
 
 
 def _build_symbols_db(tmp_path) -> str:
