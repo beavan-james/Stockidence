@@ -14,4 +14,4 @@ Jupyter/
 *.ipynb
 tests/
 frontend/
-training/
+Model/

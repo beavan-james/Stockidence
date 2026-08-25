@@ -297,14 +297,13 @@ _REGISTRY: list[EndpointSpec] = [
         provider=Provider.ALPHA_VANTAGE,
         method="market_news",
         trigger=Trigger.ON_DEMAND_STALE,
-        cadence=Cadence.IMMUTABLE,
+        cadence=Cadence.MONTHLY,
         watermark=("ticker",),
         artifacts=("ticker_news_fetches", "raw_news_articles", "news_ticker_sentiment"),
-        ttl=None,
-        notes="one-time deep-history backfill per ticker (tickers=<sym>, limit=1000); "
-        "the gate fetches once and never again — ongoing freshness comes from the "
-        "daily market_news job landing into the same tables; force=True re-runs; "
-        "ticker_news_fetches is the watermark marker, not API response data",
+        ttl=timedelta(days=30),
+        notes="per-ticker news sentiment (tickers=<sym>, limit=1000); "
+        "refreshes monthly on ticker lookup; ongoing freshness also "
+        "comes from the daily market_news job landing into the same tables",
     ),
     EndpointSpec(
         name="insider_sentiment",

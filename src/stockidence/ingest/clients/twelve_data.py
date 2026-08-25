@@ -13,7 +13,17 @@ from typing import Any
 from .base import APIError, BaseClient, InvalidResponseError, RateLimitError, build_query
 
 
+_SYMBOL_MAP: dict[str, str] = {
+    "BRK-B": "BRK.B",
+    "BF-B": "BF.B",
+}
+
+
 class TwelveDataClient(BaseClient):
+    @staticmethod
+    def _normalize_symbol(symbol: str) -> str:
+        return _SYMBOL_MAP.get(symbol, symbol)
+
     def __init__(self, *, api_key: str | None = None, timeout: float = 30.0, **kwargs: Any) -> None:
         from ...config import load_settings
 
@@ -40,6 +50,7 @@ class TwelveDataClient(BaseClient):
         end_date: str | None = None,
         order: str | None = None,
     ) -> dict[str, Any]:
+        symbol = self._normalize_symbol(symbol)
         payload = self.request(
             "GET",
             "/time_series",
@@ -70,6 +81,7 @@ class TwelveDataClient(BaseClient):
                 raise APIError(f"/time_series:{symbol}: {message}")
 
     def quote(self, symbol: str) -> dict[str, Any]:
+        symbol = self._normalize_symbol(symbol)
         payload = self.request(
             "GET",
             "/quote",

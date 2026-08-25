@@ -42,7 +42,7 @@ export function DiscoverPage() {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.15 }}
-          transition={{ duration: 0.45, ease }}
+          transition={{ duration: 0.7, ease }}
           className="grid gap-4 lg:grid-cols-3"
         >
           <MoverTable title="Top gainers" rows={movers.data.top_gainers} />
@@ -56,7 +56,7 @@ export function DiscoverPage() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.15 }}
-        transition={{ duration: 0.45, ease, delay: 0.08 }}
+        transition={{ duration: 0.7, ease, delay: 0.08 }}
         className="space-y-3"
       >
         <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
@@ -71,7 +71,7 @@ export function DiscoverPage() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.15 }}
-        transition={{ duration: 0.45, ease, delay: 0.16 }}
+        transition={{ duration: 0.7, ease, delay: 0.16 }}
       >
         <NewsTable />
       </motion.section>
@@ -81,7 +81,7 @@ export function DiscoverPage() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.15 }}
-        transition={{ duration: 0.45, ease, delay: 0.24 }}
+        transition={{ duration: 0.7, ease, delay: 0.24 }}
         className="grid gap-4 lg:grid-cols-2"
       >
         {ipos.data && ipos.data.length > 0 && <IpoCalendar listings={ipos.data} />}
