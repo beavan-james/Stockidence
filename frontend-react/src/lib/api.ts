@@ -49,4 +49,16 @@ export const client = {
   },
 
   modelWeights: () => api<import("@/types/api").ModelWeight[]>("/api/model-weights"),
+
+  componentSpec: () =>
+    api<import("@/types/api").ComponentSpec>("/api/component-spec"),
+
+  macro: () => api<import("@/types/api").MacroMetric[]>("/api/macro"),
+
+  commodities: () => api<import("@/types/api").Commodity[]>("/api/commodities"),
+
+  ipos: (limit = 10) => api<import("@/types/api").IpoListing[]>(`/api/calendar/ipos?limit=${limit}`),
+
+  earnings: (limit = 10) =>
+    api<import("@/types/api").EarningsRelease[]>(`/api/calendar/earnings?limit=${limit}`),
 };

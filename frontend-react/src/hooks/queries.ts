@@ -9,7 +9,19 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { client } from "@/lib/api";
-import type { Movers, ModelWeight, NewsEnvelope, Rating, RatingSource } from "@/types/api";
+import type {
+  Commodity,
+  ComponentSpec,
+  EarningsRelease,
+  IpoListing,
+  MacroMetric,
+  Movers,
+  ModelWeight,
+  NewsEnvelope,
+  Quote,
+  Rating,
+  RatingSource,
+} from "@/types/api";
 
 const POLL_INTERVAL_MS = 10_000;
 const POLL_MAX_ATTEMPTS = 30;
@@ -50,5 +62,47 @@ export function useNews(params: { ticker?: string; page?: number; pageSize?: num
     queryKey: ["news", params],
     queryFn: () => client.news(params),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useQuote(ticker: string | undefined) {
+  return useQuery<Quote | null>({
+    enabled: Boolean(ticker),
+    queryKey: ["quote", ticker],
+    queryFn: () => client.quote(ticker!),
+    staleTime: 30_000,
+  });
+}
+
+export function useComponentSpec() {
+  return useQuery<ComponentSpec>({
+    queryKey: ["component-spec"],
+    queryFn: () => client.componentSpec(),
+    staleTime: Infinity,
+  });
+}
+
+export function useMacro() {
+  return useQuery<MacroMetric[]>({ queryKey: ["macro"], queryFn: () => client.macro() });
+}
+
+export function useCommodities() {
+  return useQuery<Commodity[]>({
+    queryKey: ["commodities"],
+    queryFn: () => client.commodities(),
+  });
+}
+
+export function useIpos(limit = 10) {
+  return useQuery<IpoListing[]>({
+    queryKey: ["ipos", limit],
+    queryFn: () => client.ipos(limit),
+  });
+}
+
+export function useEarnings(limit = 10) {
+  return useQuery<EarningsRelease[]>({
+    queryKey: ["earnings", limit],
+    queryFn: () => client.earnings(limit),
   });
 }

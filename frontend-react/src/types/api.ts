@@ -110,3 +110,60 @@ export interface ModelWeight {
   category: string;
   weight: number;
 }
+
+export interface ComponentSpecEntry {
+  label: string;
+  sources: string;
+  direction: string;
+}
+
+export type ComponentSpec = Record<string, ComponentSpecEntry>;
+
+export interface SeriesPoint {
+  date: string;
+  value: number | null;
+}
+
+export interface MacroMetric {
+  label: string;
+  value: number | null;
+  unit: string;
+  detail: string;
+  as_of: string;
+  series: SeriesPoint[];
+  fetched: string;
+}
+
+export interface Commodity {
+  label: string;
+  nominal: string;
+  price: number | null;
+  unit: string;
+  timestamp: string;
+}
+
+export interface IpoListing {
+  date: string;
+  exchange: string | null;
+  name: string | null;
+  numberOfShares: string | null;
+  price: string | null;
+  status: string | null;
+  symbol: string | null;
+  totalSharesValue: string | null;
+}
+
+export interface EarningsRelease {
+  date: string;
+  symbol: string;
+  quarter: number | null;
+  year: number | null;
+  hour: string | null;
+  eps_estimate: number | null;
+  eps_actual: number | null;
+  eps_actual_display: string | null;
+  revenue_estimate: number | null;
+  revenue_estimate_display: string | null;
+  revenue_actual: number | null;
+  revenue_actual_display: string | null;
+}

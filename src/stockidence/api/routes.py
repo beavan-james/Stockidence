@@ -12,7 +12,7 @@ Contracts carried over from the Reflex read path:
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..service import market, rating_service, warehouse
+from ..service import market, rating_service, sub_scores, warehouse
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
@@ -101,3 +101,9 @@ def get_news(
 def get_model_weights() -> list[dict]:
     """Confidence blend weights as currently persisted in the mart."""
     return warehouse.get_model_weights()
+
+
+@meta_router.get("/component-spec")
+def get_component_spec() -> dict[str, dict[str, str]]:
+    """Sub-score display metadata: label, source fields, direction semantics."""
+    return sub_scores.COMPONENT_SPEC
