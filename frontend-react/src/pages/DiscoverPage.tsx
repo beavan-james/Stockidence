@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import { CommoditiesRow, MacroGrid } from "@/components/discover/MacroCards";
 import { EarningsCalendar, IpoCalendar } from "@/components/discover/Calendars";
 import { NewsTable } from "@/components/discover/NewsTable";
@@ -11,6 +13,10 @@ export function DiscoverPage() {
   const ipos = useIpos();
   const earnings = useEarnings();
 
+  useEffect(() => {
+    document.title = "Discover — Stockidence";
+  }, []);
+
   return (
     <div className="space-y-8">
       <div className="flex items-baseline justify-between">
@@ -23,24 +29,29 @@ export function DiscoverPage() {
       </div>
 
       {movers.data && (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="anim-rise grid gap-4 lg:grid-cols-3">
           <MoverTable title="Top gainers" rows={movers.data.top_gainers} />
           <MoverTable title="Top losers" rows={movers.data.top_losers} />
           <MoverTable title="Most actively traded" rows={movers.data.most_actively_traded} />
         </div>
       )}
 
-      <section className="space-y-3">
+      <section className="anim-rise space-y-3" style={{ animationDelay: "100ms" }}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
-          Economy & commodities
+          Economy &amp; commodities
         </h2>
         {macro.data && macro.data.length > 0 && <MacroGrid metrics={macro.data} />}
         {commodities.data && <CommoditiesRow commodities={commodities.data} />}
       </section>
 
-      <NewsTable />
+      <section className="anim-rise" style={{ animationDelay: "200ms" }}>
+        <NewsTable />
+      </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section
+        className="anim-rise grid gap-4 lg:grid-cols-2"
+        style={{ animationDelay: "300ms" }}
+      >
         {ipos.data && ipos.data.length > 0 && <IpoCalendar listings={ipos.data} />}
         {earnings.data && earnings.data.length > 0 && (
           <EarningsCalendar releases={earnings.data} />

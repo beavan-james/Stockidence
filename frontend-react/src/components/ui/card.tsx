@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils";
 function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-xl border border-line bg-surface", className)}
+      className={cn(
+        "rounded-xl border border-line bg-surface transition-colors duration-200 hover:border-[#323239]",
+        className,
+      )}
       {...props}
     />
   );

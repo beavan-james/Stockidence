@@ -1,9 +1,11 @@
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { ListRail } from "@/components/layout/ListRail";
 import { SearchBar } from "@/components/layout/SearchBar";
 
 export function AppShell() {
+  const location = useLocation();
+
   return (
     <div className="min-h-screen bg-bg text-ink">
       <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
@@ -28,7 +30,7 @@ export function AppShell() {
 
       <div className="mx-auto flex max-w-7xl gap-8 px-6 py-8">
         <ListRail />
-        <main className="min-w-0 flex-1">
+        <main key={location.pathname} className="anim-rise min-w-0 flex-1">
           <Outlet />
         </main>
       </div>

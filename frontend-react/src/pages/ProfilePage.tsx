@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { useEffect } from "react";
 
 import { BigPicture } from "@/components/profile/BigPicture";
 import { ComputingScreen } from "@/components/profile/ComputingScreen";
@@ -45,20 +46,21 @@ function ScoreBreakdown({
   categories: { category: string; score: number; weight: number }[];
 }) {
   return (
-    <Card>
+    <Card className="anim-rise" style={{ animationDelay: "140ms" }}>
       <CardContent className="space-y-4 p-6">
         <h3 className="font-semibold tracking-tight">Score breakdown</h3>
-        {categories.map((c) => (
+        {categories.map((c, i) => (
           <div key={c.category} className="flex items-center gap-4 text-sm">
             <span className="w-24 shrink-0 text-ink-secondary">
               {categoryLabel(c.category).replace(" (separate)", "")}
             </span>
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-raised">
               <div
-                className="h-full rounded-full transition-all duration-700"
+                className="anim-bar h-full rounded-full"
                 style={{
                   width: `${Math.max(c.score, 2)}%`,
                   backgroundColor: categoryColor(c.category),
+                  animationDelay: `${200 + i * 90}ms`,
                 }}
               />
             </div>
@@ -73,9 +75,19 @@ function ScoreBreakdown({
   );
 }
 
+function useDocumentTitle(title: string | undefined) {
+  useEffect(() => {
+    if (title) document.title = `${title} — Stockidence`;
+    return () => {
+      document.title = "Stockidence — Stock Confidence Rating";
+    };
+  }, [title]);
+}
+
 export function ProfilePage() {
   const symbol = useParams().symbol?.toUpperCase();
   const rating = useRating(symbol);
+  useDocumentTitle(symbol);
 
   if (!symbol) return null;
 
@@ -117,7 +129,7 @@ export function ProfilePage() {
         <ComputingScreen source={r.source} ticker={r.ticker} />
       ) : (
         <>
-          <Card>
+          <Card className="anim-rise">
             <CardContent className="flex flex-wrap items-center justify-between gap-x-10 gap-y-4 p-6">
               <div className="flex items-center gap-4">
                 {r.logo_url && (
@@ -132,7 +144,7 @@ export function ProfilePage() {
                 <QuoteBadge ticker={r.ticker} />
                 <span
                   className={cn(
-                    "inline-flex rounded-lg border px-3 py-1 text-sm font-medium",
+                    "anim-pop inline-flex rounded-lg border px-3 py-1 text-sm font-medium",
                     adviceStyle(r.advice),
                   )}
                 >

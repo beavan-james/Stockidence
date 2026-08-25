@@ -47,6 +47,110 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* --- Motion system (all disabled under prefers-reduced-motion) --- */
+
+/* Entrance: fade + rise, staggerable via inline animation-delay */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.anim-rise {
+  animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Advice badge / chips: subtle pop */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.anim-pop {
+  animation: pop-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Score bars grow from the left */
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.anim-bar {
+  transform-origin: left;
+  animation: bar-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Snowflake radar draws outward from center */
+@keyframes radar-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.anim-radar {
+  transform-origin: center;
+  animation: radar-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Skeleton shimmer sweep */
+@keyframes sk-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.sk-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-raised) 40%,
+    #232329 50%,
+    var(--color-raised) 60%
+  );
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise,
+  .anim-pop,
+  .anim-bar,
+  .anim-radar,
+  .sk-shimmer,
+  .cg-gauge-sweep,
+  .cg-fade {
+    animation: none;
+  }
+  .cg-reassure {
+    animation-duration: 0.01s;
+    animation-delay: 0s;
+    opacity: 1;
+  }
+}
+
 /* Computing screen: gauge sweep, tenet crossfade, reassurance fade-in */
 @keyframes cg-gauge-sweep {
   from {

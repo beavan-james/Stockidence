@@ -84,8 +84,14 @@ export function SubScoreDetail({ components }: { components: ComponentScore[] })
                   </h4>
                 </header>
                 <div className="space-y-3">
-                  {rows.map((c) => (
-                    <SubScoreRow key={`${c.category}-${c.component}`} component={c} />
+                  {rows.map((c, i) => (
+                    <div
+                      key={`${c.category}-${c.component}`}
+                      className="anim-rise"
+                      style={{ animationDelay: `${i * 45}ms` }}
+                    >
+                      <SubScoreRow component={c} />
+                    </div>
                   ))}
                 </div>
               </section>

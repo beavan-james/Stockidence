@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Scale, Target } from "lucide-react";
-import { formatMoney, holdingStyleLabel } from "@/lib/format";
+import { holdingStyleLabel } from "@/lib/format";
 
 /** Fair value + 12m target when the model has a valuation anchor. */
 export function ValuationReference({
@@ -13,7 +14,7 @@ export function ValuationReference({
   if (fairValue == null && targetPrice == null) return null;
 
   return (
-    <Card>
+    <Card className="anim-rise" style={{ animationDelay: "80ms" }}>
       <CardContent className="space-y-4 p-6">
         <div className="flex items-center gap-2 text-accent">
           <Scale size={18} />
@@ -22,11 +23,19 @@ export function ValuationReference({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <p className="text-xs text-ink-muted">Fair value</p>
-            <p className="num text-2xl font-semibold">{formatMoney(fairValue)}</p>
+            <AnimatedNumber
+              value={fairValue ?? 0}
+              format={(v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              className="text-2xl font-semibold"
+            />
           </div>
           <div>
             <p className="text-xs text-ink-muted">Target price (12m)</p>
-            <p className="num text-2xl font-semibold">{formatMoney(targetPrice)}</p>
+            <AnimatedNumber
+              value={targetPrice ?? 0}
+              format={(v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              className="text-2xl font-semibold"
+            />
           </div>
         </div>
       </CardContent>
@@ -47,7 +56,7 @@ export function ExecutionPlan({
   const risk = advisedBuyPrice ? ((advisedBuyPrice - stopLossPrice) / advisedBuyPrice) * 100 : null;
 
   return (
-    <Card className="border-accent/25 bg-accent-dim/40">
+    <Card className="anim-rise border-accent/25 bg-accent-dim/40" style={{ animationDelay: "200ms" }}>
       <CardContent className="space-y-4 p-6">
         <div className="flex items-center gap-2 text-accent-strong">
           <Target size={18} />
@@ -56,11 +65,19 @@ export function ExecutionPlan({
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-ink-muted">Advised buy price</p>
-            <p className="num text-2xl font-semibold">{formatMoney(advisedBuyPrice)}</p>
+            <AnimatedNumber
+              value={advisedBuyPrice}
+              format={(v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              className="text-2xl font-semibold"
+            />
           </div>
           <div>
             <p className="text-xs text-ink-muted">Stop-loss price</p>
-            <p className="num text-2xl font-semibold text-loss">{formatMoney(stopLossPrice)}</p>
+            <AnimatedNumber
+              value={stopLossPrice}
+              format={(v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              className="text-2xl font-semibold text-loss"
+            />
           </div>
           <div>
             <p className="text-xs text-ink-muted">Holding style</p>
