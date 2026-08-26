@@ -93,14 +93,14 @@ export function useCommodities() {
   });
 }
 
-export function useIpos(limit = 10) {
+export function useIpos(limit = 50) {
   return useQuery<IpoListing[]>({
     queryKey: ["ipos", limit],
     queryFn: () => client.ipos(limit),
   });
 }
 
-export function useEarnings(limit = 10) {
+export function useEarnings(limit = 50) {
   return useQuery<EarningsRelease[]>({
     queryKey: ["earnings", limit],
     queryFn: () => client.earnings(limit),

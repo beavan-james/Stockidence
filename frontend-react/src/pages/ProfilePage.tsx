@@ -9,10 +9,12 @@ import { SubScoreDetail } from "@/components/profile/SubScoreDetail";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRating } from "@/hooks/queries";
+import { usePortfolio, addToPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
 import { adviceLabel, adviceStyle } from "@/lib/format";
 import { categoryColor, categoryLabel } from "@/lib/viz";
 import type { RatingSource } from "@/types/api";
 import { cn } from "@/lib/utils";
+import { Plus, Check } from "lucide-react";
 
 const SOURCE_COPY: Record<RatingSource, string> = {
   warehouse: "",
@@ -87,9 +89,12 @@ function useDocumentTitle(title: string | undefined) {
 export function ProfilePage() {
   const symbol = useParams().symbol?.toUpperCase();
   const rating = useRating(symbol);
+  const { tickers } = usePortfolio();
   useDocumentTitle(symbol);
 
   if (!symbol) return null;
+
+  const inPortfolio = tickers.includes(symbol);
 
   if (rating.isPending) {
     return (
@@ -150,6 +155,29 @@ export function ProfilePage() {
                 >
                   {adviceLabel(r.advice)}
                 </span>
+                <button
+                  onClick={() =>
+                    inPortfolio ? removeFromPortfolio(symbol) : addToPortfolio(symbol)
+                  }
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm transition-colors",
+                    inPortfolio
+                      ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
+                      : "border-line bg-surface text-ink-secondary hover:border-accent/30 hover:text-ink",
+                  )}
+                >
+                  {inPortfolio ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      In portfolio
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5" />
+                      Add to portfolio
+                    </>
+                  )}
+                </button>
               </div>
             </CardContent>
           </Card>
