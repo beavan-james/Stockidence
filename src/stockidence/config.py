@@ -44,7 +44,7 @@ class Settings:
             ),
             min_interval_seconds={
                 "finnhub": float(os.environ.get("FINNHUB_MIN_INTERVAL_S", "1.05")),
-                "twelve_data": float(os.environ.get("TWELVE_DATA_MIN_INTERVAL_S", "8.0")),
+                "twelve_data": float(os.environ.get("TWELVE_DATA_MIN_INTERVAL_S", "2.0")),
                 "alpha_vantage": float(os.environ.get("ALPHA_VANTAGE_MIN_INTERVAL_S", "61.0")),
                 "fred": float(os.environ.get("FRED_MIN_INTERVAL_S", "1.0")),
             },

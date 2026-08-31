@@ -15,3 +15,4 @@ tests/
 frontend/
 src/dagster_home/
 ViewSchemas.ipynb
+.ruff_cache/
