@@ -36,11 +36,13 @@ from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest.engine import IngestEngine
 from .mart.mart import (
     rebuild_advanced_analytics,
+    rebuild_fred_market as rebuild_fred_mart,
     rebuild_prices_monthly,
     rebuild_prices_weekly,
     rebuild_technical_indicators,
 )
 from .mart.scoring import score_ticker
+from .staging.staging import rebuild_fred_market as rebuild_fred_staging
 from .staging.staging import rebuild_prices_daily
 from .storage import Warehouse
 
@@ -66,7 +68,14 @@ def engine_resource() -> IngestEngine:
     return IngestEngine(warehouse)
 
 
-def _make_cadence_job(cadence: Cadence):
+def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...] = ()):
+    """Build a scheduled ingestion job for one cadence group.
+
+    `post_derived` is a sequence of (label, rebuild_fn) market-wide derivations
+    that run AFTER the raw lands — used by the daily job to rebuild FRED
+    staging + mart from the freshly fetched index series. Unlike the per-ticker
+    derived assets, these have no API calls and no ticker partition.
+    """
     names = [spec.name for spec in scheduled_endpoints()
              if spec.cadence == cadence]
     if not names:
@@ -80,16 +89,29 @@ def _make_cadence_job(cadence: Cadence):
             context.log.info(
                 f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
 
+    derived_ops: list[Any] = []
+    for i, (label, rebuild) in enumerate(post_derived):
+        @op(name=f"{cadence.value}_{label}_op", required_resource_keys={"engine"})
+        def derive_cadence(context, _rebuild: Any = rebuild, _label: str = label) -> None:
+            rows = _rebuild(context.resources.engine.warehouse)
+            context.log.info(f"[derived:{_label}] rebuilt {rows} rows")
+        derived_ops.append(derive_cadence)
+
     @job(name=f"{cadence.value}_ingest")
     def cadence_job():
         ingest_cadence()
+        for op in derived_ops:
+            op()
 
     return cadence_job
 
 
 monthly_job = _make_cadence_job(Cadence.MONTHLY)
 weekdays_job = _make_cadence_job(Cadence.WEEKDAYS)
-daily_job = _make_cadence_job(Cadence.DAILY)
+daily_job = _make_cadence_job(
+    Cadence.DAILY,
+    post_derived=(("fred_staging", rebuild_fred_staging), ("fred_mart", rebuild_fred_mart)),
+)
 
 
 @schedule(job=monthly_job, cron_schedule="0 2 1 * *",

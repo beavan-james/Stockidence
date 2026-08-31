@@ -46,6 +46,7 @@ caching layer exists to solve, not a problem to buy around.
 | **Finnhub**       | Company profile 2, basic & as-reported financials, EPS surprises, insider sentiment, recommendation trends, peers, IPO & earnings calendars, quote, stock symbol listing            |    [Finnhub API Documentation](https://finnhub.io/docs/api/introduction)     |
 | **Twelve Data**   | Price time series (`interval=1day`, split-adjusted); weekly/monthly are resampled downstream in the warehouse, not fetched                                                          |    [Twelve Data API Documentation ](https://twelvedata.com/docs/introduction/overview)      |
 | **Alpha Vantage** | Market news & sentiment, top gainers/losers, earnings call transcript, macro indicators (inflation, CPI, unemployment, fed funds, natural gas, real GDP), commodities (gold/silver) |     [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/)      |
+| **FRED**         | Market-wide daily index levels — CBOE VIX (`VIXCLS`, since 1990) and S&P 500 price index (`SP500`, ~10y daily history); read as point-in-time market-regime features by the ML model datasets, not the deterministic scorer | [FRED Series Observations API](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) |
 
 The full endpoint list — grouped by the scoring category each feeds — is in
 [`API.md`](API.md).
@@ -71,7 +72,7 @@ narrative analysis — it will never replace or obscure the deterministic core.
 ## Cadence is heterogeneous by design
 
 - **Near-real-time:** Finnhub quote (cache TTL ~1 min)
-- **Daily:** market news (news & sentiment)
+- **Daily:** market news (news & sentiment), VIX / S&P 500 market indexes (FRED)
 - **Weekdays:** movers, IPO/earnings calendars
 - **Monthly:** commodities, macro indicators, stock symbol listing
 - **Quarterly/irregular:** fundamentals, earnings, transcripts

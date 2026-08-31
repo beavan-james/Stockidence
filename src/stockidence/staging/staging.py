@@ -49,3 +49,24 @@ def rebuild_prices_daily(warehouse: Warehouse, ticker: str) -> int:
         return con.execute(
             "SELECT COUNT(*) FROM staging.stg_prices_daily WHERE ticker = ?", [ticker]
         ).fetchone()[0]
+
+
+def rebuild_fred_market(warehouse: Warehouse) -> int:
+    """Typed FRED index observations: raw's string `value` → DOUBLE, dropping
+    the "." missing-value sentinel. Market-wide (not per ticker): the full
+    table is rebuilt from raw each run — a few thousand rows, idempotent on
+    the (series, date) PK."""
+    with warehouse.connect() as con:
+        con.execute("DELETE FROM staging.stg_fred_market")
+        con.execute(
+            """
+            INSERT INTO staging.stg_fred_market (series, date, value)
+            SELECT
+                series,
+                date,
+                TRY_CAST(json_extract_string(payload, '$.value') AS DOUBLE)
+            FROM raw.raw_fred_market
+            WHERE TRY_CAST(json_extract_string(payload, '$.value') AS DOUBLE) IS NOT NULL
+            """
+        )
+        return con.execute("SELECT COUNT(*) FROM staging.stg_fred_market").fetchone()[0]

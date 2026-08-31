@@ -54,6 +54,13 @@ AA_FEATURES = [
     "max_drawdown_252",
 ]
 
+# From mart.m_fred_market — market-wide regime (VIX + S&P500), joined PIT
+# as-of each period-end. vix_pctile_252 is derived below from the daily level.
+MARKET_FEATURES = [
+    "vix", "vix_pctile_252", "vix_chg_21d",
+    "spx_ret_21d", "spx_ret_63d", "spx_ret_252d",
+]
+
 # Derived from raw_financials_reported (PIT)
 FUNDAMENTAL_FEATURES = [
     "roe",           # net_income / equity
@@ -64,7 +71,7 @@ FUNDAMENTAL_FEATURES = [
     "fcf_to_assets",  # (ocf - capex) / total_assets
 ]
 
-ALL_FEATURES = TI_FEATURES + AA_FEATURES + FUNDAMENTAL_FEATURES
+ALL_FEATURES = TI_FEATURES + AA_FEATURES + FUNDAMENTAL_FEATURES + MARKET_FEATURES
 
 # ── Quarterly-specific feature set ─────────────────────────────────────────────
 # The quarterly dataset uses macro-scale momentum + fundamental velocity instead
@@ -88,7 +95,7 @@ QUARTERLY_PRICE_FEATURES = [
     "price_to_sma200", "stddev_252", "max_drawdown_252", "atr_pct",
     "return_3m", "return_12m", "distance_from_52wk_high",
 ]
-QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + QUARTERLY_FUND_FEATURES
+QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + QUARTERLY_FUND_FEATURES + MARKET_FEATURES
 
 # Categorical features are merged per ticker (not snapshot per period).
 CATEGORICAL_FEATURES = ["sector"]
@@ -356,6 +363,53 @@ def _load_financials(wh: Warehouse) -> pd.DataFrame:
     return fin
 
 
+def _load_market(wh: Warehouse) -> pd.DataFrame:
+    """Load the daily market-regime table (VIX + S&P500 momentum) from mart.
+
+    Market-wide: no ticker dimension, so the dataset joins it per period-end
+    date rather than per (ticker, date). The vix_pctile_252 regime feature is
+    computed here on the FULL daily series (before the as-of join) so it is
+    never contaminated by the label window.
+    """
+    with wh.connect(read_only=True) as con:
+        m = pd.read_sql(
+            "SELECT date, spx, vix, spx_ret_21d, spx_ret_63d, spx_ret_252d, "
+            "vix_chg_5d, vix_chg_21d FROM mart.m_fred_market ORDER BY date",
+            con,
+        )
+    m["date"] = pd.to_datetime(m["date"])
+    for col in m.columns.difference(["date"]):
+        m[col] = pd.to_numeric(m[col], errors="coerce")
+    # rolling 252-day percentile rank of the VIX level — what regime the
+    # market sits in as of that date (PIT, computed before any row join).
+    m["vix_pctile_252"] = (
+        m["vix"].rolling(252, min_periods=63)
+        .apply(lambda w: (w <= w.iloc[-1]).mean(), raw=False)
+    )
+    return m
+
+
+def _merge_market(dataset: pd.DataFrame, market: pd.DataFrame, asof: pd.DataFrame) -> pd.DataFrame:
+    """Join market features as-of each period-end (backward, no ticker key).
+
+    `asof` maps (ticker, date) labels → the period's last trading day; each
+    label row gets the latest market observation on or before that day. Rows
+    before the S&P500 series starts (~2016 on FRED) get NaN market features
+    rather than being dropped — the model treats missing as unknown.
+    """
+    keys = asof[["ticker", "date", "asof_date"]].rename(
+        columns={"asof_date": "asof", "date": "label"})
+    joined = pd.merge_asof(
+        keys.sort_values("asof"),
+        market.sort_values("date"),
+        left_on="asof",
+        right_on="date",
+        direction="backward",
+    )
+    joined = joined[["ticker", "label"] + MARKET_FEATURES].rename(columns={"label": "date"})
+    return dataset.merge(joined, on=["ticker", "date"], how="left")
+
+
 def _load_company_profile(wh: Warehouse) -> pd.DataFrame:
     """Load the coarse sector label per ticker from raw_company_profile.
 
@@ -557,6 +611,10 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
     profiles = _load_company_profile(wh)
     print(f"  {len(profiles)} tickers")
 
+    print("Loading market series (VIX / S&P 500)...")
+    market = _load_market(wh)
+    print(f"  {len(market)} daily rows, {market['date'].min().date()} → {market['date'].max().date()}")
+
     print("Computing period-end snapshot dates...")
     asof = _period_end_dates(ti, freq)
     anchor = anchor.merge(asof, on=["ticker", "date"], how="left")
@@ -583,9 +641,13 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
     dataset = dataset.merge(profiles, on="ticker", how="left")
 
     # Re-cast numeric columns (merge can introduce object dtypes)
-    for col in ["open", "high", "low", "close", "volume"] + ti_cols + aa_cols + fund_cols:
+    for col in ["open", "high", "low", "close", "volume"] + ti_cols + aa_cols + fund_cols + MARKET_FEATURES:
         if col in dataset.columns:
             dataset[col] = pd.to_numeric(dataset[col], errors="coerce")
+
+    # Market regime as-of period-end (VIX + S&P500), PIT
+    print("Joining market features (as-of)...")
+    dataset = _merge_market(dataset, market, asof)
 
     # Derived features
     print("Computing derived features...")

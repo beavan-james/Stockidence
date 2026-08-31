@@ -67,6 +67,8 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_insider_sentiment": [("ticker", "VARCHAR"), ("year", "INTEGER"), ("month", "INTEGER")],
     "raw_recommendation_trends": [("ticker", "VARCHAR"), ("period", "DATE")],
     "raw_peers": [("ticker", "VARCHAR")],
+    # market-wide index series from FRED — keyed (series, date), not per ticker
+    "raw_fred_market": [("series", "VARCHAR"), ("date", "DATE")],
 }
 
 
@@ -95,6 +97,12 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("ticker", "VARCHAR"), ("date", "DATE"),
         ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
         ("volume", "DOUBLE"), ("return_1d", "DOUBLE"),
+    ],
+    # typed FRED values: raw's "value" is a string (and "." is the missing
+    # sentinel); staging casts to DOUBLE and keeps only numeric observations.
+    # The PK is (series, date) — market-wide, not per ticker.
+    "stg_fred_market": [
+        ("series", "VARCHAR"), ("date", "DATE"), ("value", "DOUBLE"),
     ],
 }
 
@@ -130,6 +138,16 @@ MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("min_252", "DOUBLE"), ("max_252", "DOUBLE"), ("mean_252", "DOUBLE"),
         ("stddev_252", "DOUBLE"), ("variance_252", "DOUBLE"), ("max_drawdown_252", "DOUBLE"),
         ("min_all", "DOUBLE"), ("max_all", "DOUBLE"), ("mean_all", "DOUBLE"),
+    ],
+    # market-wide regime table (no ticker): VIX + S&P500 levels with
+    # close-to-close momentum over the horizons the dataset snapshots as-of.
+    # NULL before the series' history (S&P500 starts ~2016 on FRED).
+    "m_fred_market": [
+        ("date", "DATE"),
+        ("spx", "DOUBLE"), ("vix", "DOUBLE"),
+        ("spx_ret_5d", "DOUBLE"), ("spx_ret_21d", "DOUBLE"), ("spx_ret_63d", "DOUBLE"),
+        ("spx_ret_126d", "DOUBLE"), ("spx_ret_252d", "DOUBLE"),
+        ("vix_chg_5d", "DOUBLE"), ("vix_chg_21d", "DOUBLE"),
     ],
 }
 
@@ -262,7 +280,9 @@ class Warehouse:
                 )
             for table, keys in STAGING_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
-                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                # staging PK = the first two declared columns: (ticker, date)
+                # for bars, (series, date) for the market-wide FRED table.
+                pk = ", ".join(f'"{name}"' for name, _ in keys[:2])
                 con.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS staging."{table}" (
@@ -273,7 +293,11 @@ class Warehouse:
                 )
             for table, keys in MART_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
-                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                if "ticker" in {name for name, _ in keys}:
+                    pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                else:
+                    # market-wide table (m_fred_market): one row per date
+                    pk = f'"{keys[0][0]}"'
                 con.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS mart."{table}" (

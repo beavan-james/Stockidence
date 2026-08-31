@@ -4,6 +4,7 @@
 *Refreshed daily via scheduled Dagster jobs, independent of ticker activity.*
 
 - **Commodities** — one table, key `(nominal, date)` — gold/silver spot prices (monthly)
+- **Market indexes** — `raw_fred_market`, key `(series, date)` — CBOE VIX (`VIXCLS`, full history) and S&P 500 price index (`SP500`, ~10y daily per S&P licensing), landed daily from FRED; typed in `stg_fred_market`, aggregated into `m_fred_market` (levels + close-to-close momentum over 5/21/63/126/252d). Serves the ML model datasets as point-in-time market-regime features (daily)
 - **Macro indicators** — one table, key `(indicator, date)` — CPI, unemployment, fed funds, natural gas, inflation, real GDP (one row per indicator/date rather than a separate table per series) (monthly)
 - **Top Gainers/Losers** — own table, key `(ticker, date)` (weekdays)
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
@@ -33,7 +34,7 @@
 Monthly: Commodities (AV), Macro indicators (AV), Stock Symbol (FH)
 Weekly: n/a
 Weekdays: IPO Calendar (FH), Earnings Calendar (FH), Top Gainers/Losers (AV)
-Daily: Market News (AV)
+Daily: Market News (AV), Market Indexes (FRED)
 
 On Stock Lookup (Everytime): Quote (FH), Time Series (TD)
 On Stock Lookup (If stale): Company Profile 2 (FH), Basic Financials (FH), Financials As Reported (FH), Insider Sentiment (FH), Recommendation Trends (FH), EPS Surprises (FH), Peers (FH), Earnings Call Transcript (AV)
@@ -46,6 +47,7 @@ flowchart TD
     AV(["Alpha Vantage"])
     FH(["Finnhub"])
     TD(["Twelve Data"])
+    FRED(["FRED"])
 
     subgraph ORCH["Dagster orchestration"]
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
@@ -60,7 +62,7 @@ flowchart TD
     end
 
     subgraph RAW["raw layer — landed API responses · doubles as staleness-aware cache"]
-        R_PERS["Commodities · macro · top gainers/losers · IPO & earnings calendars<br/>raw_news_articles · news_ticker_sentiment"]
+        R_PERS["Commodities · macro · top gainers/losers · IPO & earnings calendars<br/>raw_news_articles · news_ticker_sentiment · raw_fred_market (VIX · S&P 500)"]
         R_PRC["Price history daily · quotes · company profile 2<br/>basic & as-reported financials · EPS surprises · transcripts<br/>insider sentiment · rec trends · peers"]
     end
 
@@ -87,7 +89,8 @@ flowchart TD
     GATE -->|"stale → fetch"| AV
     GATE -->|"stale → fetch"| FH
     GATE -->|"stale → fetch"| TD
-    AV & FH & TD -->|"land responses"| RAW
+    GATE -->|"stale → fetch"| FRED
+    AV & FH & TD & FRED -->|"land responses"| RAW
     RUN -->|"land responses"| RAW
 
     RAW -->|"load / unnest / type"| STG

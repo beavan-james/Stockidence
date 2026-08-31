@@ -90,6 +90,13 @@ _(Marked "(not used)" when the endpoint has no ingestion path; see API.md for sa
 **Beta** (Basic Financials)
 **Advanced Analytics / BBANDS / ATR** (derived in mart from daily bars, not API calls)
 
+### Market Regime (ML model features — not deterministic scorer inputs)
+**VIX (`VIXCLS`) / S&P 500 (`SP500`)** — FRED daily indexes, landed to
+`raw_fred_market` and aggregated into `m_fred_market` (levels + momentum).
+Read as point-in-time market-regime features by the ML model datasets
+(`Model/build_dataset.py`). They are **not** inputs to the deterministic
+confidence score below.
+
 ---
 ## Scoring
 

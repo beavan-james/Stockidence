@@ -683,6 +683,33 @@ persisted to `raw_gainers_losers` keyed `(ticker, date)`.
 }
 ```
 
+### Market Indexes — VIX / S&P 500 (FRED)
+
+Daily market-wide index series, one call per series, landed to
+`raw_fred_market` keyed `(series, date)`, typed in `stg_fred_market` (value
+cast to DOUBLE; `"."` missing observations dropped), and aggregated into
+`m_fred_market` (levels + close-to-close momentum). Read as point-in-time
+market-regime features by the ML model datasets — not inputs to the
+deterministic scorer.
+
+- `series_id` — `VIXCLS` (CBOE VIX close, since 1990) or `SP500` (S&P 500 price index, ~10y daily history per S&P licensing).
+- `observations` — Array of observations.
+- `realtime_start` / `realtime_end` — Revision window; market series are never revised.
+- `date` — Observation date (the row key — the fetch date is never used, keeping the data point-in-time).
+- `value` — STRING; `"."` marks a missing observation (filtered out at staging).
+
+```json
+{
+    "realtime_start": "2026-08-27",
+    "realtime_end": "2026-08-27",
+    "date": "2026-08-27",
+    "value": "14.51"
+}
+```
+
+> FRED hands the key over the query string (`api_key`) rather than a header;
+> the client redacts it from error messages.
+
 ### News & Sentiments (Alpha Vantage)
 
 ```json

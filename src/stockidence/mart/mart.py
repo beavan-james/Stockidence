@@ -381,6 +381,47 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
     return len(rows)
 
 
+def rebuild_fred_market(warehouse: Warehouse) -> int:
+    """Market-regime mart table: VIX + S&P500 levels and close-to-close
+    momentum over the horizons the ML dataset snapshots as-of a period end.
+
+    PIT-safe by construction: every value on a row is known as of that date
+    (FRED market series publish after the session close). `LAG` measures
+    returns over trading days — a holiday gap just spans a few calendar days.
+    NULLs where a series has no history yet (S&P500 starts ~2016 on FRED).
+    Market-wide: full rebuild each run from the staged rows.
+    """
+    with warehouse.connect() as con:
+        con.execute("DELETE FROM mart.m_fred_market")
+        con.execute(
+            """
+            INSERT INTO mart.m_fred_market
+                (date, spx, vix, spx_ret_5d, spx_ret_21d, spx_ret_63d,
+                 spx_ret_126d, spx_ret_252d, vix_chg_5d, vix_chg_21d)
+            WITH levels AS (
+                SELECT
+                    date,
+                    MAX(CASE WHEN series = 'SP500'  THEN value END) AS spx,
+                    MAX(CASE WHEN series = 'VIXCLS' THEN value END) AS vix
+                FROM staging.stg_fred_market
+                GROUP BY date
+            )
+            SELECT
+                date, spx, vix,
+                spx  / LAG(spx, 5)   OVER (ORDER BY date) - 1 AS spx_ret_5d,
+                spx  / LAG(spx, 21)  OVER (ORDER BY date) - 1 AS spx_ret_21d,
+                spx  / LAG(spx, 63)  OVER (ORDER BY date) - 1 AS spx_ret_63d,
+                spx  / LAG(spx, 126) OVER (ORDER BY date) - 1 AS spx_ret_126d,
+                spx  / LAG(spx, 252) OVER (ORDER BY date) - 1 AS spx_ret_252d,
+                vix  - LAG(vix, 5)   OVER (ORDER BY date) AS vix_chg_5d,
+                vix  - LAG(vix, 21)  OVER (ORDER BY date) AS vix_chg_21d
+            FROM levels
+            ORDER BY date
+            """
+        )
+        return con.execute("SELECT COUNT(*) FROM mart.m_fred_market").fetchone()[0]
+
+
 def rebuild_all_for_ticker(warehouse: Warehouse, ticker: str) -> dict[str, int]:
     """Run every staging & mart derivation for one ticker in dependency order."""
     return {
