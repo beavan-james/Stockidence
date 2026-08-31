@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from stockidence.ingest.engine import IngestEngine, _PRICE_BACKFILL_DAYS
 from stockidence.ingest.endpoints import on_demand_endpoints
+from stockidence.ingest.engine import _PRICE_BACKFILL_DAYS, IngestEngine
 from stockidence.mart.mart import rebuild_all_for_ticker
 from stockidence.storage import Warehouse
 
@@ -62,7 +62,7 @@ SPECIAL_ENDPOINTS = {"earnings_call_transcript"}
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def main() -> None:
@@ -141,7 +141,7 @@ def main() -> None:
         print(f"\n{len(errors)} errors:")
         for ticker, ep, msg in errors:
             print(f"  {ticker}/{ep}: {msg[:100]}")
-    print(f"\nDone. All tickers ingested and derived tables rebuilt.")
+    print("\nDone. All tickers ingested and derived tables rebuilt.")
 
 
 if __name__ == "__main__":

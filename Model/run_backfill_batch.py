@@ -10,15 +10,16 @@ Usage:
 """
 
 from __future__ import annotations
-from stockidence.storage import Warehouse
-from stockidence.mart.mart import rebuild_all_for_ticker
-from stockidence.ingest.engine import IngestEngine, _PRICE_BACKFILL_DAYS
-from stockidence.ingest.endpoints import on_demand_endpoints
 
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+from stockidence.ingest.endpoints import on_demand_endpoints
+from stockidence.ingest.engine import _PRICE_BACKFILL_DAYS, IngestEngine
+from stockidence.mart.mart import rebuild_all_for_ticker
+from stockidence.storage import Warehouse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -32,7 +33,7 @@ SPECIAL_ENDPOINTS = {"earnings_call_transcript"}
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def main() -> None:

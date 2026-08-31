@@ -1,12 +1,8 @@
 # Notes about Model Fitting
 
-## Error list
-  LULU/prices.daily: The read operation timed out
-  DEO/prices.daily: peer closed connection without sending complete message body (incomplete chunked read)
-
 ## Dataset Ticker List
 
-**Universe: 188 tickers**, 2011-08 → 2026-07,
+**Universe: 286 tickers**, 2011-08 → 2026-07, 45,000+ rows at monthly grain
 
 ```
 AAPL ABBV ABNB ADBE ADM ADP AEP AIAI AIG ALL AMAT AMBP AMD AMGN AMT AMZN ANET APD APP ASML
@@ -18,24 +14,12 @@ MDLZ MDT MET META MLM MO MPC MRK MS MSFT MU NBIS NEE NEM NFLX NKE NOC NOW NUE NV
 O ORCL OXY PANW PEP PFE PG PLD PLTR PM PNC PPG PRU PSA PSX PYPL QCOM RSG RTX RY
 SBUX SCHW SHOP SHW SLB SO SPG SQ SRE T TD TGT TJX TMO TMUS TRV TSLA TXN UAL UBER
 UNH UNP UPS USB V VALE VLO VMC VRTX VZ WELL WM WMB WMT XEL XOM YUM ZTS
- "MCK", "CAH", "LUV", "F", "CRWD", "FTNT", "SNOW", "LULU", "STZ", "DEO"
-```
-
-**Sector Breakdown (100 Additions)**
-
-`* **Technology & Semiconductors (15):** ADI, CDNS, DDOG, HPE, HPQ, MCHP, MPWR, NET, NTAP, ON, SNPS, TEAM, WDC, WDAY, ZS`
-`* **Financials & Insurance (15):** ACGL, AJG, AON, BK, BLK, CBOE, COF, DFS, HIG, ICE, MMC, RJF, SPGI, STT, TROW`
-* **Healthcare & MedTech (15):** A, BDX, BIIB, BSX, CNC, DXCM, EW, HCA, IQV, MRNA, MTD, REGN, SYK, TECH, WAT
-* **Industrials & Transportation (15):** CARR, CMI, CNI, CP, CSX, FAST, GWW, JCI, NSC, ODFL, OTIS, PCAR, PH, TDG, TT
-* **Consumer Discretionary (15):** AZO, BKNG, BURL, CCL, DPZ, DRI, EXPE, HAS, NCLH, ORLY, RCL, ROST, TSCO, ULTA, WSM
-* **Consumer Staples (10):** CHD, CL, CLX, GIS, HSY, K, KHC, KR, MNST, SYY
-* **Energy, Materials & Real Estate/Utilities (15):** ALB, AVB, CCI, CF, CTVA, DLR, ED, EQR, EQT, OKE, PEG, STLD, TRGP, VICI, WEC
-
-**Combined 100 Ticker Space-Separated List**
-
-```
-A ACGL ADI AJG ALB AON AVB AZO BDX BIIB BK BKNG BLK BSX BURL CARR CBOE CCI CCL CDNS CF CHD CL CLX CMI CNC CNI COF CP CSX CTVA DDOG DFS DLR DPZ DRI DXCM ED EQR EQT EW EXPE FAST GIS GWW HAS HCA HIG HPE HPQ HSY ICE IQV JCI K KHC KR MCHP MMC MNST MPWR MRNA MTD NCLH NET NSC NTAP ODFL OKE ON ORLY OTIS PCAR PEG PH RCL REGN RJF ROST SNPS SPGI STLD STT SYK SYY TDG TEAM TECH TRGP TROW TSCO TT ULTA VICI WAT WDC WDAY WEC WSM ZS
-
+MCK CAH LUV F CRWD FTNT SNOW LULU STZ DEO A ACGL ADI AJG ALB AON AVB AZO 
+BDX BIIB BK BKNG BLK BSX BURL CARR CBOE CCI CCL CDNS CF CHD CL CLX CMI CNC CNI COF 
+CP CSX CTVA DDOG DLR DPZ DRI DXCM ED EQR EQT EW EXPE FAST GIS GWW HAS HCA HIG HPE 
+HPQ HSY ICE IQV JCI KHC KR MCHP MMC MNST MPWR MRNA MTD NCLH NET NSC NTAP ODFL OKE 
+ON ORLY OTIS PCAR PEG PH RCL REGN RJF ROST SNPS SPGI STLD STT SYK SYY TDG TEAM TECH 
+TRGP TROW TSCO TT ULTA VICI WAT WDC WDAY WEC WSM ZS
 ```
 
 ## Goals
@@ -56,7 +40,7 @@ A ACGL ADI AJG ALB AON AVB AZO BDX BIIB BK BKNG BLK BSX BURL CARR CBOE CCI CCL C
 
 - Noticing some improvements after switching to a quarterly model and increasing the dataset size to 120 tickers. Will continue to increase dataset size to around 500 tickers and then re-run training. Seems like between various models (XGBoost, Ridge Regression, etc.) XGBoost is performing the best and holds a higher rank IC however directional accuracy is sitting at/below the market baseline so clearly needs more work. Will continue to experiment with various features and models.
 
-- Likely need to do some feature testing. Make sure features are not too colinear.
+- Current direction --> Expanding dataset to 288 tickers and then re-run training. Ideally looking to see better results especially from the monthly/weekly datasets. Quarterly is more so dominated by market trends and less so by individual ticker performance so I'd like to slowly move away.
 
 ## Dataset
 

@@ -24,13 +24,14 @@ Output: Model/train_dataset.parquet (monthly) / train_dataset_{freq}.parquet
 """
 
 from __future__ import annotations
-from stockidence.storage import Warehouse
 
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from stockidence.storage import Warehouse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -71,7 +72,8 @@ FUNDAMENTAL_FEATURES = [
     "fcf_to_assets",  # (ocf - capex) / total_assets
 ]
 
-ALL_FEATURES = TI_FEATURES + AA_FEATURES + FUNDAMENTAL_FEATURES + MARKET_FEATURES
+ALL_FEATURES = TI_FEATURES + AA_FEATURES + \
+    FUNDAMENTAL_FEATURES + MARKET_FEATURES
 
 # ── Quarterly-specific feature set ─────────────────────────────────────────────
 # The quarterly dataset uses macro-scale momentum + fundamental velocity instead
@@ -89,13 +91,15 @@ QUARTERLY_AA_FEATURES = [
 # Static fundamentals + quarter-over-quarter change (velocity). Trees see
 # "ROE rose from 5% to 15%" rather than just a static level.
 CHG_FEATURES = ["roe", "roa", "fcf_to_assets", "debt_equity"]
-QUARTERLY_FUND_FEATURES = FUNDAMENTAL_FEATURES + [f"{c}_chg_qoq" for c in CHG_FEATURES]
+QUARTERLY_FUND_FEATURES = FUNDAMENTAL_FEATURES + \
+    [f"{c}_chg_qoq" for c in CHG_FEATURES]
 
 QUARTERLY_PRICE_FEATURES = [
     "price_to_sma200", "stddev_252", "max_drawdown_252", "atr_pct",
     "return_3m", "return_12m", "distance_from_52wk_high",
 ]
-QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + QUARTERLY_FUND_FEATURES + MARKET_FEATURES
+QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + \
+    QUARTERLY_FUND_FEATURES + MARKET_FEATURES
 
 # Categorical features are merged per ticker (not snapshot per period).
 CATEGORICAL_FEATURES = ["sector"]
@@ -175,7 +179,8 @@ def _load_price(wh: Warehouse, freq: str = "monthly") -> pd.DataFrame:
                 con,
             )
         base["date"] = pd.to_datetime(base["date"])
-        base["label"] = base["date"].dt.to_period("Q").dt.start_time.dt.normalize()
+        base["label"] = base["date"].dt.to_period(
+            "Q").dt.start_time.dt.normalize()
         df = (
             base.groupby(["ticker", "label"], as_index=False)
             .agg(
@@ -406,7 +411,8 @@ def _merge_market(dataset: pd.DataFrame, market: pd.DataFrame, asof: pd.DataFram
         right_on="date",
         direction="backward",
     )
-    joined = joined[["ticker", "label"] + MARKET_FEATURES].rename(columns={"label": "date"})
+    joined = joined[["ticker", "label"] +
+                    MARKET_FEATURES].rename(columns={"label": "date"})
     return dataset.merge(joined, on=["ticker", "date"], how="left")
 
 
@@ -427,7 +433,8 @@ def _load_company_profile(wh: Warehouse) -> pd.DataFrame:
 
     records = []
     for ticker, payload_str in rows:
-        payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
+        payload = json.loads(payload_str) if isinstance(
+            payload_str, str) else payload_str
         industry = payload.get("finnhubIndustry")
         records.append({"ticker": ticker, "sector": SECTOR_MAP.get(industry)})
 
@@ -451,14 +458,24 @@ def _pit_join_fundamentals(
         return monthly
 
     financials = financials.dropna(subset=["filed_date"]).copy()
-    financials = financials.sort_values(["ticker", "filed_date"])
 
-    # Use merge_asof: for each row, find the latest filing <= period-end
+    # Standardize join date precision across both DataFrames
+    monthly = monthly.copy()
+    monthly["date"] = pd.to_datetime(monthly["date"]).astype("datetime64[ns]")
+    financials["filed_date"] = pd.to_datetime(
+        financials["filed_date"]).astype("datetime64[ns]")
+
+    # Prepare right dataframe and rename join column
     fin_cols = ["ticker", "filed_date"] + fund_cols
+    fin_df = financials[fin_cols].rename(columns={"filed_date": "date"})
+
+    # Sort required for pd.merge_asof
+    monthly = monthly.sort_values("date")
+    fin_df = fin_df.sort_values("date")
+
     result = pd.merge_asof(
-        monthly.sort_values("date"),
-        financials[fin_cols].rename(
-            columns={"filed_date": "date"}).sort_values("date"),
+        monthly,
+        fin_df,
         on="date",
         by="ticker",
         direction="backward",
@@ -514,7 +531,8 @@ def _snapshot_daily(
         by="ticker",
         direction="backward",
     )
-    res = res[["ticker", "label"] + feature_cols].rename(columns={"label": "date"})
+    res = res[["ticker", "label"] +
+              feature_cols].rename(columns={"label": "date"})
     return res
 
 
@@ -605,7 +623,8 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
 
     print("Loading financials...")
     fins = _load_financials(wh)
-    print(f"  {len(fins)} quarterly reports, {fins['ticker'].nunique()} tickers")
+    print(
+        f"  {len(fins)} quarterly reports, {fins['ticker'].nunique()} tickers")
 
     print("Loading company profiles (sector)...")
     profiles = _load_company_profile(wh)
@@ -613,7 +632,8 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
 
     print("Loading market series (VIX / S&P 500)...")
     market = _load_market(wh)
-    print(f"  {len(market)} daily rows, {market['date'].min().date()} → {market['date'].max().date()}")
+    print(
+        f"  {len(market)} daily rows, {market['date'].min().date()} → {market['date'].max().date()}")
 
     print("Computing period-end snapshot dates...")
     asof = _period_end_dates(ti, freq)
@@ -680,7 +700,8 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Build the ML training dataset.")
+    parser = argparse.ArgumentParser(
+        description="Build the ML training dataset.")
     parser.add_argument(
         "--freq",
         choices=["monthly", "weekly", "quarterly"],

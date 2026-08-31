@@ -14,7 +14,7 @@ on-demand ingestion pipeline (prices, fundamentals, news, etc.).
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Add repo root to path so we can import stockidence
@@ -33,7 +33,7 @@ NEW_TICKERS = ["UNH", "CAT", "NEE", "AMT", "BRK-B", "LIN"]
 
 def main() -> None:
     wh = Warehouse()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # 1. Delete price watermarks so existing tickers get re-fetched
     #    with the new 5500-day lookback (Phase 1a).
