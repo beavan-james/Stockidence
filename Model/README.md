@@ -1,15 +1,41 @@
 # Notes about Model Fitting
 
+## Error list
+  LULU/prices.daily: The read operation timed out
+  DEO/prices.daily: peer closed connection without sending complete message body (incomplete chunked read)
+
 ## Dataset Ticker List
 
-**Universe: 123 tickers**, 2011-08 → 2026-07, ~21.3k month-rows:
+**Universe: 188 tickers**, 2011-08 → 2026-07,
 
 ```
-AAPL ABBV ADBE ADP AIG ALL AMBP AMD AMGN AMT AMZN ANET APP AVGO AXP BAC BE BKR BMY BRK.B BX C CAT CI CME COP
-COST CRM CSCO CTAS CVS CVX DE DHR DIS DKNG DUK EBAY ELV EMR EOG ETN FCX FDX FI GD GE GILD GOOGL GS HAL HD HLT
-HON IBM INTC INTU ISRG ITW JNJ JPM KDP KMB KMI KO LIN LLY LMT LOW MA MAR MCD MDLZ MDT MET META MPC MRK MS
-MSFT MU NBIS NEE NKE NOC NOW NVDA ORCL OXY PANW PFE PG PLD PLTR PNC PRU PSX QCOM RSG RTX SBUX SCHW SHW SLB
-TGT TJX TMO TMUS TRV TXN UNH UNP UPS USB V VLO VRTX WM WMB WMT XOM YUM ZTS
+AAPL ABBV ABNB ADBE ADM ADP AEP AIAI AIG ALL AMAT AMBP AMD AMGN AMT AMZN ANET APD APP ASML
+AVGO AXP BAC BBY BE BKR BMY BRK-B BX C CAT CB CI CMCSA CME CMG COP COST CRM CSCO
+CTAS CVS CVX CZR D DAL DE DHI DHR DIS DKNG DOW DUK DVN EBAY ECL ELV EMR EOG EQIX
+ERIC ETN EXC FCX FDX FI GD GE GILD GM GOOGL GPN GS HAL HD HLT HON HUM IBM INTC
+INTU ISRG ITW JNJ JPM KDP KLAC KMB KMI KO LEN LIN LLY LMT LOW LRCX MA MAR MCD MCO
+MDLZ MDT MET META MLM MO MPC MRK MS MSFT MU NBIS NEE NEM NFLX NKE NOC NOW NUE NVDA
+O ORCL OXY PANW PEP PFE PG PLD PLTR PM PNC PPG PRU PSA PSX PYPL QCOM RSG RTX RY
+SBUX SCHW SHOP SHW SLB SO SPG SQ SRE T TD TGT TJX TMO TMUS TRV TSLA TXN UAL UBER
+UNH UNP UPS USB V VALE VLO VMC VRTX VZ WELL WM WMB WMT XEL XOM YUM ZTS
+ "MCK", "CAH", "LUV", "F", "CRWD", "FTNT", "SNOW", "LULU", "STZ", "DEO"
+```
+
+**Sector Breakdown (100 Additions)**
+
+`* **Technology & Semiconductors (15):** ADI, CDNS, DDOG, HPE, HPQ, MCHP, MPWR, NET, NTAP, ON, SNPS, TEAM, WDC, WDAY, ZS`
+`* **Financials & Insurance (15):** ACGL, AJG, AON, BK, BLK, CBOE, COF, DFS, HIG, ICE, MMC, RJF, SPGI, STT, TROW`
+* **Healthcare & MedTech (15):** A, BDX, BIIB, BSX, CNC, DXCM, EW, HCA, IQV, MRNA, MTD, REGN, SYK, TECH, WAT
+* **Industrials & Transportation (15):** CARR, CMI, CNI, CP, CSX, FAST, GWW, JCI, NSC, ODFL, OTIS, PCAR, PH, TDG, TT
+* **Consumer Discretionary (15):** AZO, BKNG, BURL, CCL, DPZ, DRI, EXPE, HAS, NCLH, ORLY, RCL, ROST, TSCO, ULTA, WSM
+* **Consumer Staples (10):** CHD, CL, CLX, GIS, HSY, K, KHC, KR, MNST, SYY
+* **Energy, Materials & Real Estate/Utilities (15):** ALB, AVB, CCI, CF, CTVA, DLR, ED, EQR, EQT, OKE, PEG, STLD, TRGP, VICI, WEC
+
+**Combined 100 Ticker Space-Separated List**
+
+```
+A ACGL ADI AJG ALB AON AVB AZO BDX BIIB BK BKNG BLK BSX BURL CARR CBOE CCI CCL CDNS CF CHD CL CLX CMI CNC CNI COF CP CSX CTVA DDOG DFS DLR DPZ DRI DXCM ED EQR EQT EW EXPE FAST GIS GWW HAS HCA HIG HPE HPQ HSY ICE IQV JCI K KHC KR MCHP MMC MNST MPWR MRNA MTD NCLH NET NSC NTAP ODFL OKE ON ORLY OTIS PCAR PEG PH RCL REGN RJF ROST SNPS SPGI STLD STT SYK SYY TDG TEAM TECH TRGP TROW TSCO TT ULTA VICI WAT WDC WDAY WEC WSM ZS
+
 ```
 
 ## Goals
@@ -29,6 +55,8 @@ TGT TJX TMO TMUS TRV TXN UNH UNP UPS USB V VLO VRTX WM WMB WMT XOM YUM ZTS
 - Another thing to note is that the training issues could also be due to the fact that the model is trying to predict next month returns which is more susceptible to outside noise as supposed to the more common predicting next day returns. (Will test a weekly and quarterly model to see if this amends the issue at all.)
 
 - Noticing some improvements after switching to a quarterly model and increasing the dataset size to 120 tickers. Will continue to increase dataset size to around 500 tickers and then re-run training. Seems like between various models (XGBoost, Ridge Regression, etc.) XGBoost is performing the best and holds a higher rank IC however directional accuracy is sitting at/below the market baseline so clearly needs more work. Will continue to experiment with various features and models.
+
+- Likely need to do some feature testing. Make sure features are not too colinear.
 
 ## Dataset
 
