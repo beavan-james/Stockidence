@@ -30,3 +30,6 @@ packages = ["src/stockidence"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.dagster]
+module_name = "stockidence.definitions"

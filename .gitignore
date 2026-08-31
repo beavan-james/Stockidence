@@ -11,7 +11,7 @@ __pycache__/
 .tmp_dagster_home_*/
 Jupyter/
 *.ipynb_checkpoints
-*.ipynb
 tests/
 frontend/
-Model/
+src/dagster_home/
+ViewSchemas.ipynb

@@ -1,9 +1,9 @@
-# Stockidence — Stock Confidence Rating Pipeline
+# Stockidence
 --- 
 ## What this is
 
 A **stock confidence rating pipeline**. The scoring logic is
-relatively deterministic — the focus is on the data ingestion and the app
+relatively deterministic, the focus is on the data ingestion and the app
 itself rather than the algorithm. The scoring layer has since been
 **backtested point-in-time and recalibrated once** on that evidence (see
 [Backtesting & Validation](#backtesting--validation)).
