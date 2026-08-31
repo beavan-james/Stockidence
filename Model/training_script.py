@@ -1,35 +1,26 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import RidgeCV
+from sklearn.metrics import r2_score
 
+data = pd.read_parquet('train_dataset.parquet')
 
-class RidgeRegression:
-    def __init__(self, alpha=1.0):
-        self.alpha = alpha
-        self.w = None  # Weights (coefficients)
-        self.b = None  # Intercept (bias)
+X = data.data
+y = data.target
 
-    def fit(self, X, y):
-        # 1. Convert inputs to NumPy arrays
-        X = np.asarray(X)
-        y = np.asarray(y)
-        n_samples, n_features = X.shape
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=21)
 
-        # 2. Add a column of ones to X to handle the intercept (bias)
-        X_bias = np.hstack([np.ones((n_samples, 1)), X])
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
-        # 3. Create the modified Identity matrix (do not penalize the intercept)
-        I = np.identity(n_features + 1)
-        I[0, 0] = 0  # Set the top-left element to 0 for the bias term
+ridge_cv = RidgeCV(alphas=[0.1, 1.0, 10.0], cv=5)
+ridge_cv.fit(X_train_scaled, y_train)
 
-        # 4. Solve the adjusted normal equation
-        # We use np.linalg.solve instead of inv() for better numerical stability
-        A = X_bias.T @ X_bias + self.alpha * I
-        b_vec = X_bias.T @ y
-        beta = np.linalg.solve(A, b_vec)
+y_pred = ridge_cv.predict(X_test_scaled)
 
-        # 5. Separate intercept and weights
-        self.b = beta[0]
-        self.w = beta[1:]
-
-    def predict(self, X):
-        X = np.asarray(X)
-        return X @ self.w + self.b
+print("Best alpha selected:", ridge_cv.alpha_)
+print("Model score (R^2):", r2_score(y_test, y_pred))
