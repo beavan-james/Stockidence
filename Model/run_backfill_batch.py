@@ -10,6 +10,10 @@ Usage:
 """
 
 from __future__ import annotations
+from stockidence.storage import Warehouse
+from stockidence.mart.mart import rebuild_all_for_ticker
+from stockidence.ingest.engine import IngestEngine, _PRICE_BACKFILL_DAYS
+from stockidence.ingest.endpoints import on_demand_endpoints
 
 import sys
 import time
@@ -18,13 +22,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from stockidence.ingest.endpoints import on_demand_endpoints
-from stockidence.ingest.engine import IngestEngine, _PRICE_BACKFILL_DAYS
-from stockidence.mart.mart import rebuild_all_for_ticker
-from stockidence.storage import Warehouse
 
 BATCH_TICKERS = [
-    "DAL", "UAL", "PEP", "DHI", "TSLA", "GM", "ADM", "LEN", "MCO", "CMG",
+
 ]
 
 SKIP_ENDPOINTS = {"quote", "ticker_news"}
@@ -43,7 +43,7 @@ def main() -> None:
     endpoints = [ep for ep in on_demand_endpoints()
                  if ep.name not in SKIP_ENDPOINTS]
 
-    print(f"Ingesting batch-1: {len(BATCH_TICKERS)} new tickers "
+    print(f"Ingesting current batch: {len(BATCH_TICKERS)} tickers "
           f"x {len(endpoints)} endpoints", flush=True)
     print(f"Price backfill lookback: {_PRICE_BACKFILL_DAYS} days", flush=True)
 
@@ -78,7 +78,8 @@ def main() -> None:
                 print(f"  {ep.name:30s} ERROR    {msg[:80]}", flush=True)
                 errors.append((ticker, ep.name, msg))
                 if "rate limit" in msg.lower():
-                    print(f"  -> RATE LIMITED on {ticker}/{ep.name}. Stopping.", flush=True)
+                    print(
+                        f"  -> RATE LIMITED on {ticker}/{ep.name}. Stopping.", flush=True)
                     raise SystemExit(1)
 
         total_calls += ticker_calls
@@ -89,10 +90,11 @@ def main() -> None:
         print(f"  -> derived: {counts}", flush=True)
 
         if i < len(BATCH_TICKERS):
-            time.sleep(2)
+            time.sleep(0.01)
 
     print(f"\n{'='*60}", flush=True)
-    print(f"Batch complete: {total_calls} API calls, {total_rows} rows", flush=True)
+    print(
+        f"Batch complete: {total_calls} API calls, {total_rows} rows", flush=True)
     if errors:
         print(f"\n{len(errors)} errors:", flush=True)
         for t, ep, msg in errors:

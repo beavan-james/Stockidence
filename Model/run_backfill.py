@@ -45,6 +45,10 @@ ALL_TICKERS = [
     "T", "VZ", "CMCSA", "NFLX",
     # Batch 1 — diverse new coverage (airlines, homebuilders, autos, agri, intermedia, restaurants)
     "DAL", "UAL", "PEP", "DHI", "TSLA", "GM", "ADM", "LEN", "MCO", "CMG",
+    # Batch 2 — geography + sector diversity (4 foreign issuers, tobacco, insurance, managed care, retail, gaming)
+    "TD", "RY", "VALE", "ERIC", "PM", "MO", "BBY", "CB", "HUM", "CZR",
+    # Batch 3 — semis-equipment (incl. foreign) + payments + consumer internet platforms
+    "ASML", "AMAT", "LRCX", "KLAC", "UBER", "ABNB", "SHOP", "PYPL", "SQ", "GPN",
 ]
 
 # Skip the hot-path quote endpoint — not needed for backfill.
