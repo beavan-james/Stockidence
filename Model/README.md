@@ -1,5 +1,20 @@
 # Notes about Model Fitting
 
+## Building the training dataset
+
+`build_dataset.py` now restricts every load to a **curated training universe**,
+independent of the full ingestion universe (the warehouse may hold the whole
+S&P 500 for on-demand scoring while the model trains on a smaller, cleaner set):
+
+```
+python Model/build_dataset.py --freq quarterly --tickers AAPL,MSFT,NVDA
+python Model/build_dataset.py --freq quarterly --tickers-file Model/training_universe.txt
+```
+
+Set `TRAIN_TICKERS` at the top of the file for a default; no flag = every ticker
+in the warehouse. This is a training-time filter — the ingest/mart layers stay
+broad so the production scorer can rank any ticker against its date cohort.
+
 ## Dataset Ticker List
 
 **Universe: 286 tickers**, 2011-08 → 2026-07, 45,000+ rows at monthly grain
@@ -20,7 +35,32 @@ CP CSX CTVA DDOG DLR DPZ DRI DXCM ED EQR EQT EW EXPE FAST GIS GWW HAS HCA HIG HP
 HPQ HSY ICE IQV JCI KHC KR MCHP MMC MNST MPWR MRNA MTD NCLH NET NSC NTAP ODFL OKE 
 ON ORLY OTIS PCAR PEG PH RCL REGN RJF ROST SNPS SPGI STLD STT SYK SYY TDG TEAM TECH 
 TRGP TROW TSCO TT ULTA VICI WAT WDC WDAY WEC WSM ZS
+ABT, ACN, "ADSK", "AEE", "AES", "AFL", "AIZ", "AKAM", "ALGN", "ALLE",
+"AMCR", "AME", "AMP", "AOS", "APA", "APH", "APO", "APTV", "ARE", "ARES",
+"ATO", "AVY", "AWK", "AXON", "BA", "BALL", "BAX", "BEN", "BF-B", "BG",
+"BLDR", "BR", "BRO", "BXP", "CAG", "CBRE", "CDW", "CEG", "CFG", "CHRW",
+"CHTR", "CIEN", "CINF", "CMS", "CNP", "COIN", "COO", "COR", "CPAY", "CPB",
+"CPRT", "CPT", "CRH", "CRL", "CSGP", "CTRA", "CTSH", "CVNA", "DD", "DECK",
+"DELL", "DG", "DGX", "DLTR", "DOC", "DOV", "DTE", "DVA", "EA", "EFX",
+"EG", "EL", "EME", "EPAM", "ERIE", "ES", "ESS", "ETR", "EVRG", "EXE",
+"EXPD", "EXR", "FANG", "FDS", "FE", "FFIV", "FICO", "FIS", "FISV", "FITB",
+"FIX", "FOX", "FOXA", "FRT", "FSLR", "FTV", "GEHC", "GEN", "GEV", "GL",
+"GLW", "GNRC", "GOOG", "GPC", "GRMN", "HBAN", "HII", "HOLX", "HOOD", "HRL",
+"HST", "HUBB", "HWM", "IBKR", "IDXX", "IEX", "IFF", "INCY", "INVH", "IP",
+"IR", "IRM", "IT", "IVZ", "J", "JBHT", "JBL", "JKHY", "KEY", "KEYS",
+"KIM", "KKR", "KVUE", "L", "LDOS", "LH", "LHX", "LII", "LNT", "LVS",
+"LW", "LYB", "LYV", "MAA", "MAS", "MGM", "MKC", "MMM", "MOH", "MOS",
+"MRO", "MRSH", "MSCI", "MSI", "MTB", "MTCH", "NDAQ", "NDSN", "NI", "NRG",
+"NTRS", "NVR", "NWS", "NWSA", "NXPI", "OMC", "PAYC", "PAYX", "PCG", "PFG",
+"PGR", "PHM", "PKG", "PNR", "PNW", "PODD", "POOL", "PPL", "PSKY", "PTC",
+"PWR", "Q", "RDDT", "REG", "RF", "RL", "RMD", "ROK", "ROL", "ROP",
+"RVTY", "SBAC", "SJM", "SMCI", "SNA", "SNDK", "SOLV", "STE", "STX", "SW",
+"SWK", "SWKS", "SYF", "TAP", "TDY", "TEL", "TER", "TFC", "TKO", "TPL",
+"TPR", "TRMB", "TSN", "TTD", "TTWO", "TXT", "TYL", "UDR", "UHS", "URI",
+"VLTO", "VRSK", "VRSN", "VST", "VTR", "VTRS", "WAB", "WBD", "WRB", "WST",
+"WTW", "WY", "WYNN", "XYL", "XYZ", "ZBH", "ZBRA"
 ```
+
 
 ## Goals
 
@@ -31,6 +71,12 @@ TRGP TROW TSCO TT ULTA VICI WAT WDC WDAY WEC WSM ZS
 - Test: All tickers, all months after cutoff (Jan. 2024)
 
 - Models: Ridge Regression (L2 penalty) and Gradient Boosted Trees (separate models, ridge regression is the secondary model and can be used for feature inference)
+
+- Make output more sophisticated than just a single predicted return value. Can output expected short-term, mid-term, long-term returns along with price prediction and confidence intervals. This will allow for more sophisticated decision making and risk management.
+
+- Split into two models. Already saw good results with stock ranking though not as good with actual return/directional prediction so can focus one model on that and another on simply giving fair value and other statistics for the to interpret.
+
+- Production model: `Model/production_ranking_model.ipynb` — XGBoost `rank:ndcg` on the quarterly grain, walk-forward validated. Optimizes the head of the ranking (top-10/top-25/top-quintile) rather than pooled return accuracy, which is what the screening product needs. Saves `Model/artifacts/ranking_ndcg.{json,meta.json}` for the service layer. Walk-forward results (26 quarters, 2019→2025): top-10 excess +3.27 pp/qtr (t=1.39), top-25 +3.37 (t=2.09), top-quintile +3.54 (t=2.44), precision@10 19.2% (random 6.6%), top-20 vs S&P +3.76 pp/qtr (73% of quarters). The average is inflated by 2020 (+29.6pp Q2 outlier = ~65% of total excess); excluding 2020 the edge is ~+1.5 pp/qtr — real but modest and regime-dependent.
 
 ## Roadblocks
 
@@ -52,7 +98,7 @@ TRGP TROW TSCO TT ULTA VICI WAT WDC WDAY WEC WSM ZS
 
 `features` - Notice the feature list does not include any news or sentiment features. This is due to not being able to pull news and sentiment data more than 1 year back. To avoid having a sparse dataset, the model only uses technical features. The plan is to either add news and sentiment weighting to the model down the road or create a separate model for news and sentiment features.
 
-Feature additions: sector/industry, VIX index, S&P 500 index, Russel 2000 index, 
+Feature additions: lagged features, rolling stastics, feature scaling
 
 ## Measures
 

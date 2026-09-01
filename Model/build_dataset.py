@@ -72,8 +72,22 @@ FUNDAMENTAL_FEATURES = [
     "fcf_to_assets",  # (ocf - capex) / total_assets
 ]
 
+# ── Rolling return-distribution statistics (computed per ticker, PIT) ────────
+# Computed on the period-grain close series after assembly; each row uses only
+# closes through its own period-end (no lookahead). Window is in periods.
+ROLLING_RET_WINDOW = {"weekly": 52, "monthly": 12, "quarterly": 12}
+ROLLING_BETA_WINDOW = {"weekly": 104, "monthly": 24, "quarterly": 24}
+ROLLING_FEATURES = [
+    "roll_sharpe",        # trailing mean/std of period returns (annualized)
+    "roll_skew",          # trailing skewness of period returns
+    "roll_kurt",          # trailing excess kurtosis (fat-tail regime)
+    "roll_downside_dev",  # std of negative period returns (semi-deviation)
+    "roll_var95",         # 5% historical VaR of period returns (loss tail)
+    "roll_beta",          # trailing beta of name vs S&P500 period returns
+]
+
 ALL_FEATURES = TI_FEATURES + AA_FEATURES + \
-    FUNDAMENTAL_FEATURES + MARKET_FEATURES
+    FUNDAMENTAL_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
 
 # ── Quarterly-specific feature set ─────────────────────────────────────────────
 # The quarterly dataset uses macro-scale momentum + fundamental velocity instead
@@ -99,10 +113,17 @@ QUARTERLY_PRICE_FEATURES = [
     "return_3m", "return_12m", "distance_from_52wk_high",
 ]
 QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + \
-    QUARTERLY_FUND_FEATURES + MARKET_FEATURES
+    QUARTERLY_FUND_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
 
 # Categorical features are merged per ticker (not snapshot per period).
 CATEGORICAL_FEATURES = ["sector"]
+
+# ── Training universe ────────────────────────────────────────────────────────────
+# The curated universe the dataset is built for. The warehouse may hold a much
+# wider ingestion universe (e.g. the full S&P 500); this restricts every load
+# to the names the model should actually be trained on. Override at runtime
+# with `--tickers` / `--tickers-file`. None = use every ticker in the warehouse.
+TRAIN_TICKERS: list[str] | None = None
 
 # Finnhub `finnhubIndustry` → coarse GICS-like sector. Finnhub returns 33
 # granular industries; grouping to ~11 sectors keeps tree splits from
@@ -157,26 +178,41 @@ SECTOR_MAP = {
 
 # ── Data loading helpers ────────────────────────────────────────────────────────
 
-def _load_price(wh: Warehouse, freq: str = "monthly") -> pd.DataFrame:
+def _ticker_filter(tickers: list[str] | None) -> tuple[str, list[str]]:
+    """SQL WHERE fragment + params restricting a query to the training universe.
+
+    Returns ("", []) when the universe is unrestricted so existing callers run
+    unchanged. Unsafe characters don't matter: values are passed as query
+    parameters, never interpolated.
+    """
+    if not tickers:
+        return "", []
+    placeholders = ", ".join("?" for _ in tickers)
+    return f"WHERE ticker IN ({placeholders})", list(tickers)
+
+
+def _load_price(wh: Warehouse, freq: str = "monthly",
+                tickers: list[str] | None = None) -> pd.DataFrame:
     """Load anchor OHLCV bars labeled at period start (mart convention).
 
     Weekly/monthly come straight from the mart; quarterly is resampled from
     the monthly bars (close = last month's end-of-month close).
     """
+    where, params = _ticker_filter(tickers)
     if freq in ("weekly", "monthly"):
         table = f"mart.m_prices_{freq}"
         with wh.connect(read_only=True) as con:
             df = pd.read_sql(
                 f"SELECT ticker, date, open, high, low, close, volume "
-                f"FROM {table} ORDER BY ticker, date",
-                con,
+                f"FROM {table} {where} ORDER BY ticker, date",
+                con, params=params,
             )
     elif freq == "quarterly":
         with wh.connect(read_only=True) as con:
             base = pd.read_sql(
-                "SELECT ticker, date, open, high, low, close, volume "
-                "FROM mart.m_prices_monthly ORDER BY ticker, date",
-                con,
+                f"SELECT ticker, date, open, high, low, close, volume "
+                f"FROM mart.m_prices_monthly {where} ORDER BY ticker, date",
+                con, params=params,
             )
         base["date"] = pd.to_datetime(base["date"])
         base["label"] = base["date"].dt.to_period(
@@ -201,13 +237,15 @@ def _load_price(wh: Warehouse, freq: str = "monthly") -> pd.DataFrame:
     return df
 
 
-def _load_technical_indicators(wh: Warehouse, feature_cols: list[str] | None = None) -> pd.DataFrame:
+def _load_technical_indicators(wh: Warehouse, feature_cols: list[str] | None = None,
+                              tickers: list[str] | None = None) -> pd.DataFrame:
     """Load daily technical indicators."""
     cols = feature_cols if feature_cols is not None else TI_FEATURES
+    where, params = _ticker_filter(tickers)
     with wh.connect(read_only=True) as con:
         sql_cols = ["ticker", "date"] + cols
-        sql = f"SELECT {', '.join(sql_cols)} FROM mart.m_technical_indicators ORDER BY ticker, date"
-        df = pd.read_sql(sql, con)
+        sql = f"SELECT {', '.join(sql_cols)} FROM mart.m_technical_indicators {where} ORDER BY ticker, date"
+        df = pd.read_sql(sql, con, params=params)
     df["date"] = pd.to_datetime(df["date"])
     for col in cols:
         if col in df.columns:
@@ -215,13 +253,15 @@ def _load_technical_indicators(wh: Warehouse, feature_cols: list[str] | None = N
     return df
 
 
-def _load_advanced_analytics(wh: Warehouse, feature_cols: list[str] | None = None) -> pd.DataFrame:
+def _load_advanced_analytics(wh: Warehouse, feature_cols: list[str] | None = None,
+                            tickers: list[str] | None = None) -> pd.DataFrame:
     """Load daily advanced analytics."""
     cols = feature_cols if feature_cols is not None else AA_FEATURES
+    where, params = _ticker_filter(tickers)
     with wh.connect(read_only=True) as con:
         sql_cols = ["ticker", "date", "close"] + cols
-        sql = f"SELECT {', '.join(sql_cols)} FROM mart.m_advanced_analytics ORDER BY ticker, date"
-        df = pd.read_sql(sql, con)
+        sql = f"SELECT {', '.join(sql_cols)} FROM mart.m_advanced_analytics {where} ORDER BY ticker, date"
+        df = pd.read_sql(sql, con, params=params)
     df["date"] = pd.to_datetime(df["date"])
     for col in ["close"] + cols:
         if col in df.columns:
@@ -229,13 +269,15 @@ def _load_advanced_analytics(wh: Warehouse, feature_cols: list[str] | None = Non
     return df
 
 
-def _load_financials(wh: Warehouse) -> pd.DataFrame:
+def _load_financials(wh: Warehouse, tickers: list[str] | None = None) -> pd.DataFrame:
     """Load PIT financials and extract key metrics from the payload JSON."""
     import json
 
+    where, params = _ticker_filter(tickers)
     with wh.connect(read_only=True) as con:
         rows = con.execute(
-            "SELECT ticker, year, quarter, payload FROM raw.raw_financials_reported"
+            f"SELECT ticker, year, quarter, payload FROM raw.raw_financials_reported {where}",
+            params,
         ).fetchall()
 
     # XBRL concept aliases per metric, in precedence order. Covers:
@@ -416,7 +458,7 @@ def _merge_market(dataset: pd.DataFrame, market: pd.DataFrame, asof: pd.DataFram
     return dataset.merge(joined, on=["ticker", "date"], how="left")
 
 
-def _load_company_profile(wh: Warehouse) -> pd.DataFrame:
+def _load_company_profile(wh: Warehouse, tickers: list[str] | None = None) -> pd.DataFrame:
     """Load the coarse sector label per ticker from raw_company_profile.
 
     Finnhub classifies each company with a granular `finnhubIndustry`;
@@ -426,9 +468,11 @@ def _load_company_profile(wh: Warehouse) -> pd.DataFrame:
     """
     import json
 
+    where, params = _ticker_filter(tickers)
     with wh.connect(read_only=True) as con:
         rows = con.execute(
-            "SELECT ticker, payload FROM raw.raw_company_profile"
+            f"SELECT ticker, payload FROM raw.raw_company_profile {where}",
+            params,
         ).fetchall()
 
     records = []
@@ -586,6 +630,135 @@ def _add_quarterly_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# ── Rolling return-distribution statistics ─────────────────────────────────────
+
+def _rolling_sharpe(ret: pd.Series, win: int, periods_per_year: float,
+                    min_periods: int | None = None) -> pd.Series:
+    """Trailing mean/std ratio of period returns, annualized."""
+    mp = min_periods or max(3, win // 2)
+    m = ret.rolling(win, min_periods=mp).mean()
+    s = ret.rolling(win, min_periods=mp).std(ddof=0)
+    return (m / s.replace(0, np.nan) * np.sqrt(periods_per_year))
+
+
+def _rolling_skew(ret: pd.Series, win: int,
+                  min_periods: int | None = None) -> pd.Series:
+    """Trailing skewness (Fisher-Pearson, sample) of period returns."""
+    mp = min_periods or max(4, win // 2)
+    return ret.rolling(win, min_periods=mp).skew()
+
+
+def _rolling_kurt(ret: pd.Series, win: int,
+                  min_periods: int | None = None) -> pd.Series:
+    """Trailing excess kurtosis of period returns; NaN until enough obs."""
+    mp = min_periods or max(4, win // 2)
+    return ret.rolling(win, min_periods=mp).kurt()
+
+
+def _rolling_downside_dev(ret: pd.Series, win: int,
+                          min_periods: int | None = None) -> pd.Series:
+    """Semi-deviation: std of only the non-positive period returns."""
+    # A window rarely holds a full `win` of non-positive returns, so keep the
+    # required count modest (the stat is a tail measure, not a density estimate).
+    mp = min_periods or max(3, win // 4)
+    neg = ret.where(ret <= 0)
+    return neg.rolling(win, min_periods=mp).std(ddof=0)
+
+
+def _rolling_var95(ret: pd.Series, win: int,
+                   min_periods: int | None = None) -> pd.Series:
+    """5% historical VaR: negative of the 5th percentile of period returns."""
+    mp = min_periods or max(5, win // 2)
+    return -ret.rolling(win, min_periods=mp).quantile(0.05)
+
+
+def _rolling_beta(name_ret: pd.Series, mkt_ret: pd.Series, win: int,
+                  min_periods: int | None = None) -> pd.Series:
+    """Trailing beta = cov(name, market)/var(market) over a rolling window."""
+    mp = min_periods or max(10, win // 2)
+    cov = name_ret.rolling(win, min_periods=mp).cov(mkt_ret)
+    varr = mkt_ret.rolling(win, min_periods=mp).var(ddof=0)
+    return cov / varr.replace(0, np.nan)
+
+
+def _market_period_returns(market: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """Resample the daily S&P500 level to per-period returns.
+
+    Returns a DataFrame keyed by (period label) with the market's period
+    return, so each ticker row can align market returns to its own close
+    period without lookahead (only closes through the period belong to it).
+    """
+    s = market[["date", "spx"]].dropna(subset=["spx"]).copy()
+    s["date"] = pd.to_datetime(s["date"])
+    s = s.sort_values("date")
+    # label each daily obs with its period bucket, as in _period_end_dates
+    if freq == "weekly":
+        s["label"] = (s["date"] - pd.to_timedelta(s["date"].dt.weekday, unit="D"))
+    elif freq == "monthly":
+        s["label"] = s["date"].dt.to_period("M").dt.start_time.dt.normalize()
+    else:  # quarterly
+        s["label"] = s["date"].dt.to_period("Q").dt.start_time.dt.normalize()
+
+    # period close = last trading day's spx level in the bucket
+    per = (s.groupby("label")["spx"]
+             .last()
+             .sort_index()
+             .pct_change()
+             .rename("mkt_ret"))
+    return per.reset_index()
+
+
+def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame,
+                       freq: str) -> pd.DataFrame:
+    """Compute trailing return-distribution + beta features per ticker.
+
+    Runs on the per-grain close series AFTER the base/derived features are in
+    the frame, so each row carries only its own history through the period-end
+    close — PIT-correct, mirroring return_3m / max_drawdown_252.
+
+    Distribution stats come from the name's own period returns; beta is the
+    rolling cov/var of the name vs the S&P500 period return (aligned on the
+    same period bucket, so there is no lookahead).
+    """
+    ppy = {"weekly": 52, "monthly": 12, "quarterly": 4}[freq]
+    win = ROLLING_RET_WINDOW.get(freq, 12)
+    bwin = ROLLING_BETA_WINDOW.get(freq, 24)
+
+    d = df.copy().sort_values(["ticker", "date"]).reset_index(drop=True)
+    d["_ret"] = d.groupby("ticker")["close"].pct_change()
+
+    # per-period market returns aligned to the same period bucket
+    mkt = _market_period_returns(market, freq)
+    if freq == "weekly":
+        d["_label"] = (d["date"] - pd.to_timedelta(d["date"].dt.weekday, unit="D"))
+    elif freq == "monthly":
+        d["_label"] = d["date"].dt.to_period("M").dt.start_time.dt.normalize()
+    else:
+        d["_label"] = d["date"].dt.to_period("Q").dt.start_time.dt.normalize()
+    d = d.merge(mkt, left_on="_label", right_on="label", how="left")
+
+    out = np.full(len(d), np.nan)
+    for col, fn in {
+        "roll_sharpe": lambda r: _rolling_sharpe(r, win, ppy),
+        "roll_skew": lambda r: _rolling_skew(r, win),
+        "roll_kurt": lambda r: _rolling_kurt(r, win),
+        "roll_downside_dev": lambda r: _rolling_downside_dev(r, win),
+        "roll_var95": lambda r: _rolling_var95(r, win),
+    }.items():
+        buf = np.full(len(d), np.nan)
+        for _, sub in d.groupby("ticker"):
+            buf[sub.index] = fn(sub["_ret"]).to_numpy()
+        d[col] = buf
+
+    buf = np.full(len(d), np.nan)
+    for _, sub in d.groupby("ticker"):
+        buf[sub.index] = _rolling_beta(sub["_ret"], sub["mkt_ret"], bwin).to_numpy()
+    d["roll_beta"] = buf
+
+    d = d.drop(columns=["_ret", "_label", "label", "mkt_ret"])
+    return d
+
+
 # ── Target variable ─────────────────────────────────────────────────────────────
 
 def _add_target(df: pd.DataFrame) -> pd.DataFrame:
@@ -597,9 +770,19 @@ def _add_target(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Main ────────────────────────────────────────────────────────────────────────
 
-def build_dataset(freq: str = "monthly") -> pd.DataFrame:
-    """Build the full training dataset for one bar frequency."""
+def build_dataset(freq: str = "monthly",
+                  tickers: list[str] | None = None) -> pd.DataFrame:
+    """Build the full training dataset for one bar frequency.
+
+    `tickers` restricts every load to the curated training universe; None
+    falls back to TRAIN_TICKERS, then to every ticker in the warehouse.
+    """
     wh = Warehouse()
+
+    if tickers is None:
+        tickers = TRAIN_TICKERS
+    n_ticker = len(tickers) if tickers else "ALL"
+    print(f"Training universe: {n_ticker} ticker(s)\n")
 
     # Quarterly uses its own feature set (macro momentum + fundamental
     # velocity); weekly/monthly keep the 14-day indicator set.
@@ -610,24 +793,24 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
         ti_cols, aa_cols, fund_cols = TI_FEATURES, AA_FEATURES, FUNDAMENTAL_FEATURES
 
     print(f"Loading price ({freq})...")
-    anchor = _load_price(wh, freq)
+    anchor = _load_price(wh, freq, tickers)
     print(f"  {len(anchor)} rows, {anchor['ticker'].nunique()} tickers")
 
     print("Loading technical indicators...")
-    ti = _load_technical_indicators(wh, ti_cols)
+    ti = _load_technical_indicators(wh, ti_cols, tickers)
     print(f"  {len(ti)} daily rows")
 
     print("Loading advanced analytics...")
-    aa = _load_advanced_analytics(wh, aa_cols)
+    aa = _load_advanced_analytics(wh, aa_cols, tickers)
     print(f"  {len(aa)} daily rows")
 
     print("Loading financials...")
-    fins = _load_financials(wh)
+    fins = _load_financials(wh, tickers)
     print(
         f"  {len(fins)} quarterly reports, {fins['ticker'].nunique()} tickers")
 
     print("Loading company profiles (sector)...")
-    profiles = _load_company_profile(wh)
+    profiles = _load_company_profile(wh, tickers)
     print(f"  {len(profiles)} tickers")
 
     print("Loading market series (VIX / S&P 500)...")
@@ -678,6 +861,10 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
         dataset = _add_derived_features(dataset)
         feat_names = ALL_FEATURES
 
+    # Rolling return-distribution statistics + beta (PIT, per ticker)
+    print("Computing rolling stats & beta...")
+    dataset = _add_rolling_stats(dataset, market, freq)
+
     # Target
     print("Adding target variable...")
     dataset = _add_target(dataset)
@@ -700,6 +887,9 @@ def build_dataset(freq: str = "monthly") -> pd.DataFrame:
 if __name__ == "__main__":
     import argparse
 
+    def _split_tickers(arg: str) -> list[str]:
+        return [t.strip() for t in arg.split(",") if t.strip()]
+
     parser = argparse.ArgumentParser(
         description="Build the ML training dataset.")
     parser.add_argument(
@@ -708,9 +898,35 @@ if __name__ == "__main__":
         default="monthly",
         help="bar frequency of the dataset (default: monthly)",
     )
+    parser.add_argument(
+        "--tickers",
+        type=_split_tickers,
+        default=None,
+        help="comma-separated training universe, e.g. 'AAPL,MSFT,NVDA' "
+             "(overrides TRAIN_TICKERS constant)",
+    )
+    parser.add_argument(
+        "--tickers-file",
+        type=Path,
+        default=None,
+        help="path to a newline- or comma-separated ticker list for the "
+             "training universe (overrides TRAIN_TICKERS constant)",
+    )
     args = parser.parse_args()
 
-    dataset = build_dataset(freq=args.freq)
+    tickers = None
+    if args.tickers and args.tickers_file:
+        parser.error("provide either --tickers or --tickers-file, not both")
+    if args.tickers_file:
+        tickers = [
+            t.strip() for t in args.tickers_file.read_text()
+            .replace(",", "\n").splitlines()
+            if t.strip()
+        ]
+    elif args.tickers:
+        tickers = args.tickers
+
+    dataset = build_dataset(freq=args.freq, tickers=tickers)
     out_path = Path(__file__).parent / (
         "train_dataset.parquet"
         if args.freq == "monthly"

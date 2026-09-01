@@ -25,7 +25,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 BATCH_TICKERS = [
-
+    "HOLX", "CRTA",
+    "IR", "IRM", "IT", "IVZ", "J", "JBHT", "JBL", "JKHY", "KEY", "KEYS",
+    "KIM", "KKR", "KVUE", "L", "LDOS", "LH", "LHX", "LII", "LNT", "LVS",
+    "LW", "LYB", "LYV", "MAA", "MAS", "MGM", "MKC", "MMM", "MOH", "MOS",
+    "MRO", "MRSH", "MSCI", "MSI", "MTB", "MTCH", "NDAQ", "NDSN", "NI", "NRG",
+    "NTRS", "NVR", "NWS", "NWSA", "NXPI", "OMC", "PAYC", "PAYX", "PCG", "PFG",
+    "PGR", "PHM", "PKG", "PNR", "PNW", "PODD", "POOL", "PPL", "PSKY", "PTC",
+    "PWR", "Q", "RDDT", "REG", "RF", "RL", "RMD", "ROK", "ROL", "ROP",
+    "RVTY", "SBAC", "SJM", "SMCI", "SNA", "SNDK", "SOLV", "STE", "STX", "SW",
+    "SWK", "SWKS", "SYF", "TAP", "TDY", "TEL", "TER", "TFC", "TKO", "TPL",
+    "TPR", "TRMB", "TSN", "TTD", "TTWO", "TXT", "TYL", "UDR", "UHS", "URI",
+    "VLTO", "VRSK", "VRSN", "VST", "VTR", "VTRS", "WAB", "WBD", "WRB", "WST",
+    "WTW", "WY", "WYNN", "XYL", "XYZ", "ZBH", "ZBRA"
 ]
 
 SKIP_ENDPOINTS = {"quote", "ticker_news"}
