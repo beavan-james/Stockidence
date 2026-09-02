@@ -7,8 +7,8 @@ independent of the full ingestion universe (the warehouse may hold the whole
 S&P 500 for on-demand scoring while the model trains on a smaller, cleaner set):
 
 ```
-python Model/build_dataset.py --freq quarterly --tickers AAPL,MSFT,NVDA
-python Model/build_dataset.py --freq quarterly --tickers-file Model/training_universe.txt
+python Model/scripts/build_dataset.py --freq quarterly --tickers AAPL,MSFT,NVDA
+python Model/scripts/build_dataset.py --freq quarterly --tickers-file Model/training_universe.txt
 ```
 
 Set `TRAIN_TICKERS` at the top of the file for a default; no flag = every ticker
@@ -17,7 +17,7 @@ broad so the production scorer can rank any ticker against its date cohort.
 
 ## Dataset Ticker List
 
-**Universe: 286 tickers**, 2011-08 → 2026-07, 45,000+ rows at monthly grain
+**Universe: 520 tickers**, 2011-08 → 2026-07, 1,841,414+ rows at daily grain
 
 ```
 AAPL ABBV ABNB ADBE ADM ADP AEP AIAI AIG ALL AMAT AMBP AMD AMGN AMT AMZN ANET APD APP ASML
@@ -45,12 +45,12 @@ ABT, ACN, "ADSK", "AEE", "AES", "AFL", "AIZ", "AKAM", "ALGN", "ALLE",
 "EG", "EL", "EME", "EPAM", "ERIE", "ES", "ESS", "ETR", "EVRG", "EXE",
 "EXPD", "EXR", "FANG", "FDS", "FE", "FFIV", "FICO", "FIS", "FISV", "FITB",
 "FIX", "FOX", "FOXA", "FRT", "FSLR", "FTV", "GEHC", "GEN", "GEV", "GL",
-"GLW", "GNRC", "GOOG", "GPC", "GRMN", "HBAN", "HII", "HOLX", "HOOD", "HRL",
+"GLW", "GNRC", "GOOG", "GPC", "GRMN", "HBAN", "HII", "HOOD", "HRL",
 "HST", "HUBB", "HWM", "IBKR", "IDXX", "IEX", "IFF", "INCY", "INVH", "IP",
 "IR", "IRM", "IT", "IVZ", "J", "JBHT", "JBL", "JKHY", "KEY", "KEYS",
 "KIM", "KKR", "KVUE", "L", "LDOS", "LH", "LHX", "LII", "LNT", "LVS",
 "LW", "LYB", "LYV", "MAA", "MAS", "MGM", "MKC", "MMM", "MOH", "MOS",
-"MRO", "MRSH", "MSCI", "MSI", "MTB", "MTCH", "NDAQ", "NDSN", "NI", "NRG",
+"MRSH", "MSCI", "MSI", "MTB", "MTCH", "NDAQ", "NDSN", "NI", "NRG",
 "NTRS", "NVR", "NWS", "NWSA", "NXPI", "OMC", "PAYC", "PAYX", "PCG", "PFG",
 "PGR", "PHM", "PKG", "PNR", "PNW", "PODD", "POOL", "PPL", "PSKY", "PTC",
 "PWR", "Q", "RDDT", "REG", "RF", "RL", "RMD", "ROK", "ROL", "ROP",
@@ -76,7 +76,7 @@ ABT, ACN, "ADSK", "AEE", "AES", "AFL", "AIZ", "AKAM", "ALGN", "ALLE",
 
 - Split into two models. Already saw good results with stock ranking though not as good with actual return/directional prediction so can focus one model on that and another on simply giving fair value and other statistics for the to interpret.
 
-- Production model: `Model/production_ranking_model.ipynb` — XGBoost `rank:ndcg` on the quarterly grain, walk-forward validated. Optimizes the head of the ranking (top-10/top-25/top-quintile) rather than pooled return accuracy, which is what the screening product needs. Saves `Model/artifacts/ranking_ndcg.{json,meta.json}` for the service layer. Walk-forward results (26 quarters, 2019→2025): top-10 excess +3.27 pp/qtr (t=1.39), top-25 +3.37 (t=2.09), top-quintile +3.54 (t=2.44), precision@10 19.2% (random 6.6%), top-20 vs S&P +3.76 pp/qtr (73% of quarters). The average is inflated by 2020 (+29.6pp Q2 outlier = ~65% of total excess); excluding 2020 the edge is ~+1.5 pp/qtr — real but modest and regime-dependent.
+- Production model: `Model/notebooks/production_ranking_model.ipynb` — XGBoost `rank:ndcg` on the quarterly grain over a **core-13 raw feature set** (price_sma200/stddev/drawdown/atr/return_3m/return_12m/distance_from_52wk_high + roe/roa/debt_equity/current_ratio/cash_to_assets/fcf_to_assets + sector), walk-forward validated. An A/B on the broader universe showed the 40-feature engineered variant (vol-scaled momentum, `rk_*` cross-sectional ranks, `rel_*` momentum) *hurt* — halving pooled IC and top-10 excess — so the derived-numerator set was dropped. Optimizes the head of the ranking (top-10/top-25/top-quintile) rather than pooled return accuracy, which is what the screening product needs. Saves `Model/artifacts/ranking_ndcg.{json,meta.json}` for the service layer. Walk-forward results (26 quarters, 2019→2025, 357-ticker universe): rank IC +0.175, top-10 excess +3.13 pp/qtr (t=1.19), top-25 +4.56 (t=2.26), top-quintile +2.68 (t=2.24), precision@10 11.5% (random 3.6%), top-20 vs S&P +5.51 pp/qtr (73% of quarters).
 
 ## Roadblocks
 
@@ -90,7 +90,7 @@ ABT, ACN, "ADSK", "AEE", "AES", "AFL", "AIZ", "AKAM", "ALGN", "ALLE",
 
 ## Dataset
 
-**Dataset**: Model/train_dataset.parquet — 4136 rows × 33 columns, 27 tickers, 2011-2026
+**Dataset**: Model/datasets/train_dataset.parquet (daily), datasets/train_dataset_monthly.parquet, datasets/train_dataset_weekly.parquet, datasets/train_dataset_quarterly.parquet — full 520-ticker universe; `train_dataset_quarterly_curated.parquet` on the 125-ticker curated list
 **Feature columns**: sma_20, sma_50, sma_200, ema_12, ema_26, rsi_14, adx_14, atr_14, macd_hist, stoch_k_14, stoch_d_14, cci_20, stddev_252, max_drawdown_252, roe, roa, debt_equity, current_ratio, cash_to_assets, fcf, plus derived: price_to_sma20/50/200, atr_pct, fcf_yield
 **Target**: target_return (next-month close-to-close return)
 
