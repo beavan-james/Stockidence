@@ -393,6 +393,36 @@ class Warehouse:
                 ON CONFLICT (category) DO UPDATE SET weight = excluded.weight
                 """
             )
+            # Static model-ranking snapshot for the screening UI: one ranked
+            # cohort (rank, ticker, sector, score) per as_of quarter. Seeded
+            # once from Model/artifacts/latest_rankings.json while the table
+            # is empty; the future Dagster ranking job owns writes after that
+            # and this seed never clobbers its rows.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.model_rankings (
+                    as_of DATE NOT NULL,
+                    rank INTEGER NOT NULL,
+                    ticker VARCHAR NOT NULL,
+                    sector VARCHAR,
+                    score DOUBLE,
+                    PRIMARY KEY (as_of, ticker)
+                )
+                """
+            )
+            if con.execute("SELECT COUNT(*) FROM mart.model_rankings").fetchone()[0] == 0:
+                snapshot = _REPO_ROOT / "Model" / "artifacts" / "latest_rankings.json"
+                if snapshot.exists():
+                    payload = json.loads(snapshot.read_text())
+                    rows = [
+                        (payload["as_of"], r["rank"], r["ticker"], r.get("sector"), r.get("score"))
+                        for r in payload["items"]
+                    ]
+                    con.executemany(
+                        "INSERT INTO mart.model_rankings (as_of, rank, ticker, sector, score)"
+                        " VALUES (?, ?, ?, ?, ?)",
+                        rows,
+                    )
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).

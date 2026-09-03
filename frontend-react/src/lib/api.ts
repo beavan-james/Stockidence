@@ -50,6 +50,8 @@ export const client = {
 
   modelWeights: () => api<import("@/types/api").ModelWeight[]>("/api/model-weights"),
 
+  rankings: () => api<import("@/types/api").RankingsEnvelope>("/api/rankings"),
+
   componentSpec: () =>
     api<import("@/types/api").ComponentSpec>("/api/component-spec"),
 

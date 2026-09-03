@@ -111,6 +111,19 @@ export interface ModelWeight {
   weight: number;
 }
 
+export interface RankedTicker {
+  rank: number;
+  ticker: string;
+  sector: string | null;
+  score: number | null;
+}
+
+export interface RankingsEnvelope {
+  as_of: string;
+  universe_size: number;
+  items: RankedTicker[];
+}
+
 export interface ComponentSpecEntry {
   label: string;
   sources: string;

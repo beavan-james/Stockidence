@@ -12,7 +12,7 @@ Contracts carried over from the Reflex read path:
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..service import market, rating_service, sub_scores, warehouse
+from ..service import market, ranking, rating_service, sub_scores, warehouse
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
@@ -47,6 +47,12 @@ def get_quote(ticker: str) -> dict | None:
 def get_movers() -> dict:
     """Top gainers, losers, and most actively traded, with snapshot day."""
     return market.get_market_movers()
+
+
+@market_router.get("/rankings")
+def get_rankings() -> dict:
+    """Model ranking cohort for the latest quarter: rank/ticker/sector/score."""
+    return ranking.get_rankings()
 
 
 @market_router.get("/calendar/ipos")

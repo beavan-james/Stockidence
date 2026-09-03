@@ -19,6 +19,7 @@ import type {
   ModelWeight,
   NewsEnvelope,
   Quote,
+  RankingsEnvelope,
   Rating,
   RatingSource,
 } from "@/types/api";
@@ -54,6 +55,15 @@ export function useModelWeights() {
     queryKey: ["model-weights"],
     queryFn: () => client.modelWeights(),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useRankings() {
+  return useQuery<RankingsEnvelope>({
+    queryKey: ["rankings"],
+    queryFn: () => client.rankings(),
+    // Quarterly snapshot: refetch at most hourly.
+    staleTime: 60 * 60_000,
   });
 }
 

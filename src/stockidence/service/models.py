@@ -70,6 +70,22 @@ class BuyPlan:
 
 
 @dataclass(frozen=True)
+class RankedTicker:
+    rank: int
+    ticker: str
+    sector: str | None
+    score: float | None
+
+    def to_dict(self) -> dict:
+        return {
+            "rank": self.rank,
+            "ticker": self.ticker,
+            "sector": self.sector,
+            "score": round(self.score, 4) if self.score is not None else None,
+        }
+
+
+@dataclass(frozen=True)
 class Rating:
     ticker: str
     company_name: str
