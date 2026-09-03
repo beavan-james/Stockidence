@@ -796,12 +796,11 @@ def _add_target(df: pd.DataFrame, freq: str = "monthly",
     df = df.sort_values(["ticker", "date"])
     df["target_return"] = df.groupby("ticker")["close"].pct_change().shift(-1)
     if freq == "quarterly" and last_trade is not None:
-        fwd = df.groupby("ticker")["date"].shift(-1)
-        fwd_end = (fwd + pd.offsets.QuarterEnd()).dt.normalize()
+        own_end = (df["date"] + pd.offsets.QuarterEnd()).dt.normalize()
         lt = df[["ticker"]].merge(last_trade, on="ticker", how="left")
         closed = pd.to_datetime(lt["last_date"]) >= (
-            fwd_end - pd.Timedelta(days=5))
-        df.loc[fwd.notna() & ~closed, "target_return"] = np.nan
+            own_end - pd.Timedelta(days=5))
+        df.loc[~closed, "target_return"] = np.nan
     return df
 
 
