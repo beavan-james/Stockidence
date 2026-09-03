@@ -38,8 +38,8 @@
     "seed": 42,
     "nthread": -1
   },
-  "n_tickers": 357,
-  "n_rows": 14960,
+  "n_tickers": 377,
+  "n_rows": 15874,
   "date_range": [
     "2012-07-01",
     "2026-04-01"

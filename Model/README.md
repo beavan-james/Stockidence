@@ -1,5 +1,11 @@
 # Notes about Model Fitting
 
+## Key Notes
+
+The model is not a steady alpha generator. It is a **ranking model** and although it performs well it does carry momentum/risk issues.
+
+Key turning point was noticing that the model was predicting strong buy tickers correctly with some degree of success though not necessarily predicting the entire universe of tickers correctly. This was a good sign that the model was able to find some signal and would perform better when only looking at its top-ranked tickers. This is the main reason for the model being a ranking model rather than a regression model.
+
 ## Building the training dataset
 
 `build_dataset.py` now restricts every load to a **curated training universe**,

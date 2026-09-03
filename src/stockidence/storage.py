@@ -27,7 +27,10 @@ from typing import Any
 
 import duckdb
 
-DEFAULT_DB_PATH = os.environ.get("STOCKIDENCE_DB", "data/stockidence.duckdb")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DB_PATH = os.environ.get(
+    "STOCKIDENCE_DB", str(_REPO_ROOT / "data" / "stockidence.duckdb")
+)
 
 # artifact table -> key columns (name, duckdb type). payload + fetched_at are
 # appended to every table. Keys match the registry watermark/artifact names.
