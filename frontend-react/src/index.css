@@ -57,6 +57,17 @@ body {
     0 0 46px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
+/* Header nav links glow instead of a card-background hover */
+.nav-glow {
+  transition: color 0.25s ease, text-shadow 0.25s ease;
+}
+.nav-glow:hover {
+  color: var(--color-ink);
+  text-shadow:
+    0 0 14px color-mix(in srgb, var(--color-accent) 80%, transparent),
+    0 0 36px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
 /* --- Motion system (all disabled under prefers-reduced-motion) --- */
 
 /* Entrance: fade + rise, staggerable via inline animation-delay */

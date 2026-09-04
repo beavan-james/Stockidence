@@ -14,7 +14,7 @@ import { useEffect, useRef } from "react";
 const GRID =
   "linear-gradient(color-mix(in srgb, var(--color-accent) __ALPHA__%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-accent) __ALPHA__%, transparent) 1px, transparent 1px)";
 
-const HIGHLIGHT_RADIUS = 260;
+const HIGHLIGHT_RADIUS = 340;
 
 export function GridGlowBackground() {
   const highlightRef = useRef<HTMLDivElement | null>(null);
@@ -78,7 +78,7 @@ export function GridGlowBackground() {
         ref={highlightRef}
         className="absolute inset-0 will-change-[mask-image]"
         style={{
-          backgroundImage: GRID.replaceAll("__ALPHA__", "22"),
+          backgroundImage: GRID.replaceAll("__ALPHA__", "13"),
           backgroundSize: "32px 32px",
         }}
       />
