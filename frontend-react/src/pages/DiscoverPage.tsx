@@ -71,7 +71,7 @@ export function DiscoverPage() {
     );
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-12">
             <div className="flex items-baseline justify-between">
                 <h1 className="title-glow text-xl font-semibold tracking-tight">
                     Discover
@@ -84,21 +84,26 @@ export function DiscoverPage() {
             </div>
 
             {movers.data && (
-                <motion.div
+                <motion.section
                     variants={sectionVariants}
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, amount: 0.15 }}
                     transition={{ duration: 0.7, ease }}
-                    className="grid gap-4 lg:grid-cols-3"
+                    className="space-y-4 pt-4"
                 >
-                    <MoverTable title="Top gainers" rows={sortedGainers} />
-                    <MoverTable title="Top losers" rows={sortedLosers} />
-                    <MoverTable
-                        title="Most actively traded"
-                        rows={sortedActive}
-                    />
-                </motion.div>
+                    <h2 className="text-lg font-semibold tracking-tight">
+                        Daily Movement
+                    </h2>
+                    <div className="grid gap-4 lg:grid-cols-3">
+                        <MoverTable title="Top gainers" rows={sortedGainers} />
+                        <MoverTable title="Top losers" rows={sortedLosers} />
+                        <MoverTable
+                            title="Most actively traded"
+                            rows={sortedActive}
+                        />
+                    </div>
+                </motion.section>
             )}
 
             <motion.section
@@ -107,9 +112,9 @@ export function DiscoverPage() {
                 whileInView="visible"
                 viewport={{ once: true, amount: 0.15 }}
                 transition={{ duration: 0.7, ease, delay: 0.08 }}
-                className="space-y-3"
+                className="space-y-4 pt-4"
             >
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
+                <h2 className="text-lg font-semibold tracking-tight">
                     Economy &amp; commodities
                 </h2>
                 {macro.data && macro.data.length > 0 && (
@@ -126,7 +131,11 @@ export function DiscoverPage() {
                 whileInView="visible"
                 viewport={{ once: true, amount: 0.15 }}
                 transition={{ duration: 0.7, ease, delay: 0.16 }}
+                className="space-y-4 pt-4"
             >
+                <h2 className="text-lg font-semibold tracking-tight">
+                    News &amp; sentiment
+                </h2>
                 <NewsTable />
             </motion.section>
 
@@ -136,14 +145,19 @@ export function DiscoverPage() {
                 whileInView="visible"
                 viewport={{ once: true, amount: 0.15 }}
                 transition={{ duration: 0.7, ease, delay: 0.24 }}
-                className="grid gap-4 lg:grid-cols-2"
+                className="space-y-4 pt-4"
             >
-                {ipos.data && ipos.data.length > 0 && (
-                    <IpoCalendar listings={ipos.data} />
-                )}
-                {earnings.data && earnings.data.length > 0 && (
-                    <EarningsCalendar releases={earnings.data} />
-                )}
+                <h2 className="text-lg font-semibold tracking-tight">
+                    Calendars
+                </h2>
+                <div className="grid gap-4 lg:grid-cols-2">
+                    {ipos.data && ipos.data.length > 0 && (
+                        <IpoCalendar listings={ipos.data} />
+                    )}
+                    {earnings.data && earnings.data.length > 0 && (
+                        <EarningsCalendar releases={earnings.data} />
+                    )}
+                </div>
             </motion.section>
         </div>
     );

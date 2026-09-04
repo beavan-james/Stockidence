@@ -44,7 +44,6 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
 
   return (
     <div>
-      <h3 className="text-sm font-semibold tracking-tight">IPO calendar</h3>
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -113,7 +112,6 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
 
   return (
     <div>
-      <h3 className="text-sm font-semibold tracking-tight">Earnings calendar</h3>
       <motion.div
         variants={containerVariants}
         initial="hidden"

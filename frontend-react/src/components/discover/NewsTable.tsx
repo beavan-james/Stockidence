@@ -73,8 +73,7 @@ export function NewsTable() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold tracking-tight">News &amp; sentiment</h3>
-          <p className="mt-0.5 text-xs text-ink-muted">
+          <p className="text-xs text-ink-muted">
             {data ? `${data.total.toLocaleString()} articles` : "—"}
             {isFetching && !isLoading && " · loading…"}
           </p>

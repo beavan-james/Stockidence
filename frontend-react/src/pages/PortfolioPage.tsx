@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { HoldingSparkline } from "@/components/portfolio/HoldingSparkline";
 import { TickerAutocomplete } from "@/components/layout/TickerAutocomplete";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   addHolding,
@@ -83,9 +82,8 @@ function HoldingCard({ holding }: { holding: Holding }) {
   }
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-2">
+    <div className="space-y-3 border-b border-line/60 pb-4">
+      <div className="flex items-center justify-between gap-2">
           <Link
             to={`/stocks/${symbol}`}
             className="num text-sm font-semibold hover:text-accent"
@@ -175,8 +173,7 @@ function HoldingCard({ holding }: { holding: Holding }) {
             </dd>
           </dl>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
@@ -299,35 +296,30 @@ export function PortfolioPage() {
   const dayPnl = rows.reduce((s, r) => s + r.dayValue, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <h1 className="title-glow text-xl font-semibold tracking-tight">Portfolio</h1>
 
       <AddHoldingForm />
 
       {holdings.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-ink-muted">
-            Your portfolio is empty. Add a holding above to get started —
-            shares and avg cost are optional.
-          </CardContent>
-        </Card>
+        <p className="py-12 text-center text-sm text-ink-muted">
+          Your portfolio is empty. Add a holding above to get started —
+          shares and avg cost are optional.
+        </p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card>
-              <CardContent className="space-y-1 p-4">
+          <section className="space-y-4 pt-4">
+            <h2 className="text-lg font-semibold tracking-tight">Overview</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1 border-b border-line/60 pb-4">
                 <p className="text-xs text-ink-muted">Total value</p>
                 <p className="num text-xl font-semibold">{fmtMoney(totalValue, 0)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="space-y-1 p-4">
+              </div>
+              <div className="space-y-1 border-b border-line/60 pb-4">
                 <p className="text-xs text-ink-muted">Total P&amp;L</p>
                 <PnL value={totalCost > 0 ? totalPnl : null} pct={totalPnlPct} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="space-y-1 p-4">
+              </div>
+              <div className="space-y-1 border-b border-line/60 pb-4">
                 <p className="text-xs text-ink-muted">Day change</p>
                 <span
                   className={cn(
@@ -338,15 +330,13 @@ export function PortfolioPage() {
                   {dayPnl >= 0 ? "+" : ""}
                   {fmtMoney(dayPnl, 0)}
                 </span>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </div>
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Allocation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2.5 p-4 pt-0">
+          <section className="space-y-4 pt-4">
+            <h2 className="text-lg font-semibold tracking-tight">Allocation</h2>
+            <div className="space-y-2.5">
               {totalValue > 0 ? (
                 rows.map(({ holding, value }) => {
                   const pct = (value / totalValue) * 100;
@@ -372,14 +362,17 @@ export function PortfolioPage() {
                   Add shares and wait for live prices to see allocation.
                 </p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </section>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {holdings.map((h) => (
-              <HoldingCard key={h.symbol} holding={h} />
-            ))}
-          </div>
+          <section className="space-y-4 pt-4">
+            <h2 className="text-lg font-semibold tracking-tight">Holdings</h2>
+            <div className="grid gap-x-8 md:grid-cols-2 xl:grid-cols-3">
+              {holdings.map((h) => (
+                <HoldingCard key={h.symbol} holding={h} />
+              ))}
+            </div>
+          </section>
         </>
       )}
     </div>
