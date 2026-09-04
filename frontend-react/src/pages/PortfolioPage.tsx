@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
 import { HoldingSparkline } from "@/components/portfolio/HoldingSparkline";
+import { TickerAutocomplete } from "@/components/layout/TickerAutocomplete";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -194,13 +195,18 @@ function AddHoldingForm() {
     "rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none";
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap gap-2">
-      <input
-        type="text"
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-start gap-2">
+      <TickerAutocomplete
         value={symbol}
-        onChange={(e) => setSymbol(e.target.value)}
+        onValueChange={setSymbol}
+        onPick={(picked) => {
+          // Picking a suggestion fills the field without submitting, so
+          // shares/cost can still be entered before adding the holding.
+          setSymbol(picked);
+        }}
         placeholder="Ticker (e.g. AAPL)"
-        className={cn(inputCls, "w-36")}
+        ariaLabel="Holding ticker search"
+        className="w-56"
       />
       <input
         type="number"
