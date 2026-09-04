@@ -1,5 +1,10 @@
 # Model Overview
 ---
+> This spec governs the **deterministic per-ticker confidence score** (the
+> rating shown on ticker pages). The separate quarterly **ranking model**
+> that powers the website's Model screener is specified in
+> [`Model/README.md`](Model/README.md).
+---
 ## Categories
 
 | Category   | Description                                                                                                                   |

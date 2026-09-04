@@ -26,6 +26,10 @@ ticker:
   free-tier rate limits.
 - **Orchestration:** Dagster (assets/jobs), with incrementals load design
   driven by watermark-based staleness gates per (source, ticker, endpoint).
+  No sensors: the frontend launches the `refresh_tickers` job directly
+  (`POST /api/pipeline/refresh`), and a quarterly `quarterly_model_refresh`
+  job refreshes the universe, rebuilds the training dataset, and retrains
+  the ranking model.
 - **Warehouse:** DuckDB, three-layer schema `raw → staging → mart`.
 - **Caching:** staleness-aware cache in front of API calls; policy differs by
   data type (a quote is stale in minutes, an income statement in months).
@@ -67,6 +71,11 @@ and the evidence behind each revision.
 
 An LLM layer may be added *on top of* the deterministic score later for
 narrative analysis — it will never replace or obscure the deterministic core.
+
+Alongside the per-ticker rating, a quarterly **XGBoost `rank:ndcg` model**
+orders the whole universe by expected next-quarter return (ranking only, no
+price prediction). The website's Model page serves it from
+`mart.model_rankings`. See [`Model/README.md`](Model/README.md).
 
 ---
 ## Cadence is heterogeneous by design
@@ -157,3 +166,4 @@ Harness lives in `stockidence.backtest` / `backtest_metrics` /
 | `ARCHITECTURE.md` | Warehouse layers, watermark/staleness design, data flow diagram |
 | `API.md`          | Every endpoint used, grouped by scoring category, with JSON samples |
 | `MODEL.md`        | Scoring weights, sub-scores, fair-value & target-price methodology, thresholds |
+| `Model/README.md` | Ranking model spec, validation, quarterly refresh pipeline |

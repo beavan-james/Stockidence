@@ -909,3 +909,48 @@ Kept as reference; no ingestion path exists yet.
   "timezone": "America/New_York"
 }
 ```
+
+---
+
+## Our REST surface (FastAPI → SPA)
+
+Above is every *provider* endpoint the pipeline touches. These are the routes
+our own FastAPI layer (`src/stockidence/api/`) serves to the React SPA
+(`frontend-react/`, dev proxies `/api` → `:8000`). JSON samples as served.
+
+### Rankings (ranking model)
+
+`GET /api/rankings` — full ranked cohort for the latest quarter, read from
+`mart.model_rankings` (written by the quarterly DAG; static snapshot between
+refreshes). Scores are ordinal within-quarter ranks, not expected returns.
+
+```json
+{
+  "as_of": "2026-04-01",
+  "universe_size": 305,
+  "items": [
+    {"rank": 1, "ticker": "MRNA", "sector": "Healthcare", "score": 1.0055}
+  ]
+}
+```
+
+### Price history (portfolio graphs)
+
+`GET /api/prices/{ticker}?months=12` (1–120) — weekly closes ascending,
+from `mart.m_prices_weekly`. Empty list when the ticker has no bars.
+
+```json
+[{"date": "2026-06-08", "close": 291.13}]
+```
+
+### Pipeline trigger (push model)
+
+`POST /api/pipeline/refresh` with `{"tickers": ["AAPL"]}` — launches the
+`refresh_tickers` Dagster job over GraphQL. Returns `202` with the run id,
+`503` when the Dagster webserver is unreachable. Rating lookups call this
+fire-and-forget (per-ticker cooldown) instead of queueing for a sensor —
+there are no sensors; see `ARCHITECTURE.md`.
+
+```json
+{"run_id": "c09c66b8-b0f7-4c68-b8eb-4fe7248ea208", "tickers": ["AAPL"]}
+```
