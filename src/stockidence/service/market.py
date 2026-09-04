@@ -123,6 +123,74 @@ def get_price_history(ticker: str, months: int = 12) -> list[dict]:
     return [{"date": d, "close": _num(c)} for d, c in rows if c is not None]
 
 
+def get_technicals(ticker: str) -> dict | None:
+    """Latest raw technical statistics for a ticker — feeds the profile page.
+
+    Reads the newest row of mart.m_technical_indicators plus 52-week context
+    from mart.m_advanced_analytics. Raw values only (RSI, CCI, ...), no
+    scores. None when the warehouse is absent or the ticker has no row.
+    """
+    rows = _read(
+        """
+        SELECT date, sma_20, sma_50, sma_200, ema_12, ema_26,
+               macd, macd_signal, macd_hist, rsi_14, atr_14, adx_14,
+               plus_di_14, minus_di_14, stoch_k_14, stoch_d_14, cci_20,
+               ad, obv, bb_upper_20, bb_mid_20, bb_lower_20
+        FROM mart.m_technical_indicators
+        WHERE ticker = ?
+        ORDER BY date DESC LIMIT 1
+        """,
+        [ticker.upper()],
+    )
+    if not rows:
+        return None
+    (date, sma_20, sma_50, sma_200, ema_12, ema_26, macd, macd_signal,
+     macd_hist, rsi, atr, adx, plus_di, minus_di, stoch_k, stoch_d, cci,
+     ad, obv, bb_upper, bb_mid, bb_lower) = rows[0]
+    ctx = _read(
+        """
+        SELECT max_252, min_252, stddev_252, max_drawdown_252
+        FROM mart.m_advanced_analytics
+        WHERE ticker = ?
+        ORDER BY date DESC LIMIT 1
+        """,
+        [ticker.upper()],
+    )
+    high_52w = low_52w = stddev = max_dd = None
+    if ctx:
+        high_52w, low_52w, stddev, max_dd = ctx[0]
+    return {
+        "as_of": str(date) if date else None,
+        "indicators": {
+            "sma_20": _num(sma_20),
+            "sma_50": _num(sma_50),
+            "sma_200": _num(sma_200),
+            "ema_12": _num(ema_12),
+            "ema_26": _num(ema_26),
+            "macd": _num(macd),
+            "macd_signal": _num(macd_signal),
+            "macd_hist": _num(macd_hist),
+            "rsi_14": _num(rsi),
+            "atr_14": _num(atr),
+            "adx_14": _num(adx),
+            "plus_di_14": _num(plus_di),
+            "minus_di_14": _num(minus_di),
+            "stoch_k_14": _num(stoch_k),
+            "stoch_d_14": _num(stoch_d),
+            "cci_20": _num(cci),
+            "ad": _num(ad),
+            "obv": _num(obv),
+            "bb_upper_20": _num(bb_upper),
+            "bb_mid_20": _num(bb_mid),
+            "bb_lower_20": _num(bb_lower),
+            "high_52w": _num(high_52w),
+            "low_52w": _num(low_52w),
+            "stddev_252": _num(stddev),
+            "max_drawdown_252": _num(max_dd),
+        },
+    }
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 

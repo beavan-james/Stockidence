@@ -73,6 +73,12 @@ def get_price_history(
     return market.get_price_history(ticker, months=months)
 
 
+@market_router.get("/technicals/{ticker}")
+def get_technicals(ticker: str) -> dict | None:
+    """Latest raw technical statistics — feeds the ticker profile page."""
+    return market.get_technicals(ticker)
+
+
 @market_router.get("/movers")
 def get_movers() -> dict:
     """Top gainers, losers, and most actively traded, with snapshot day."""
