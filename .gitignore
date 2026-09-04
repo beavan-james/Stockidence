@@ -16,4 +16,5 @@ frontend/
 src/dagster_home/
 ViewSchemas.ipynb
 .ruff_cache/
-Model/datasets/train_dataset.parquet
+Model/datasets/*.parquet 
+Model/artifacts/ranking_ndcg.json
