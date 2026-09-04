@@ -115,28 +115,24 @@ def get_commodities() -> list[dict]:
 @market_router.get("/news")
 def get_news(
     ticker: str = "",
+    date_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
 ) -> dict:
-    """News items, newest first, filtered and paged server-side.
+    """News items, newest first, filtered and paged in SQL.
 
     `ticker` matches articles whose sentiment_tickers mention it
-    (case-insensitive substring, same semantics as the Reflex filter).
+    (case-insensitive substring, same semantics as the Reflex filter);
+    `date_from`/`date_to` bound the publish date (YYYY-MM-DD).
+    Only the requested page is parsed — the full table is never loaded.
     Returns an envelope so the client pager needs no total-count guess.
     """
-    news = market.get_market_news()
-    query = ticker.strip().upper()
-    if query:
-        news = [n for n in news if query in (n.get("sentiment_tickers") or "").upper()]
-    start = (page - 1) * page_size
-    items = news[start : start + page_size]
-    return {
-        "items": items,
-        "total": len(news),
-        "page": page,
-        "page_size": page_size,
-        "page_count": max(1, -(-len(news) // page_size)),
-    }
+    start = (date_from or "").replace("-", "") or None
+    end = (date_to or "").replace("-", "") or None
+    return market.get_news_page(
+        ticker=ticker, date_from=start, date_to=end, page=page, page_size=page_size
+    )
 
 
 @meta_router.get("/model-weights")

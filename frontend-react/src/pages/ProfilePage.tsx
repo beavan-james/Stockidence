@@ -96,45 +96,43 @@ export function ProfilePage() {
         <ComputingScreen source={r.source} ticker={r.ticker} />
       ) : (
         <>
-          <Card className="anim-rise">
-            <CardContent className="flex flex-wrap items-center justify-between gap-x-10 gap-y-4 p-6">
-              <div className="flex items-center gap-4">
-                {r.logo_url && (
-                  <img src={r.logo_url} alt="" className="h-9 w-9 rounded-lg bg-raised object-contain" />
+          <div className="anim-rise flex flex-wrap items-center justify-between gap-x-10 gap-y-4 border-b border-line/60 pb-4">
+            <div className="flex items-center gap-4">
+              {r.logo_url && (
+                <img src={r.logo_url} alt="" className="h-9 w-9 rounded-lg bg-raised object-contain" />
+              )}
+              <div>
+                <h1 className="num title-glow text-xl font-semibold tracking-tight">{r.ticker}</h1>
+                <p className="text-sm text-ink-secondary">{r.company_name || "—"}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <QuoteBadge ticker={r.ticker} />
+              <button
+                onClick={() =>
+                  inPortfolio ? removeFromPortfolio(symbol) : addToPortfolio(symbol)
+                }
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm transition-colors",
+                  inPortfolio
+                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
+                    : "border-line bg-transparent text-ink-secondary hover:border-accent/30 hover:text-ink",
                 )}
-                <div>
-                  <h1 className="num title-glow text-xl font-semibold tracking-tight">{r.ticker}</h1>
-                  <p className="text-sm text-ink-secondary">{r.company_name || "—"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-6">
-                <QuoteBadge ticker={r.ticker} />
-                <button
-                  onClick={() =>
-                    inPortfolio ? removeFromPortfolio(symbol) : addToPortfolio(symbol)
-                  }
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm transition-colors",
-                    inPortfolio
-                      ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
-                      : "border-line bg-surface text-ink-secondary hover:border-accent/30 hover:text-ink",
-                  )}
-                >
-                  {inPortfolio ? (
-                    <>
-                      <Check className="h-3.5 w-3.5" />
-                      In portfolio
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-3.5 w-3.5" />
-                      Add to portfolio
-                    </>
-                  )}
-                </button>
-              </div>
-            </CardContent>
-          </Card>
+              >
+                {inPortfolio ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    In portfolio
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add to portfolio
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
 
           <ValuationReference fairValue={r.fair_value} targetPrice={r.target_price} />
 

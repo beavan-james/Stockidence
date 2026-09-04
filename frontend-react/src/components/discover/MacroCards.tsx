@@ -1,6 +1,5 @@
 import { motion, type Variants } from "framer-motion";
 
-import { Card, CardContent } from "@/components/ui/card";
 import type { Commodity, MacroMetric, SeriesPoint } from "@/types/api";
 
 function Sparkline({ points }: { points: SeriesPoint[] }) {
@@ -43,22 +42,23 @@ export function MacroGrid({ metrics }: { metrics: MacroMetric[] }) {
       variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
     >
       {metrics.map((m) => (
-        <motion.div key={m.label} variants={cardVariants} transition={{ duration: 0.4, ease }}>
-          <Card className="bg-surface/60 backdrop-blur-sm">
-            <CardContent className="space-y-2 p-5">
-              <div className="flex items-baseline justify-between">
-                <p className="text-sm font-medium">{m.label}</p>
-                <p className="num text-lg font-semibold">
-                  {m.value?.toLocaleString("en-US")}
-                  <span className="ml-1 text-xs font-normal text-ink-muted">{m.unit}</span>
-                </p>
-              </div>
-              <Sparkline points={m.series} />
-              <p className="text-[11px] text-ink-muted">
-                {m.detail} · as of {m.as_of}
-              </p>
-            </CardContent>
-          </Card>
+        <motion.div
+          key={m.label}
+          variants={cardVariants}
+          transition={{ duration: 0.4, ease }}
+          className="space-y-2 border-b border-line/60 pb-4"
+        >
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm font-medium">{m.label}</p>
+            <p className="num text-lg font-semibold">
+              {m.value?.toLocaleString("en-US")}
+              <span className="ml-1 text-xs font-normal text-ink-muted">{m.unit}</span>
+            </p>
+          </div>
+          <Sparkline points={m.series} />
+          <p className="text-[11px] text-ink-muted">
+            {m.detail} · as of {m.as_of}
+          </p>
         </motion.div>
       ))}
     </motion.div>
@@ -75,18 +75,19 @@ export function CommoditiesRow({ commodities }: { commodities: Commodity[] }) {
       variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
     >
       {commodities.map((c) => (
-        <motion.div key={c.nominal} variants={cardVariants} transition={{ duration: 0.4, ease }}>
-          <Card className="bg-surface/60 backdrop-blur-sm">
-            <CardContent className="flex items-baseline justify-between p-5">
-              <p className="text-sm font-medium">{c.label}</p>
-              <div className="text-right">
-                <p className="num text-lg font-semibold">
-                  ${c.price?.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-[11px] text-ink-muted">{c.unit}</p>
-              </div>
-            </CardContent>
-          </Card>
+        <motion.div
+          key={c.nominal}
+          variants={cardVariants}
+          transition={{ duration: 0.4, ease }}
+          className="flex items-baseline justify-between border-b border-line/60 pb-4"
+        >
+          <p className="text-sm font-medium">{c.label}</p>
+          <div className="text-right">
+            <p className="num text-lg font-semibold">
+              ${c.price?.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-ink-muted">{c.unit}</p>
+          </div>
         </motion.div>
       ))}
     </motion.div>

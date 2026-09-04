@@ -69,11 +69,13 @@ export function useRankings() {
   });
 }
 
-export function useNews(params: { ticker?: string; page?: number; pageSize?: number }) {
+export function useNews(params: { ticker?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) {
   return useQuery<NewsEnvelope>({
     queryKey: ["news", params],
     queryFn: () => client.news(params),
     placeholderData: (previous) => previous,
+    // Pages are cheap now (SQL LIMIT/OFFSET) but identical params shouldn't refetch.
+    staleTime: 5 * 60_000,
   });
 }
 

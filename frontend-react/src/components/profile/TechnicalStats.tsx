@@ -1,4 +1,3 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTechnicals } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
@@ -76,12 +75,10 @@ export function TechnicalStats({ ticker }: { ticker: string }) {
 
   if (stats.isPending) {
     return (
-      <Card>
-        <CardContent className="space-y-2 p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-40" />
-        </CardContent>
-      </Card>
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-40" />
+      </div>
     );
   }
 
@@ -89,14 +86,13 @@ export function TechnicalStats({ ticker }: { ticker: string }) {
   if (!indicators) return null;
 
   return (
-    <Card className="anim-rise" style={{ animationDelay: "140ms" }}>
-      <CardContent className="space-y-6 p-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-semibold tracking-tight">Technical statistics</h3>
-          {stats.data?.as_of && (
-            <span className="text-xs text-ink-muted">As of {stats.data.as_of}</span>
-          )}
-        </div>
+    <div className="anim-rise space-y-6" style={{ animationDelay: "140ms" }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold tracking-tight">Technical statistics</h3>
+        {stats.data?.as_of && (
+          <span className="text-xs text-ink-muted">As of {stats.data.as_of}</span>
+        )}
+      </div>
         {GROUPS.map((g) => (
           <section key={g.title} className="space-y-1">
             <h4 className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
@@ -125,7 +121,6 @@ export function TechnicalStats({ ticker }: { ticker: string }) {
             </dl>
           </section>
         ))}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

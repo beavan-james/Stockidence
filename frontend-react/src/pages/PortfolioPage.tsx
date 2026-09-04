@@ -51,8 +51,17 @@ function HoldingCard({ holding }: { holding: Holding }) {
   const [editShares, setEditShares] = useState("");
   const [editCost, setEditCost] = useState("");
 
-  const price = quote.data?.price ?? null;
-  const prevClose = quote.data?.prev_close ?? null;
+  const closes = useMemo(
+    () => (history.data ?? []).map((b) => b.close),
+    [history.data],
+  );
+  const lastClose = closes[closes.length - 1] ?? null;
+  const prevBarClose = closes[closes.length - 2] ?? null;
+
+  // Live quote first, latest weekly close as fallback so market value
+  // shows for every holding with price history, quote or not.
+  const price = quote.data?.price ?? lastClose;
+  const prevClose = quote.data?.prev_close ?? prevBarClose;
   const dayPct =
     price != null && prevClose ? ((price - prevClose) / prevClose) * 100 : null;
 
@@ -61,11 +70,6 @@ function HoldingCard({ holding }: { holding: Holding }) {
   const costBasis = shares > 0 && avgCost > 0 ? shares * avgCost : null;
   const pnl = marketValue != null && costBasis != null ? marketValue - costBasis : null;
   const pnlPct = pnl != null && costBasis ? (pnl / costBasis) * 100 : null;
-
-  const closes = useMemo(
-    () => (history.data ?? []).map((b) => b.close),
-    [history.data],
-  );
 
   function startEdit() {
     setEditShares(shares ? String(shares) : "");
@@ -238,27 +242,37 @@ function AddHoldingForm() {
   );
 }
 
-function usePortfolioQuotes(symbols: string[]) {
+function usePortfolioMarket(symbols: string[]) {
   // One query per holding; hooks can't loop, so cap the fan-out.
-  const a = useQuote(symbols[0]);
-  const b = useQuote(symbols[1]);
-  const c = useQuote(symbols[2]);
-  const d = useQuote(symbols[3]);
-  const e = useQuote(symbols[4]);
-  const f = useQuote(symbols[5]);
-  const g = useQuote(symbols[6]);
-  const h = useQuote(symbols[7]);
-  const i = useQuote(symbols[8]);
-  const j = useQuote(symbols[9]);
-  const k = useQuote(symbols[10]);
-  const l = useQuote(symbols[11]);
-  return [a, b, c, d, e, f, g, h, i, j, k, l].slice(0, symbols.length);
+  // Each slot pairs the live quote with a short price history so market
+  // value resolves from the latest weekly close when no quote is cached.
+  const q0 = useQuote(symbols[0]); const h0 = usePriceHistory(symbols[0], 3);
+  const q1 = useQuote(symbols[1]); const h1 = usePriceHistory(symbols[1], 3);
+  const q2 = useQuote(symbols[2]); const h2 = usePriceHistory(symbols[2], 3);
+  const q3 = useQuote(symbols[3]); const h3 = usePriceHistory(symbols[3], 3);
+  const q4 = useQuote(symbols[4]); const h4 = usePriceHistory(symbols[4], 3);
+  const q5 = useQuote(symbols[5]); const h5 = usePriceHistory(symbols[5], 3);
+  const q6 = useQuote(symbols[6]); const h6 = usePriceHistory(symbols[6], 3);
+  const q7 = useQuote(symbols[7]); const h7 = usePriceHistory(symbols[7], 3);
+  const q8 = useQuote(symbols[8]); const h8 = usePriceHistory(symbols[8], 3);
+  const q9 = useQuote(symbols[9]); const h9 = usePriceHistory(symbols[9], 3);
+  const q10 = useQuote(symbols[10]); const h10 = usePriceHistory(symbols[10], 3);
+  const q11 = useQuote(symbols[11]); const h11 = usePriceHistory(symbols[11], 3);
+  const quotes = [q0, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11];
+  const hists = [h0, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11];
+  return symbols.map((_, i) => {
+    const closes = (hists[i]?.data ?? []).map((b) => b.close);
+    return {
+      price: quotes[i]?.data?.price ?? closes[closes.length - 1] ?? null,
+      prevClose: quotes[i]?.data?.prev_close ?? closes[closes.length - 2] ?? null,
+    };
+  });
 }
 
 export function PortfolioPage() {
   const { holdings } = usePortfolio();
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
-  const quotes = usePortfolioQuotes(symbols);
+  const market = usePortfolioMarket(symbols);
 
   useEffect(() => {
     document.title = "Portfolio — Stockidence";
@@ -267,15 +281,15 @@ export function PortfolioPage() {
   const rows = useMemo(
     () =>
       holdings.map((h, idx) => {
-        const price = quotes[idx]?.data?.price ?? null;
-        const prevClose = quotes[idx]?.data?.prev_close ?? null;
+        const price = market[idx]?.price ?? null;
+        const prevClose = market[idx]?.prevClose ?? null;
         const value = price != null && h.shares > 0 ? price * h.shares : 0;
         const cost = h.shares > 0 && h.avgCost > 0 ? h.shares * h.avgCost : 0;
         const dayValue =
           price != null && prevClose && h.shares > 0 ? (price - prevClose) * h.shares : 0;
         return { holding: h, price, value, cost, dayValue };
       }),
-    [holdings, quotes],
+    [holdings, market],
   );
 
   const totalValue = rows.reduce((s, r) => s + r.value, 0);

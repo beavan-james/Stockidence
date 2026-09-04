@@ -2,7 +2,6 @@ import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import { motion, type Variants } from "framer-motion";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { EarningsRelease, IpoListing } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -44,62 +43,58 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
   );
 
   return (
-    <Card className="bg-surface/60 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle>IPO calendar</CardTitle>
-      </CardHeader>
-      <CardContent className="px-2 pb-2 pt-3">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.1 }}
-          className={cn("overflow-y-auto", sorted.length > MAX_VISIBLE && "max-h-96")}
-        >
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-surface">
-              <tr className="text-left text-xs text-ink-muted">
-                <th className="px-3 pb-2 font-normal">Date</th>
-                <th className="px-3 pb-2 font-normal">Symbol</th>
-                <th className="px-3 pb-2 font-normal">Company</th>
-                <th className="px-3 pb-2 text-right font-normal">Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((ipo, i) => {
-                const pill = statusPill(ipo.status);
-                return (
-                  <motion.tr
-                    key={`${ipo.symbol ?? i}-${ipo.date}`}
-                    variants={rowVariants}
-                    transition={{ duration: 0.35, ease }}
-                    className={cn(
-                      "border-t border-line/60 transition-colors",
-                      ipo.symbol ? "cursor-pointer hover:bg-raised" : "",
+    <div>
+      <h3 className="text-sm font-semibold tracking-tight">IPO calendar</h3>
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+        className={cn("overflow-y-auto pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
+            <tr className="text-left text-xs text-ink-muted">
+              <th className="px-3 pb-2 font-normal">Date</th>
+              <th className="px-3 pb-2 font-normal">Symbol</th>
+              <th className="px-3 pb-2 font-normal">Company</th>
+              <th className="px-3 pb-2 text-right font-normal">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((ipo, i) => {
+              const pill = statusPill(ipo.status);
+              return (
+                <motion.tr
+                  key={`${ipo.symbol ?? i}-${ipo.date}`}
+                  variants={rowVariants}
+                  transition={{ duration: 0.35, ease }}
+                  className={cn(
+                    "border-t border-line/60 transition-colors",
+                    ipo.symbol ? "cursor-pointer hover:bg-raised/60" : "",
+                  )}
+                  onClick={ipo.symbol ? () => void navigate(`/stocks/${ipo.symbol}`) : undefined}
+                >
+                  <td className="num px-3 py-2.5 text-ink-secondary">{ipo.date}</td>
+                  <td className="px-3 py-2.5">
+                    <span className="num font-semibold">{ipo.symbol ?? "—"}</span>
+                    {pill && (
+                      <span className={cn("ml-2 text-[11px]", pill.cls)}>
+                        {pill.label}
+                      </span>
                     )}
-                    onClick={ipo.symbol ? () => void navigate(`/stocks/${ipo.symbol}`) : undefined}
-                  >
-                    <td className="num px-3 py-2.5 text-ink-secondary">{ipo.date}</td>
-                    <td className="px-3 py-2.5">
-                      <span className="num font-semibold">{ipo.symbol ?? "—"}</span>
-                      {pill && (
-                        <span className={cn("ml-2 text-[11px]", pill.cls)}>
-                          {pill.label}
-                        </span>
-                      )}
-                    </td>
-                    <td className="max-w-40 truncate px-3 py-2.5 text-ink-secondary">{ipo.name}</td>
-                    <td className={cn("num px-3 py-2.5 text-right", ipo.price ? "font-medium" : "text-ink-muted")}>
-                      {ipo.price ? `$${ipo.price}` : "—"}
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </motion.div>
-      </CardContent>
-    </Card>
+                  </td>
+                  <td className="max-w-40 truncate px-3 py-2.5 text-ink-secondary">{ipo.name}</td>
+                  <td className={cn("num px-3 py-2.5 text-right", ipo.price ? "font-medium" : "text-ink-muted")}>
+                    {ipo.price ? `$${ipo.price}` : "—"}
+                  </td>
+                </motion.tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </motion.div>
+    </div>
   );
 }
 
@@ -117,72 +112,68 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
   );
 
   return (
-    <Card className="bg-surface/60 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle>Earnings calendar</CardTitle>
-      </CardHeader>
-      <CardContent className="px-2 pb-2 pt-3">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.1 }}
-          className={cn("overflow-y-auto", sorted.length > MAX_VISIBLE && "max-h-96")}
-        >
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-surface">
-              <tr className="text-left text-xs text-ink-muted">
-                <th className="px-3 pb-2 font-normal">Date</th>
-                <th className="px-3 pb-2 font-normal">Symbol</th>
-                <th className="px-3 pb-2 font-normal">When</th>
-                <th className="px-3 pb-2 text-right font-normal">EPS est.</th>
-                <th className="px-3 pb-2 text-right font-normal">Rev est.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((e, i) => {
-                const badge = hourBadge(e.hour);
-                return (
-                  <motion.tr
-                    key={`${e.symbol}-${i}`}
-                    variants={rowVariants}
-                    transition={{ duration: 0.35, ease }}
-                    className="cursor-pointer border-t border-line/60 transition-colors hover:bg-raised"
-                    onClick={() => void navigate(`/stocks/${e.symbol}`)}
+    <div>
+      <h3 className="text-sm font-semibold tracking-tight">Earnings calendar</h3>
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+        className={cn("overflow-y-auto pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
+            <tr className="text-left text-xs text-ink-muted">
+              <th className="px-3 pb-2 font-normal">Date</th>
+              <th className="px-3 pb-2 font-normal">Symbol</th>
+              <th className="px-3 pb-2 font-normal">When</th>
+              <th className="px-3 pb-2 text-right font-normal">EPS est.</th>
+              <th className="px-3 pb-2 text-right font-normal">Rev est.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((e, i) => {
+              const badge = hourBadge(e.hour);
+              return (
+                <motion.tr
+                  key={`${e.symbol}-${i}`}
+                  variants={rowVariants}
+                  transition={{ duration: 0.35, ease }}
+                  className="cursor-pointer border-t border-line/60 transition-colors hover:bg-raised/60"
+                  onClick={() => void navigate(`/stocks/${e.symbol}`)}
+                >
+                  <td className="num px-3 py-2.5 text-ink-secondary">{e.date}</td>
+                  <td className="num px-3 py-2.5 font-semibold">{e.symbol}</td>
+                  <td className="px-3 py-2.5">
+                    {badge.label !== "—" ? (
+                      <span className={cn("inline-flex rounded-md px-2 py-0.5 text-xs font-medium", badge.cls)}>
+                        {badge.label}
+                      </span>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    )}
+                  </td>
+                  <td
+                    className={cn(
+                      "num px-3 py-2.5 text-right font-medium",
+                      e.eps_estimate == null
+                        ? "text-ink-muted"
+                        : e.eps_estimate >= 0
+                          ? "text-gain"
+                          : "text-loss",
+                    )}
                   >
-                    <td className="num px-3 py-2.5 text-ink-secondary">{e.date}</td>
-                    <td className="num px-3 py-2.5 font-semibold">{e.symbol}</td>
-                    <td className="px-3 py-2.5">
-                      {badge.label !== "—" ? (
-                        <span className={cn("inline-flex rounded-md px-2 py-0.5 text-xs font-medium", badge.cls)}>
-                          {badge.label}
-                        </span>
-                      ) : (
-                        <span className="text-ink-muted">—</span>
-                      )}
-                    </td>
-                    <td
-                      className={cn(
-                        "num px-3 py-2.5 text-right font-medium",
-                        e.eps_estimate == null
-                          ? "text-ink-muted"
-                          : e.eps_estimate >= 0
-                            ? "text-gain"
-                            : "text-loss",
-                      )}
-                    >
-                      {e.eps_estimate?.toFixed(2) ?? "—"}
-                    </td>
-                    <td className="num px-3 py-2.5 text-right text-ink-secondary">
-                      {e.revenue_estimate_display ?? "—"}
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </motion.div>
-      </CardContent>
-    </Card>
+                    {e.eps_estimate?.toFixed(2) ?? "—"}
+                  </td>
+                  <td className="num px-3 py-2.5 text-right text-ink-secondary">
+                    {e.revenue_estimate_display ?? "—"}
+                  </td>
+                </motion.tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </motion.div>
+    </div>
   );
 }

@@ -50,9 +50,11 @@ export const client = {
 
   movers: () => api<import("@/types/api").Movers>("/api/movers"),
 
-  news: (params: { ticker?: string; page?: number; pageSize?: number }) => {
+  news: (params: { ticker?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
     if (params.ticker) qs.set("ticker", params.ticker);
+    if (params.dateFrom) qs.set("date_from", params.dateFrom);
+    if (params.dateTo) qs.set("date_to", params.dateTo);
     if (params.page) qs.set("page", String(params.page));
     if (params.pageSize) qs.set("page_size", String(params.pageSize));
     return api<import("@/types/api").NewsEnvelope>(`/api/news?${qs.toString()}`);

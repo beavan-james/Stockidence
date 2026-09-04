@@ -476,41 +476,86 @@ def _fmt_money(v) -> str | None:
         return None
 
 
-def get_market_news() -> list[dict]:
-    """Market-wide news items with sentiment labels.
-
-    Reads the full accumulated raw_news_articles table (the daily pipeline
-    upserts on article_id, so history persists and grows) and lets the UI's
-    ticker filter + pager handle volume. If the table ever outgrows a
-    single-state-var read, move paging into this query.
-    """
-    rows = _read(
-        """
-        SELECT payload FROM raw.raw_news_articles
-        ORDER BY (payload->>'time_published') DESC
-        """
-    )
-    if not rows:
-        return [_finalize_news(item) for item in _DEMO_NEWS]
+def _parse_news_row(payload) -> dict | None:
     import json
-    out = []
-    for (payload,) in rows:
-        p = json.loads(payload) if isinstance(payload, str) else payload
-        if p is None or not isinstance(p, dict):
-            continue
-        tickers = p.get("ticker_sentiment", [])
-        out.append({
-            "title": p.get("title"),
-            "url": p.get("url"),
-            "time_published": _format_news_time(p.get("time_published")),
-            "authors": _str_list(p.get("authors")),
-            "summary": p.get("summary"),
-            "source": p.get("source"),
-            "overall_sentiment_score": _num(p.get("overall_sentiment_score")),
-            "overall_sentiment_label": p.get("overall_sentiment_label"),
-            "sentiment_tickers": ", ".join(t.get("ticker") for t in tickers if t.get("ticker")) if tickers else "",
-        })
-    return out if out else [_finalize_news(item) for item in _DEMO_NEWS]
+    p = json.loads(payload) if isinstance(payload, str) else payload
+    if p is None or not isinstance(p, dict):
+        return None
+    tickers = p.get("ticker_sentiment", [])
+    return {
+        "title": p.get("title"),
+        "url": p.get("url"),
+        "time_published": _format_news_time(p.get("time_published")),
+        "authors": _str_list(p.get("authors")),
+        "summary": p.get("summary"),
+        "source": p.get("source"),
+        "overall_sentiment_score": _num(p.get("overall_sentiment_score")),
+        "overall_sentiment_label": p.get("overall_sentiment_label"),
+        "sentiment_tickers": ", ".join(t.get("ticker") for t in tickers if t.get("ticker")) if tickers else "",
+    }
+
+
+_NEWS_WHERE = """
+    (? = '' OR array_to_string(
+        CAST(json_extract(payload, '$.ticker_sentiment[*].ticker') AS VARCHAR[]), ','
+    ) ILIKE '%' || ? || '%')
+    AND (? IS NULL OR substr(payload->>'time_published', 1, 8) >= ?)
+    AND (? IS NULL OR substr(payload->>'time_published', 1, 8) <= ?)
+"""
+
+
+def _news_params(ticker: str, date_from: str | None, date_to: str | None) -> list:
+    q = (ticker or "").strip().upper()
+    return [q, q, date_from, date_from, date_to, date_to]
+
+
+def get_news_page(
+    ticker: str = "",
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> dict:
+    """One page of news, filtered and counted in SQL.
+
+    Only the page's payloads are parsed — the full 23k+ article table is
+    never loaded, so paging stays fast as history grows. `date_from` /
+    `date_to` are YYYY-MM-DD against the article publish date.
+    """
+    params = _news_params(ticker, date_from, date_to)
+    total_rows = _read(
+        f"SELECT COUNT(*) FROM raw.raw_news_articles WHERE {_NEWS_WHERE}",
+        params,
+    )
+    if total_rows is None:
+        demo = [_finalize_news(item) for item in _DEMO_NEWS]
+        query = (ticker or "").strip().upper()
+        if query:
+            demo = [n for n in demo if query in (n.get("sentiment_tickers") or "").upper()]
+        return {
+            "items": demo,
+            "total": len(demo),
+            "page": 1,
+            "page_size": page_size,
+            "page_count": 1,
+        }
+    total = total_rows[0][0] or 0
+    offset = (max(page, 1) - 1) * page_size
+    rows = _read(
+        f"""SELECT payload FROM raw.raw_news_articles
+            WHERE {_NEWS_WHERE}
+            ORDER BY payload->>'time_published' DESC
+            LIMIT ? OFFSET ?""",
+        [*params, page_size, offset],
+    ) or []
+    items = [parsed for (payload,) in rows if (parsed := _parse_news_row(payload))]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "page_count": max(1, -(-total // page_size)),
+    }
 
 
 def _finalize_news(item: dict) -> dict:

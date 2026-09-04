@@ -140,6 +140,36 @@ def daily_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
+@op(name="ingest_news_op", required_resource_keys={"engine"})
+def ingest_news_op(context) -> None:
+    engine = context.resources.engine
+    result = engine.ingest_scheduled("market_news", now=_now())
+    context.log.info(
+        f"[scheduled:market_news] {result.reason} ({result.rows_written} rows)")
+
+
+@job(name="news_ingest")
+def news_job():
+    """News-only pull (Alpha Vantage market_news, limit=1000, upsert on
+    article_id so repeats are idempotent). The 01:00 daily job also pulls
+    news; these two add the morning/evening refreshes."""
+    ingest_news_op()
+
+
+@schedule(job=news_job, cron_schedule="0 11 * * *",
+          default_status=DefaultScheduleStatus.RUNNING)
+def news_morning_schedule() -> dict:  # noqa: ANN401
+    """11:00 UTC (~7am ET): morning news + sentiment pull."""
+    return {}
+
+
+@schedule(job=news_job, cron_schedule="0 23 * * *",
+          default_status=DefaultScheduleStatus.RUNNING)
+def news_evening_schedule() -> dict:  # noqa: ANN401
+    """23:00 UTC (~7pm ET): evening news + sentiment pull."""
+    return {}
+
+
 @asset(partitions_def=ticker_partitions, required_resource_keys={"engine"})
 def ticker_data(context: AssetExecutionContext) -> None:
     """On-demand per-ticker fetch (manual materialization path).
@@ -320,9 +350,10 @@ defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
             m_advanced_analytics, m_technical_indicators, ticker_score],
-    jobs=[monthly_job, weekdays_job, daily_job, refresh_tickers_job,
+    jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
           quarterly_model_refresh_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
+               news_morning_schedule, news_evening_schedule,
                quarterly_schedule],
     # DuckDB is a single-writer file: with the default multiprocess executor
     # DuckDB is a single-writer file: with the default multiprocess executor

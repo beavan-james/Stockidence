@@ -81,7 +81,8 @@ price prediction). The website's Model page serves it from
 ## Cadence is heterogeneous by design
 
 - **Near-real-time:** Finnhub quote (cache TTL ~1 min)
-- **Daily:** market news (news & sentiment), VIX / S&P 500 market indexes (FRED)
+- **Daily:** VIX / S&P 500 market indexes (FRED)
+- **Twice daily + overnight:** market news & sentiment (7am / 7pm ET pulls, plus the 01:00 UTC daily pull; upserts on article_id, served with SQL-side date filter + paging)
 - **Weekdays:** movers, IPO/earnings calendars
 - **Monthly:** commodities, macro indicators, stock symbol listing
 - **Quarterly/irregular:** fundamentals, earnings, transcripts
