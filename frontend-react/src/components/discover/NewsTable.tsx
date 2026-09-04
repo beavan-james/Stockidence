@@ -85,7 +85,7 @@ export function NewsTable() {
               setTickerQuery(e.target.value.toUpperCase());
               resetPage();
             }}
-            placeholder="Filter by ticker…"
+            placeholder="Ticker search"
             aria-label="Filter news by ticker"
             className="num w-36"
           />
