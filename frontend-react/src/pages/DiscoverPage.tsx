@@ -5,7 +5,6 @@ import { CommoditiesRow, MacroGrid } from "@/components/discover/MacroCards";
 import { EarningsCalendar, IpoCalendar } from "@/components/discover/Calendars";
 import { NewsTable } from "@/components/discover/NewsTable";
 import { MoverTable } from "@/components/discover/MoverTable";
-import { RankingTable } from "@/components/discover/RankingTable";
 import {
     useCommodities,
     useEarnings,
@@ -74,25 +73,15 @@ export function DiscoverPage() {
     return (
         <div className="space-y-8">
             <div className="flex items-baseline justify-between">
-                <h1 className="text-xl font-semibold tracking-tight">
+                <h1 className="title-glow text-xl font-semibold tracking-tight">
                     Discover
                 </h1>
-            {movers.data?.movers_as_of && (
-                <span className="text-xs text-ink-muted">
-                    Market close · {movers.data.movers_as_of}
-                </span>
-            )}
+                {movers.data?.movers_as_of && (
+                    <span className="text-xs text-ink-muted">
+                        Market close · {movers.data.movers_as_of}
+                    </span>
+                )}
             </div>
-
-            <motion.section
-                variants={sectionVariants}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, amount: 0.15 }}
-                transition={{ duration: 0.7, ease }}
-            >
-                <RankingTable />
-            </motion.section>
 
             {movers.data && (
                 <motion.div

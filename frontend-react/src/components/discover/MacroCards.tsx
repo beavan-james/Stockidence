@@ -17,7 +17,7 @@ function Sparkline({ points }: { points: SeriesPoint[] }) {
       <polyline
         points={coords}
         fill="none"
-        stroke="#818cf8"
+        stroke="#F3037E"
         strokeWidth="2"
         vectorEffect="non-scaling-stroke"
       />
@@ -44,7 +44,7 @@ export function MacroGrid({ metrics }: { metrics: MacroMetric[] }) {
     >
       {metrics.map((m) => (
         <motion.div key={m.label} variants={cardVariants} transition={{ duration: 0.4, ease }}>
-          <Card>
+          <Card className="bg-surface/60 backdrop-blur-sm">
             <CardContent className="space-y-2 p-5">
               <div className="flex items-baseline justify-between">
                 <p className="text-sm font-medium">{m.label}</p>
@@ -76,7 +76,7 @@ export function CommoditiesRow({ commodities }: { commodities: Commodity[] }) {
     >
       {commodities.map((c) => (
         <motion.div key={c.nominal} variants={cardVariants} transition={{ duration: 0.4, ease }}>
-          <Card>
+          <Card className="bg-surface/60 backdrop-blur-sm">
             <CardContent className="flex items-baseline justify-between p-5">
               <p className="text-sm font-medium">{c.label}</p>
               <div className="text-right">

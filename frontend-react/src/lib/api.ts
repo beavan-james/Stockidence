@@ -38,6 +38,11 @@ export const client = {
   quote: (ticker: string) =>
     api<import("@/types/api").Quote | null>(`/api/quote/${encodeURIComponent(ticker)}`),
 
+  prices: (ticker: string, months = 12) =>
+    api<import("@/types/api").PriceBar[]>(
+      `/api/prices/${encodeURIComponent(ticker)}?months=${months}`,
+    ),
+
   movers: () => api<import("@/types/api").Movers>("/api/movers"),
 
   news: (params: { ticker?: string; page?: number; pageSize?: number }) => {

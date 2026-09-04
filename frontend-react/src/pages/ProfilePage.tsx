@@ -9,7 +9,7 @@ import { SubScoreDetail } from "@/components/profile/SubScoreDetail";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRating } from "@/hooks/queries";
-import { usePortfolio, addToPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
+import { usePortfolio, addToPortfolio, isInPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
 import { adviceLabel, adviceStyle } from "@/lib/format";
 import { categoryColor, categoryLabel } from "@/lib/viz";
 import type { RatingSource } from "@/types/api";
@@ -89,12 +89,12 @@ function useDocumentTitle(title: string | undefined) {
 export function ProfilePage() {
   const symbol = useParams().symbol?.toUpperCase();
   const rating = useRating(symbol);
-  const { tickers } = usePortfolio();
+  usePortfolio();
   useDocumentTitle(symbol);
 
   if (!symbol) return null;
 
-  const inPortfolio = tickers.includes(symbol);
+  const inPortfolio = isInPortfolio(symbol);
 
   if (rating.isPending) {
     return (
@@ -110,7 +110,7 @@ export function ProfilePage() {
       <Card>
         <CardContent className="space-y-3 p-10 text-center">
           <p className="text-sm text-ink">{rating.error.message}</p>
-          <Link to="/" className="text-xs text-accent hover:text-accent-strong">
+          <Link to="/discover" className="text-xs text-accent hover:text-accent-strong">
             ← Back to Discover
           </Link>
         </CardContent>
@@ -124,7 +124,7 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/" className="inline-flex items-center gap-1 text-xs text-ink-muted hover:text-accent">
+      <Link to="/discover" className="inline-flex items-center gap-1 text-xs text-ink-muted hover:text-accent">
         ← Back to Discover
       </Link>
 
@@ -141,7 +141,7 @@ export function ProfilePage() {
                   <img src={r.logo_url} alt="" className="h-9 w-9 rounded-lg bg-raised object-contain" />
                 )}
                 <div>
-                  <h1 className="num text-xl font-semibold tracking-tight">{r.ticker}</h1>
+                  <h1 className="num title-glow text-xl font-semibold tracking-tight">{r.ticker}</h1>
                   <p className="text-sm text-ink-secondary">{r.company_name || "—"}</p>
                 </div>
               </div>

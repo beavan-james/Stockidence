@@ -44,7 +44,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
   );
 
   return (
-    <Card>
+    <Card className="bg-surface/60 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>IPO calendar</CardTitle>
       </CardHeader>
@@ -117,7 +117,7 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
   );
 
   return (
-    <Card>
+    <Card className="bg-surface/60 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Earnings calendar</CardTitle>
       </CardHeader>

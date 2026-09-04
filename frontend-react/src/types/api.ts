@@ -66,6 +66,11 @@ export interface Quote {
   as_of: string | null;
 }
 
+export interface PriceBar {
+  date: string;
+  close: number | null;
+}
+
 export interface Mover {
   ticker: string;
   price: string;

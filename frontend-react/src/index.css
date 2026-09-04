@@ -14,10 +14,10 @@
   --color-raised: #1a1a1f;
   --color-line: #26262b;
 
-  /* Iris accent */
-  --color-accent: #818cf8;
-  --color-accent-strong: #a5b4fc;
-  --color-accent-dim: rgba(129, 140, 248, 0.14);
+  /* Ruby accent */
+  --color-accent: #F3037E;
+  --color-accent-strong: #FF5CA8;
+  --color-accent-dim: rgba(243, 3, 126, 0.14);
 
   /* Text ramp */
   --color-ink: #f4f4f5;
@@ -45,6 +45,16 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+}
+
+/* Page titles glow in the accent color on hover */
+.title-glow {
+  transition: text-shadow 0.3s ease;
+}
+.title-glow:hover {
+  text-shadow:
+    0 0 18px color-mix(in srgb, var(--color-accent) 75%, transparent),
+    0 0 46px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
 /* --- Motion system (all disabled under prefers-reduced-motion) --- */

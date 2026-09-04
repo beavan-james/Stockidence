@@ -35,8 +35,8 @@ export function Snowflake({ categories }: { categories: CategoryScore[] }) {
       })}
       <polygon
         points={polygon}
-        fill="rgba(129,140,248,0.14)"
-        stroke="#818cf8"
+        fill="rgba(243,3,126,0.14)"
+        stroke="#F3037E"
         strokeWidth={2}
         strokeLinejoin="round"
       />

@@ -1,42 +1,37 @@
-"""One-time backfill setup: reset price watermarks + queue all tickers.
+"""One-time full backfill: reset price watermarks + refresh every ticker.
 
 Run this script once after bumping _PRICE_BACKFILL_DAYS to trigger
-a full history re-fetch for all tickers (existing + new).
+a full history re-fetch for the whole universe.
 
 Usage:
     python Model/scripts/setup_backfill.py
 
-The Dagster ticker_request_sensor will pick up the pending requests
-and materialize ticker_data for each ticker, which triggers the full
-on-demand ingestion pipeline (prices, fundamentals, news, etc.).
+Push model: runs refresh_tickers(full_backfill=True) directly — no sensor
+queue involved. Equivalent to launching the refresh_tickers job with the
+full universe, plus the watermark wipe.
 """
 
 from __future__ import annotations
 
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 # Add repo root to path so we can import stockidence
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from stockidence.ingest.engine import IngestEngine
+from stockidence.ingest.refresh import refresh_tickers
+from stockidence.quarterly import quarterly_universe
 from stockidence.storage import Warehouse
-
-EXISTING_TICKERS = [
-    "AAPL", "AMZN", "APP", "BE", "CSCO", "DIS", "DKNG", "GOOGL",
-    "INTC", "JNJ", "JPM", "KO", "META", "MSFT", "NBIS", "NVDA",
-    "PLTR", "V", "WMT", "XOM",
-]
-
-NEW_TICKERS = ["UNH", "CAT", "NEE", "AMT", "BRK-B", "LIN"]
 
 
 def main() -> None:
     wh = Warehouse()
-    now = datetime.now(UTC)
+    wh.init_schema()
+    engine = IngestEngine(wh)
 
-    # 1. Delete price watermarks so existing tickers get re-fetched
-    #    with the new 5500-day lookback (Phase 1a).
+    # 1. Delete price watermarks so every ticker gets re-fetched
+    #    with the full lookback.
     with wh.connect() as con:
         before = con.execute(
             "SELECT COUNT(*) FROM control.watermarks WHERE endpoint = ?",
@@ -48,17 +43,18 @@ def main() -> None:
         )
         print(f"Deleted {before} price watermarks (raw.raw_prices_daily)")
 
-    # 2. Queue all tickers for ingestion (existing + new).
-    all_tickers = EXISTING_TICKERS + NEW_TICKERS
-    for ticker in all_tickers:
-        wh.request_ticker(ticker, requested_at=now)
-        status = "existing" if ticker in EXISTING_TICKERS else "NEW"
-        print(f"Queued {ticker:8s} [{status}]")
+    # 2. Refresh the whole universe with full backfills.
+    universe = quarterly_universe()
+    print(f"Refreshing {len(universe)} tickers (full backfill)...")
+    summary = refresh_tickers(engine, universe, full_backfill=True)
 
     # 3. Summary
-    pending = wh.pending_ticker_requests()
-    print(f"\nDone. {len(pending)} tickers pending in control.ticker_requests.")
-    print("Start the Dagster daemon to process the sensor, or trigger manually.")
+    print(f"\nDone. {summary['processed']} tickers refreshed, "
+          f"{summary['api_calls']} API calls, {summary['rows_written']} rows.")
+    if summary["errors"]:
+        print(f"{len(summary['errors'])} errors:")
+        for err in summary["errors"]:
+            print(f"  {err['ticker']}/{err['endpoint']}: {err['error'][:100]}")
 
 
 if __name__ == "__main__":

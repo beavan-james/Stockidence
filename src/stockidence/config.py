@@ -28,6 +28,7 @@ class Settings:
     fred_api_key: str
     min_interval_seconds: dict[str, float] = None
     alpha_vantage_pace_file: str = ""
+    dagster_web_url: str = "http://localhost:3000"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -48,6 +49,7 @@ class Settings:
                 "alpha_vantage": float(os.environ.get("ALPHA_VANTAGE_MIN_INTERVAL_S", "61.0")),
                 "fred": float(os.environ.get("FRED_MIN_INTERVAL_S", "1.0")),
             },
+            dagster_web_url=os.environ.get("DAGSTER_WEB_URL", "http://localhost:3000"),
         )
 
 

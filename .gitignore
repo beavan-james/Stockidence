@@ -17,5 +17,3 @@ src/dagster_home/
 ViewSchemas.ipynb
 .ruff_cache/
 Model/datasets/train_dataset.parquet
-Model/artifacts/
-Model/notebooks/production_ranking_model.ipynb

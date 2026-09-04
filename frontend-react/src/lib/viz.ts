@@ -1,7 +1,7 @@
 /** Category identity colors and score→color mapping for data viz. */
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  valuation: "#818cf8",
+  valuation: "#F3037E",
   trend: "#22d3ee",
   sentiment: "#fbbf24",
   moat: "#34d399",

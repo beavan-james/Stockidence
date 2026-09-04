@@ -18,6 +18,7 @@ import type {
   Movers,
   ModelWeight,
   NewsEnvelope,
+  PriceBar,
   Quote,
   RankingsEnvelope,
   Rating,
@@ -81,6 +82,16 @@ export function useQuote(ticker: string | undefined) {
     queryKey: ["quote", ticker],
     queryFn: () => client.quote(ticker!),
     staleTime: 30_000,
+  });
+}
+
+export function usePriceHistory(ticker: string | undefined, months = 12) {
+  return useQuery<PriceBar[]>({
+    enabled: Boolean(ticker),
+    queryKey: ["prices", ticker, months],
+    queryFn: () => client.prices(ticker!, months),
+    // Weekly bars barely move intraday.
+    staleTime: 60 * 60_000,
   });
 }
 

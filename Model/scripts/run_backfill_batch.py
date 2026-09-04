@@ -1,39 +1,27 @@
-"""Run backfill for batch-1 new tickers only (diverse sector expansion).
+"""Run backfill for a batch of tickers (diverse sector expansion).
 
-Safer than re-running the whole ALL_TICKERS universe: processes just the
-10 new tickers so existing ones are not re-fetched. Clears each ticker's
-price watermark first to force a fresh 5500-day backfill, mirrors
-run_backfill.py's loop.
+Thin CLI over stockidence.ingest.refresh.refresh_tickers: full price
+backfill per ticker (watermarks wiped first), derived rebuilds inline.
+Edit BATCH_TICKERS, then run:
 
-Usage:
     python Model/scripts/run_backfill_batch.py
 """
 
 from __future__ import annotations
 
 import sys
-import time
-from datetime import UTC, datetime
 from pathlib import Path
-
-from stockidence.ingest.endpoints import on_demand_endpoints
-from stockidence.ingest.engine import _PRICE_BACKFILL_DAYS, IngestEngine
-from stockidence.mart.mart import rebuild_all_for_ticker
-from stockidence.storage import Warehouse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from stockidence.ingest.engine import _PRICE_BACKFILL_DAYS, IngestEngine
+from stockidence.ingest.refresh import refresh_tickers
+from stockidence.storage import Warehouse
 
-BATCH_TICKERS = [
+
+BATCH_TICKERS: list[str] = [
 
 ]
-
-SKIP_ENDPOINTS = {"quote", "ticker_news"}
-SPECIAL_ENDPOINTS = {"earnings_call_transcript"}
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def main() -> None:
@@ -41,65 +29,21 @@ def main() -> None:
     wh.init_schema()
     engine = IngestEngine(wh)
 
-    endpoints = [ep for ep in on_demand_endpoints()
-                 if ep.name not in SKIP_ENDPOINTS]
-
-    print(f"Ingesting current batch: {len(BATCH_TICKERS)} tickers "
-          f"x {len(endpoints)} endpoints", flush=True)
+    print(f"Ingesting current batch: {len(BATCH_TICKERS)} tickers", flush=True)
     print(f"Price backfill lookback: {_PRICE_BACKFILL_DAYS} days", flush=True)
 
-    now = _now()
-    total_calls = total_rows = 0
-    errors = []
-
-    for i, ticker in enumerate(BATCH_TICKERS, 1):
-        print(f"\n[{i}/{len(BATCH_TICKERS)}] {ticker}", flush=True)
-
-        # Force a fresh full price backfill for this ticker.
-        with wh.connect() as con:
-            con.execute(
-                "DELETE FROM control.watermarks "
-                "WHERE endpoint = ? AND dimension_key = ?",
-                ["raw.raw_prices_daily", ticker],
-            )
-
-        ticker_calls = ticker_rows = 0
-        for ep in endpoints:
-            if ep.name in SPECIAL_ENDPOINTS:
-                continue
-            try:
-                result = engine.ingest_on_demand(ep.name, ticker, now=now)
-                status = "FETCHED" if result.fetched else "fresh"
-                if result.fetched:
-                    ticker_calls += 1
-                    ticker_rows += result.rows_written
-                print(f"  {ep.name:30s} {status:8s} {result.reason}", flush=True)
-            except Exception as e:
-                msg = str(e)
-                print(f"  {ep.name:30s} ERROR    {msg[:80]}", flush=True)
-                errors.append((ticker, ep.name, msg))
-                if "rate limit" in msg.lower():
-                    print(
-                        f"  -> RATE LIMITED on {ticker}/{ep.name}. Stopping.", flush=True)
-                    raise SystemExit(1)
-
-        total_calls += ticker_calls
-        total_rows += ticker_rows
-        print(f"  -> {ticker_calls} API calls, {ticker_rows} rows", flush=True)
-
-        counts = rebuild_all_for_ticker(wh, ticker)
-        print(f"  -> derived: {counts}", flush=True)
-
-        if i < len(BATCH_TICKERS):
-            time.sleep(0.01)
+    summary = refresh_tickers(engine, BATCH_TICKERS, full_backfill=True)
 
     print(f"\n{'='*60}", flush=True)
     print(
-        f"Batch complete: {total_calls} API calls, {total_rows} rows", flush=True)
-    if errors:
-        print(f"\n{len(errors)} errors:", flush=True)
-        for t, ep, msg in errors:
-            print(f"  {t}/{ep}: {msg[:100]}", flush=True)
+        f"Batch complete: {summary['api_calls']} API calls, "
+        f"{summary['rows_written']} rows",
+        flush=True,
+    )
+    if summary["errors"]:
+        print(f"\n{len(summary['errors'])} errors:", flush=True)
+        for err in summary["errors"]:
+            print(f"  {err['ticker']}/{err['endpoint']}: {err['error'][:100]}", flush=True)
 
 
 if __name__ == "__main__":

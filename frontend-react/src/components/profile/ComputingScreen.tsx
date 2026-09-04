@@ -61,7 +61,7 @@ export function ComputingScreen({ source, ticker }: { source: string; ticker?: s
             cy="60"
             r="48"
             fill="none"
-            stroke="#818cf8"
+            stroke="#F3037E"
             strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray="90 212"

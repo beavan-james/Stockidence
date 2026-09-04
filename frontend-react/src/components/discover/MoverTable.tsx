@@ -21,7 +21,7 @@ export function MoverTable({ title, rows }: { title: string; rows: Mover[] }) {
   const navigate = useNavigate();
 
   return (
-    <Card>
+    <Card className="bg-surface/60 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>

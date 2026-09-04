@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
-from . import demo, warehouse
+from . import dagster_client, demo, warehouse
 
 TICKER_RE = re.compile(r"^[A-Z0-9.\-^]{1,10}$")
 
@@ -31,12 +31,15 @@ def get_rating(ticker: str) -> dict:
 
     Resolution order:
       1. warehouse mart snapshot for the ticker — returned immediately when
-         fresh; if stale, re-queued and served with source="refreshing" so the
-         UI shows the old numbers while the sensor recomputes
-      2. queue a pipeline request and report source="pending" — the Dagster
-         sensor consumes control.ticker_requests and will compute the ticker
+         fresh; if stale, a refresh job is launched and the old numbers are
+         served with source="refreshing" while it recomputes
+      2. no snapshot: launch a refresh job and report source="pending" —
+         the UI polls until the mart snapshot lands
       3. deterministic demo data only when the warehouse itself is
          unavailable (no DB), so the UI never hard-fails during build-out
+
+    Push model: compute requests launch the ``refresh_tickers`` Dagster job
+    directly (per-ticker cooldown dedups the UI's 10s poll). No sensor polls.
     """
     normalized = normalize_ticker(ticker)
     if not TICKER_RE.match(normalized):
@@ -55,25 +58,25 @@ def get_rating(ticker: str) -> dict:
     if rating is not None:
         result = rating.to_dict()
         if _stale_snapshot(rating):
-            warehouse.enqueue_ticker_request(normalized)
+            dagster_client.request_refresh([normalized])
             result["source"] = "refreshing"
         return result
 
-    if warehouse.enqueue_ticker_request(normalized) is True:
-        return {
-            "ticker": normalized,
-            "company_name": "",
-            "as_of": "",
-            "confidence_score": 0.0,
-            "advice": "PENDING",
-            "volatility_score": 0.0,
-            "categories": [],
-            "components": [],
-            "buy_plan": None,
-            "fair_value": None,
-            "target_price": None,
-            "source": "pending",
-        }
+    if not warehouse.is_warehouse_reachable():
+        return demo.generate_rating(normalized).to_dict()
 
-    rating = demo.generate_rating(normalized)
-    return rating.to_dict()
+    dagster_client.request_refresh([normalized])
+    return {
+        "ticker": normalized,
+        "company_name": "",
+        "as_of": "",
+        "confidence_score": 0.0,
+        "advice": "PENDING",
+        "volatility_score": 0.0,
+        "categories": [],
+        "components": [],
+        "buy_plan": None,
+        "fair_value": None,
+        "target_price": None,
+        "source": "pending",
+    }

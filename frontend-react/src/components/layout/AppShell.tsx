@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 
+import { GridGlowBackground } from "@/components/layout/GridGlowBackground";
 import { SearchBar } from "@/components/layout/SearchBar";
 
 export function AppShell() {
@@ -7,6 +8,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-bg text-ink">
+      <GridGlowBackground />
       <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6">
           <Link to="/" className="flex items-center gap-2">
@@ -19,6 +21,12 @@ export function AppShell() {
           <nav className="flex items-center gap-1 text-sm text-ink-secondary">
             <Link
               to="/"
+              className="rounded-lg px-3 py-1.5 transition-colors hover:bg-raised hover:text-ink"
+            >
+              Model
+            </Link>
+            <Link
+              to="/discover"
               className="rounded-lg px-3 py-1.5 transition-colors hover:bg-raised hover:text-ink"
             >
               Discover
@@ -39,13 +47,13 @@ export function AppShell() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="relative z-10 mx-auto max-w-7xl px-6 py-8">
         <main key={location.pathname} className="anim-rise min-w-0">
           <Outlet />
         </main>
       </div>
 
-      <footer className="border-t border-line py-6">
+      <footer className="relative z-10 border-t border-line py-6">
         <p className="mx-auto max-w-7xl px-6 text-xs text-ink-muted">
           Deterministic confidence scores from a transparent pipeline — not investment advice.
         </p>

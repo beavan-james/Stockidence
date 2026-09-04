@@ -11,17 +11,39 @@ Contracts carried over from the Reflex read path:
 """
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
-from ..service import market, ranking, rating_service, sub_scores, warehouse
+from ..service import dagster_client, market, ranking, rating_service, sub_scores, warehouse
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
 meta_router = APIRouter(prefix="/api", tags=["meta"])
 
 
+class RefreshRequest(BaseModel):
+    tickers: list[str]
+
+
+@rating_router.post("/pipeline/refresh", status_code=202)
+def trigger_refresh(body: RefreshRequest) -> dict:
+    """Launch the refresh_tickers Dagster job for the given tickers.
+
+    This is the push path the frontend uses instead of the old sensor queue:
+    returns the Dagster run id, or 503 when the webserver is unreachable.
+    """
+    tickers = [t.strip().upper() for t in body.tickers if t.strip()]
+    if not tickers:
+        raise HTTPException(status_code=422, detail="no tickers to refresh")
+    try:
+        run_id = dagster_client.submit_refresh_run(tickers)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"run_id": run_id, "tickers": tickers}
+
+
 @rating_router.get("/rating/{ticker}")
 def get_rating(ticker: str) -> dict:
-    """Full confidence rating for one ticker (queues a compute if needed)."""
+    """Full confidence rating for one ticker (launches a compute if needed)."""
     try:
         return rating_service.get_rating(ticker)
     except ValueError as exc:
@@ -41,6 +63,14 @@ def search_tickers(
 def get_quote(ticker: str) -> dict | None:
     """Latest cached quote for the profile header badge; null when absent."""
     return market.get_quote(ticker)
+
+
+@market_router.get("/prices/{ticker}")
+def get_price_history(
+    ticker: str, months: int = Query(default=12, ge=1, le=120)
+) -> list[dict]:
+    """Weekly closes, ascending — feeds portfolio holding graphs."""
+    return market.get_price_history(ticker, months=months)
 
 
 @market_router.get("/movers")

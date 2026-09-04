@@ -63,7 +63,7 @@ export function NewsTable() {
   });
 
   return (
-    <Card>
+    <Card className="bg-surface/60 backdrop-blur-sm">
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

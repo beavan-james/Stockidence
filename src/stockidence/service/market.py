@@ -102,6 +102,27 @@ def get_quote(ticker: str) -> dict | None:
     }
 
 
+def get_price_history(ticker: str, months: int = 12) -> list[dict]:
+    """Weekly closes for a ticker, ascending by date — feeds portfolio graphs.
+
+    Reads mart.m_prices_weekly (resampled downstream, split-adjusted). Empty
+    list when the warehouse is absent or the ticker has no bars; the UI
+    degrades to quote-only rows.
+    """
+    rows = _read(
+        """
+        SELECT CAST(date AS VARCHAR), close
+        FROM mart.m_prices_weekly
+        WHERE ticker = ? AND date >= current_date - (? * INTERVAL '1 month')
+        ORDER BY date ASC
+        """,
+        [ticker.upper(), months],
+    )
+    if not rows:
+        return []
+    return [{"date": d, "close": _num(c)} for d, c in rows if c is not None]
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
