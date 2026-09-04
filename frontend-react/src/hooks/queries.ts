@@ -18,9 +18,12 @@ import type {
   Movers,
   ModelWeight,
   NewsEnvelope,
+  PriceBar,
   Quote,
+  RankingsEnvelope,
   Rating,
   RatingSource,
+  TechnicalStats,
 } from "@/types/api";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -57,11 +60,22 @@ export function useModelWeights() {
   });
 }
 
-export function useNews(params: { ticker?: string; page?: number; pageSize?: number }) {
+export function useRankings() {
+  return useQuery<RankingsEnvelope>({
+    queryKey: ["rankings"],
+    queryFn: () => client.rankings(),
+    // Quarterly snapshot: refetch at most hourly.
+    staleTime: 60 * 60_000,
+  });
+}
+
+export function useNews(params: { ticker?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) {
   return useQuery<NewsEnvelope>({
     queryKey: ["news", params],
     queryFn: () => client.news(params),
     placeholderData: (previous) => previous,
+    // Pages are cheap now (SQL LIMIT/OFFSET) but identical params shouldn't refetch.
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -71,6 +85,26 @@ export function useQuote(ticker: string | undefined) {
     queryKey: ["quote", ticker],
     queryFn: () => client.quote(ticker!),
     staleTime: 30_000,
+  });
+}
+
+export function usePriceHistory(ticker: string | undefined, months = 12) {
+  return useQuery<PriceBar[]>({
+    enabled: Boolean(ticker),
+    queryKey: ["prices", ticker, months],
+    queryFn: () => client.prices(ticker!, months),
+    // Weekly bars barely move intraday.
+    staleTime: 60 * 60_000,
+  });
+}
+
+export function useTechnicals(ticker: string | undefined) {
+  return useQuery<TechnicalStats | null>({
+    enabled: Boolean(ticker),
+    queryKey: ["technicals", ticker],
+    queryFn: () => client.technicals(ticker!),
+    // Derived once a day from landed bars.
+    staleTime: 60 * 60_000,
   });
 }
 
@@ -93,14 +127,14 @@ export function useCommodities() {
   });
 }
 
-export function useIpos(limit = 10) {
+export function useIpos(limit = 50) {
   return useQuery<IpoListing[]>({
     queryKey: ["ipos", limit],
     queryFn: () => client.ipos(limit),
   });
 }
 
-export function useEarnings(limit = 10) {
+export function useEarnings(limit = 50) {
   return useQuery<EarningsRelease[]>({
     queryKey: ["earnings", limit],
     queryFn: () => client.earnings(limit),

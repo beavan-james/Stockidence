@@ -21,7 +21,7 @@ PROVISIONAL_WEIGHTS: dict[str, float] = {
     "moat": 0.06,
 }
 
-# Demo mirrors the MODEL.md sub-score weights per category so the breakdown
+# Demo mirrors the sub-score weights per category so the breakdown
 # card is consistent with the live pipeline (which reads weights from mart).
 PROVISIONAL_COMPONENT_WEIGHTS: dict[str, dict[str, float]] = {
     "valuation": {

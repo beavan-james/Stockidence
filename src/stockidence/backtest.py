@@ -3,7 +3,7 @@
 For each replay date we re-run the deterministic scorer with as_of set, so
 bar-dated inputs cannot see the future, then record what actually happened
 over the next N trading days. The output feeds tuning conversations about
-MODEL.md weights/thresholds — this module only measures; it never mutates
+scoring weights/thresholds — this module only measures; it never mutates
 the model or the mart snapshot tables (score_ticker runs persist=False).
 
 Known approximation: slow period-keyed inputs (quarterly fundamentals,

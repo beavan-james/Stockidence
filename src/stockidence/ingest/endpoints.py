@@ -24,6 +24,7 @@ class Provider(StrEnum):
     ALPHA_VANTAGE = "alpha_vantage"
     FINNHUB = "finnhub"
     TWELVE_DATA = "twelve_data"
+    FRED = "fred"
     DERIVED = "derived"
 
 
@@ -212,6 +213,31 @@ _REGISTRY: list[EndpointSpec] = [
         artifacts=("raw_news_articles", "news_ticker_sentiment"),
         ttl=timedelta(days=1),
         notes="One response fans out to the article table and the ticker junction table",
+    ),
+    # --- persistent: daily, market-wide indexes via FRED ---
+    EndpointSpec(
+        name="market.vix",
+        provider=Provider.FRED,
+        method="observations",
+        trigger=Trigger.SCHEDULED,
+        cadence=Cadence.DAILY,
+        watermark=("series", "date"),
+        artifacts=("raw_fred_market",),
+        ttl=timedelta(days=1),
+        notes="FRED VIXCLS (CBOE VIX), daily close since 1990; full-series fetch "
+        "upserts idempotently on (series, date)",
+    ),
+    EndpointSpec(
+        name="market.sp500",
+        provider=Provider.FRED,
+        method="observations",
+        trigger=Trigger.SCHEDULED,
+        cadence=Cadence.DAILY,
+        watermark=("series", "date"),
+        artifacts=("raw_fred_market",),
+        ttl=timedelta(days=1),
+        notes="FRED SP500, daily S&P 500 PRICE index (no dividends); ~10y of daily "
+        "history per S&P/FRED licensing agreement",
     ),
     # --- hot path ---
     EndpointSpec(

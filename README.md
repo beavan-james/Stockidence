@@ -1,12 +1,12 @@
-# Stockidence — Stock Confidence Rating Pipeline
+# Stockidence
 --- 
 ## What this is
 
 A **stock confidence rating pipeline**. The scoring logic is
-relatively deterministic — the focus is on the data ingestion and the app
+relatively deterministic, the focus is on the data ingestion and the app
 itself rather than the algorithm. The scoring layer has since been
 **backtested point-in-time and recalibrated once** on that evidence (see
-[Backtesting & Validation](#backtesting--validation)).
+[Model Validation](#model-validation)).
 
 **The problem it answers:** *"I want to buy this stock but don't know if it's a
 good time, and I don't have time to research it."* The app outputs, for any
@@ -26,6 +26,10 @@ ticker:
   free-tier rate limits.
 - **Orchestration:** Dagster (assets/jobs), with incrementals load design
   driven by watermark-based staleness gates per (source, ticker, endpoint).
+  No sensors: the frontend launches the `refresh_tickers` job directly
+  (`POST /api/pipeline/refresh`), and a quarterly `quarterly_model_refresh`
+  job refreshes the universe, rebuilds the training dataset, and retrains
+  the ranking model.
 - **Warehouse:** DuckDB, three-layer schema `raw → staging → mart`.
 - **Caching:** staleness-aware cache in front of API calls; policy differs by
   data type (a quote is stale in minutes, an income statement in months).
@@ -46,6 +50,7 @@ caching layer exists to solve, not a problem to buy around.
 | **Finnhub**       | Company profile 2, basic & as-reported financials, EPS surprises, insider sentiment, recommendation trends, peers, IPO & earnings calendars, quote, stock symbol listing            |    [Finnhub API Documentation](https://finnhub.io/docs/api/introduction)     |
 | **Twelve Data**   | Price time series (`interval=1day`, split-adjusted); weekly/monthly are resampled downstream in the warehouse, not fetched                                                          |    [Twelve Data API Documentation ](https://twelvedata.com/docs/introduction/overview)      |
 | **Alpha Vantage** | Market news & sentiment, top gainers/losers, earnings call transcript, macro indicators (inflation, CPI, unemployment, fed funds, natural gas, real GDP), commodities (gold/silver) |     [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/)      |
+| **FRED**         | Market-wide daily index levels — CBOE VIX (`VIXCLS`, since 1990) and S&P 500 price index (`SP500`, ~10y daily history); read as point-in-time market-regime features by the ML model datasets, not the deterministic scorer | [FRED Series Observations API](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) |
 
 The full endpoint list — grouped by the scoring category each feeds — is in
 [`API.md`](API.md).
@@ -61,17 +66,23 @@ The full endpoint list — grouped by the scoring category each feeds — is in
 Deterministic, rule-based, weighted formula — no ML/LLM in the core score.
 Weights are **provisional** (v2, backtest-informed: Valuation 62%, Trend 24%,
 Sentiment 10%, Moat 4%; volatility is a separate output, not blended in). See
-[`MODEL.md`](MODEL.md) for sub-scores, fair-value methodology, thresholds,
-and the evidence behind each revision.
+[`TICKER_STATS.md`](TICKER_STATS.md) for the fair-value methodology and the
+technical statistics shown on ticker pages.
 
 An LLM layer may be added *on top of* the deterministic score later for
 narrative analysis — it will never replace or obscure the deterministic core.
+
+Alongside the per-ticker rating, a quarterly **XGBoost `rank:ndcg` model**
+orders the whole universe by expected next-quarter return (ranking only, no
+price prediction). The website's Model page serves it from
+`mart.model_rankings`. See [`Model/README.md`](Model/README.md).
 
 ---
 ## Cadence is heterogeneous by design
 
 - **Near-real-time:** Finnhub quote (cache TTL ~1 min)
-- **Daily:** market news (news & sentiment)
+- **Daily:** VIX / S&P 500 market indexes (FRED)
+- **Twice daily + overnight:** market news & sentiment (7am / 7pm ET pulls, plus the 01:00 UTC daily pull; upserts on article_id, served with SQL-side date filter + paging)
 - **Weekdays:** movers, IPO/earnings calendars
 - **Monthly:** commodities, macro indicators, stock symbol listing
 - **Quarterly/irregular:** fundamentals, earnings, transcripts
@@ -80,73 +91,45 @@ Cadence is heterogeneous primarily to avoid hitting API rate limits specifically
 
 ---
 
-## Backtesting & Validation
+## Model Validation
 
-The scoring layer is validated with a **point-in-time replay harness**: every
-replay date re-runs the deterministic scorer with an `as_of` cutoff, so
-bar-dated inputs cannot see the future, then records what actually happened
-over the next 5/20/60 trading bars. Replays need ≥210 prior bars (so SMA200-based
-trend components aren't degenerate) and a full forward window, or they're skipped.
-
-**Sample:** 13 large-cap tickers × ~500 daily bars each → **431 replays**
-spanning 2025-06 → 2026-05. All diagnostics bootstrap whole *replay dates*,
-because 13 tickers scored on the same weekly dates are not 431 independent
-observations.
-
-### Does the score rank-order outcomes?
+The production model is validated with **walk-forward backtesting**: every
+quarter from 2019→2025, the ranker trains on all history before the quarter
+cutoff and is graded on that quarter's realized returns — 26 out-of-sample
+quarters, 7,661 test rows. No lookahead: features are point-in-time
+snapshots, targets are forward returns.
 
 | Metric | Result |
 | ------ | ------ |
-| Spearman ρ (confidence vs 60d forward return) | **+0.24** [+0.17, +0.31], excludes 0 |
-| Train window only (9 mo) | +0.33 [+0.26, +0.40] |
-| Held-out window (last 2 mo) | ≈ 0 — regime-dependent, see limits |
-| Volatility score vs realized forward vol | **+0.61** (validated separately from confidence) |
+| Rank IC, pooled (predicted vs realized rank) | **+0.163** (random = 0) |
+| Top-10 excess over universe mean | **+3.90 pp/qtr** (t=+1.44, positive 73% of quarters) |
+| Top-25 excess over universe mean | **+5.08 pp/qtr** (t=+2.39, positive 77% of quarters) |
+| Top-quintile excess | **+2.99 pp/qtr** (t=+2.22, positive 73% of quarters) |
+| Precision@10 (predicted top-10 ∩ realized top-10) | **14.6%** (random 3.4%) |
+| Top-20 vs S&P 500 | **+5.53 pp/qtr**, beats the index 73% of quarters |
 
-Realized 60d forward returns by rating (v2 weights + bands):
-
-| Rating | n | mean 60d ret |
-| ------ | - | ------------ |
-| Strong Buy | 74 | +9.4% |
-| Buy | 160 | **+14.1%** |
-| Hold | 152 | +4.7% |
-| Sell | 38 | +1.8% |
-| Strong Sell | 7 | +2.4% |
-
-The ladder is monotone where it counts: buy-rated names beat hold, and the
-low bands mark genuinely below-market names.
-
-### What the backtest changed
-
-1. **Weights v1 → v2 (52/21/21/6 → 62/24/10/4).** Per-category attribution on
-   train-window replays showed valuation was the only positively-correlated
-   category (+0.38) while sentiment (−0.30) and moat (−0.25) correlated
-   *negatively* — weight moved toward what carries signal.
-2. **Rating bounds recalibrated (75/60/40/25 → 66/59/50/46).** The original
-   bands assumed a score spread the model never produces (observed 43.7–69.1),
-   so Sell/Strong Sell were unreachable. Under the new bounds the Sell bucket
-   realized −2.9% mean forward return vs Hold's +5.4%.
-3. **Buy-plan stops widened ×3.** Trade-level simulation (enter at advised
-   price, honor stop-loss) showed the original ATR stops killed ~84% of
-   positions before any target could be reached — median trade −2.4%. After
-   widening: avg/trade +13.5% (train) / +16.3% (held-out), win rate 25% → 73%.
+Year-by-year top-20 vs S&P (pp/qtr, hit rate): 2019 +4.01 (75%), 2020
++15.56 (100%), 2021 −3.46 (50%), 2022 +0.81 (50%), 2023 +12.09 (100%),
+2024 +2.54 (75%), 2025 +8.80 (100%).
 
 ### Honest limits
 
-- **One window, one regime.** The held-out period showed near-zero score↔return
-  discrimination under *both* weightings — the edge is regime-dependent, and no
-  reweighting within current category definitions fixes that.
-- Bull-market sample only; no bear-market data yet.
-- Overlapping observations: effective sample size is closer to ~50 independent
-  weeks than 431 rows.
-- Slow inputs (quarterly fundamentals, transcripts) are used as-landed rather
-  than as-of-publication — free-tier sources don't expose reliable report
-  timestamps; lookahead risk is small but nonzero.
-- The trade simulation measures plan quality, not a tradable strategy: users
-  choose their own exits.
+- **Quarterly grain, slow feedback.** Only ~4 fresh observations per year —
+  regime shifts (e.g. 2021–2022, when the model roughly tracked the index)
+  take quarters to detect, and 26 quarters is a small sample for t-stats
+  near ±2.
+- **Momentum/risk concentration.** The ranker leans into names with strong
+  trailing momentum and drawdown profiles; top cohorts can concentrate in
+  high-beta growth — it ranks, it does not manage risk.
+- **Bull-market sample only** (2019→2025 window); no sustained bear market
+  in the validation period.
+- **Overlapping cohorts:** the same names recur across adjacent quarters, so
+  effective independence is lower than 7,661 rows suggests.
 
-Harness lives in `stockidence.backtest` / `backtest_metrics` /
-`backtest_trades`; methodology and every constant revision are documented in
-[`MODEL.md`](MODEL.md).
+Harness lives in `Model/notebooks/production_ranking_model.ipynb`
+(walk-forward cells + S&P benchmark + artifact export); the model spec,
+feature set, and refresh pipeline are documented in
+[`Model/README.md`](Model/README.md).
 
 ---
 ## Docs
@@ -155,4 +138,5 @@ Harness lives in `stockidence.backtest` / `backtest_metrics` /
 | ---------------- | ----------------------------------------------------- |
 | `ARCHITECTURE.md` | Warehouse layers, watermark/staleness design, data flow diagram |
 | `API.md`          | Every endpoint used, grouped by scoring category, with JSON samples |
-| `MODEL.md`        | Scoring weights, sub-scores, fair-value & target-price methodology, thresholds |
+| `TICKER_STATS.md` | Fair-value methodology and the technical statistics on ticker pages |
+| `Model/README.md` | Ranking model spec, validation, quarterly refresh pipeline |

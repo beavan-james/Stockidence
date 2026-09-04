@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -12,16 +13,15 @@ const STAGES = [
 ];
 
 const TENETS = [
-  "Valuation leads the verdict.",
-  "Volatility informs — it never decides.",
-  "Every sub-score traces back to a source.",
-  "Same inputs, same rating. Every time.",
+  "Fair value anchors the verdict.",
+  "Every statistic traces back to a source.",
+  "Same inputs, same numbers. Every time.",
 ];
 
 function headline(source: string, ticker?: string): string {
-  if (source === "pending") return ticker ? `First rating for ${ticker}` : "Computing your first rating";
+  if (source === "pending") return ticker ? `Loading ${ticker}` : "Loading ticker";
   if (source === "refreshing") return ticker ? `Refreshing ${ticker}` : "Refreshing";
-  return ticker ? `Computing a rating for ${ticker}` : "Computing a rating";
+  return ticker ? `Computing ${ticker}` : "Computing";
 }
 
 function subtitle(source: string): string {
@@ -47,60 +47,67 @@ export function ComputingScreen({ source, ticker }: { source: string; ticker?: s
   }, []);
 
   return (
-    <Card>
-      <CardContent className="space-y-6 p-10 text-center">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">{headline(source, ticker)}</h2>
-          <p className="text-xs text-ink-muted">{subtitle(source)}</p>
-        </div>
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <Card>
+        <CardContent className="space-y-6 p-10 text-center">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold tracking-tight">{headline(source, ticker)}</h2>
+            <p className="text-xs text-ink-muted">{subtitle(source)}</p>
+          </div>
 
-        <svg viewBox="0 0 120 120" className="mx-auto h-28 w-28" role="img" aria-label="Computing">
-          <circle cx="60" cy="60" r="48" fill="none" stroke="#26262b" strokeWidth="6" />
-          <circle
-            cx="60"
-            cy="60"
-            r="48"
-            fill="none"
-            stroke="#818cf8"
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeDasharray="90 212"
-            className="cg-gauge-sweep origin-center"
-          />
-          <text x="60" y="57" textAnchor="middle" style={{ fontSize: 9 }} className="fill-zinc-500">
-            CALIBRATING
-          </text>
-        </svg>
+          <div
+            className="mx-auto h-1 max-w-sm overflow-hidden rounded-full bg-raised"
+            role="progressbar"
+            aria-label="Loading"
+          >
+            <motion.div
+              className="h-full w-1/3 rounded-full bg-accent"
+              style={{ boxShadow: "0 0 16px var(--color-accent)" }}
+              animate={{ x: ["-100%", "300%"] }}
+              transition={{ duration: 1.6, ease: "easeInOut", repeat: Infinity }}
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-1 text-xs">
-          {STAGES.map((label, i) => (
-            <span key={label} className="flex items-center gap-1">
-              <span
-                className={cn(
-                  "rounded-full border px-3 py-1 transition-colors duration-700",
-                  i === stage
-                    ? "border-accent/50 bg-accent-dim text-accent-strong"
-                    : i < stage
-                      ? "border-line bg-raised text-ink-secondary"
-                      : "border-line/60 text-ink-muted/60",
-                )}
-              >
-                {label}
+          <div className="flex flex-wrap items-center justify-center gap-1 text-xs">
+            {STAGES.map((label, i) => (
+              <span key={label} className="flex items-center gap-1">
+                <span
+                  className={cn(
+                    "rounded-full border px-3 py-1 transition-colors duration-700",
+                    i === stage
+                      ? "border-accent/50 bg-accent-dim text-accent-strong"
+                      : i < stage
+                        ? "border-line bg-raised text-ink-secondary"
+                        : "border-line/60 text-ink-muted/60",
+                  )}
+                >
+                  {label}
+                </span>
+                {i < STAGES.length - 1 && <span className="text-ink-muted/50">›</span>}
               </span>
-              {i < STAGES.length - 1 && <span className="text-ink-muted/50">›</span>}
-            </span>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        <p key={tenet} className="cg-fade text-sm italic text-ink-secondary">
-          {TENETS[tenet]}
-        </p>
+          <motion.p
+            key={tenet}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="text-sm italic text-ink-secondary"
+          >
+            {TENETS[tenet]}
+          </motion.p>
 
-        <p className="cg-reassure text-xs text-ink-muted">
-          Still working — fundamentals are the slow part. This page updates itself the moment
-          the rating lands.
-        </p>
-      </CardContent>
-    </Card>
+          <p className="text-xs text-ink-muted">
+            Still working — fundamentals are the slow part. This page updates itself the moment
+            the numbers land.
+          </p>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }

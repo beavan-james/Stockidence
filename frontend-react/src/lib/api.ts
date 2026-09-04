@@ -38,17 +38,31 @@ export const client = {
   quote: (ticker: string) =>
     api<import("@/types/api").Quote | null>(`/api/quote/${encodeURIComponent(ticker)}`),
 
+  prices: (ticker: string, months = 12) =>
+    api<import("@/types/api").PriceBar[]>(
+      `/api/prices/${encodeURIComponent(ticker)}?months=${months}`,
+    ),
+
+  technicals: (ticker: string) =>
+    api<import("@/types/api").TechnicalStats | null>(
+      `/api/technicals/${encodeURIComponent(ticker)}`,
+    ),
+
   movers: () => api<import("@/types/api").Movers>("/api/movers"),
 
-  news: (params: { ticker?: string; page?: number; pageSize?: number }) => {
+  news: (params: { ticker?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
     if (params.ticker) qs.set("ticker", params.ticker);
+    if (params.dateFrom) qs.set("date_from", params.dateFrom);
+    if (params.dateTo) qs.set("date_to", params.dateTo);
     if (params.page) qs.set("page", String(params.page));
     if (params.pageSize) qs.set("page_size", String(params.pageSize));
     return api<import("@/types/api").NewsEnvelope>(`/api/news?${qs.toString()}`);
   },
 
   modelWeights: () => api<import("@/types/api").ModelWeight[]>("/api/model-weights"),
+
+  rankings: () => api<import("@/types/api").RankingsEnvelope>("/api/rankings"),
 
   componentSpec: () =>
     api<import("@/types/api").ComponentSpec>("/api/component-spec"),

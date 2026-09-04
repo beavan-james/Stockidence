@@ -1,11 +1,12 @@
 import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
 import { motion, type Variants } from "framer-motion";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { EarningsRelease, IpoListing } from "@/types/api";
 import { cn } from "@/lib/utils";
 
 const ease = [0.22, 1, 0.36, 1] as const;
+const MAX_VISIBLE = 10;
 
 const rowVariants: Variants = {
   hidden: { opacity: 0, x: -6 },
@@ -35,14 +36,23 @@ function statusPill(status: string | null): { label: string; cls: string } | nul
 
 export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
   const navigate = useNavigate();
+
+  const sorted = useMemo(
+    () => [...listings].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "")),
+    [listings],
+  );
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>IPO calendar</CardTitle>
-      </CardHeader>
-      <CardContent className="px-2 pb-2 pt-3">
+    <div>
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+        className={cn("overflow-y-auto pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
+      >
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
             <tr className="text-left text-xs text-ink-muted">
               <th className="px-3 pb-2 font-normal">Date</th>
               <th className="px-3 pb-2 font-normal">Symbol</th>
@@ -50,8 +60,8 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
               <th className="px-3 pb-2 text-right font-normal">Price</th>
             </tr>
           </thead>
-          <motion.tbody variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }}>
-            {listings.map((ipo, i) => {
+          <tbody>
+            {sorted.map((ipo, i) => {
               const pill = statusPill(ipo.status);
               return (
                 <motion.tr
@@ -60,7 +70,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
                   transition={{ duration: 0.35, ease }}
                   className={cn(
                     "border-t border-line/60 transition-colors",
-                    ipo.symbol ? "cursor-pointer hover:bg-raised" : "",
+                    ipo.symbol ? "cursor-pointer hover:bg-raised/60" : "",
                   )}
                   onClick={ipo.symbol ? () => void navigate(`/stocks/${ipo.symbol}`) : undefined}
                 >
@@ -80,23 +90,37 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
                 </motion.tr>
               );
             })}
-          </motion.tbody>
+          </tbody>
         </table>
-      </CardContent>
-    </Card>
+      </motion.div>
+    </div>
   );
 }
 
 export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) {
   const navigate = useNavigate();
+
+  const sorted = useMemo(
+    () =>
+      [...releases].sort((a, b) => {
+        const dateCmp = (a.date ?? "").localeCompare(b.date ?? "");
+        if (dateCmp !== 0) return dateCmp;
+        return (b.revenue_estimate ?? 0) - (a.revenue_estimate ?? 0);
+      }),
+    [releases],
+  );
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Earnings calendar</CardTitle>
-      </CardHeader>
-      <CardContent className="px-2 pb-2 pt-3">
+    <div>
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+        className={cn("overflow-y-auto pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
+      >
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
             <tr className="text-left text-xs text-ink-muted">
               <th className="px-3 pb-2 font-normal">Date</th>
               <th className="px-3 pb-2 font-normal">Symbol</th>
@@ -105,15 +129,15 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
               <th className="px-3 pb-2 text-right font-normal">Rev est.</th>
             </tr>
           </thead>
-          <motion.tbody variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }}>
-            {releases.map((e, i) => {
+          <tbody>
+            {sorted.map((e, i) => {
               const badge = hourBadge(e.hour);
               return (
                 <motion.tr
                   key={`${e.symbol}-${i}`}
                   variants={rowVariants}
                   transition={{ duration: 0.35, ease }}
-                  className="cursor-pointer border-t border-line/60 transition-colors hover:bg-raised"
+                  className="cursor-pointer border-t border-line/60 transition-colors hover:bg-raised/60"
                   onClick={() => void navigate(`/stocks/${e.symbol}`)}
                 >
                   <td className="num px-3 py-2.5 text-ink-secondary">{e.date}</td>
@@ -145,9 +169,9 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
                 </motion.tr>
               );
             })}
-          </motion.tbody>
+          </tbody>
         </table>
-      </CardContent>
-    </Card>
+      </motion.div>
+    </div>
   );
 }

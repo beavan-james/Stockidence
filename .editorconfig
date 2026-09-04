@@ -1,0 +1,17 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Frontend (React/TS/CSS): 2-space convention
+[*.{ts,tsx,js,jsx,css,json,md}]
+indent_style = space
+indent_size = 2
+
+# Backend: 4-space PEP 8
+[*.py]
+indent_style = space
+indent_size = 4

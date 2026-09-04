@@ -1,18 +1,17 @@
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
 
-import { BigPicture } from "@/components/profile/BigPicture";
 import { ComputingScreen } from "@/components/profile/ComputingScreen";
 import { QuoteBadge } from "@/components/profile/QuoteBadge";
-import { ExecutionPlan, ValuationReference } from "@/components/profile/RatingsCards";
-import { SubScoreDetail } from "@/components/profile/SubScoreDetail";
+import { ValuationReference } from "@/components/profile/RatingsCards";
+import { TechnicalStats } from "@/components/profile/TechnicalStats";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRating } from "@/hooks/queries";
-import { adviceLabel, adviceStyle } from "@/lib/format";
-import { categoryColor, categoryLabel } from "@/lib/viz";
+import { usePortfolio, addToPortfolio, isInPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
 import type { RatingSource } from "@/types/api";
 import { cn } from "@/lib/utils";
+import { Plus, Check } from "lucide-react";
 
 const SOURCE_COPY: Record<RatingSource, string> = {
   warehouse: "",
@@ -40,41 +39,6 @@ function SourceNotice({ source }: { source: RatingSource }) {
   );
 }
 
-function ScoreBreakdown({
-  categories,
-}: {
-  categories: { category: string; score: number; weight: number }[];
-}) {
-  return (
-    <Card className="anim-rise" style={{ animationDelay: "140ms" }}>
-      <CardContent className="space-y-4 p-6">
-        <h3 className="font-semibold tracking-tight">Score breakdown</h3>
-        {categories.map((c, i) => (
-          <div key={c.category} className="flex items-center gap-4 text-sm">
-            <span className="w-24 shrink-0 text-ink-secondary">
-              {categoryLabel(c.category).replace(" (separate)", "")}
-            </span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-raised">
-              <div
-                className="anim-bar h-full rounded-full"
-                style={{
-                  width: `${Math.max(c.score, 2)}%`,
-                  backgroundColor: categoryColor(c.category),
-                  animationDelay: `${200 + i * 90}ms`,
-                }}
-              />
-            </div>
-            <span className="num w-16 text-right text-xs text-ink-muted">
-              {(c.weight * 100).toFixed(0)}% weight
-            </span>
-            <span className="num w-8 text-right">{c.score.toFixed(0)}</span>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
 function useDocumentTitle(title: string | undefined) {
   useEffect(() => {
     if (title) document.title = `${title} — Stockidence`;
@@ -87,9 +51,12 @@ function useDocumentTitle(title: string | undefined) {
 export function ProfilePage() {
   const symbol = useParams().symbol?.toUpperCase();
   const rating = useRating(symbol);
+  usePortfolio();
   useDocumentTitle(symbol);
 
   if (!symbol) return null;
+
+  const inPortfolio = isInPortfolio(symbol);
 
   if (rating.isPending) {
     return (
@@ -105,7 +72,7 @@ export function ProfilePage() {
       <Card>
         <CardContent className="space-y-3 p-10 text-center">
           <p className="text-sm text-ink">{rating.error.message}</p>
-          <Link to="/" className="text-xs text-accent hover:text-accent-strong">
+          <Link to="/discover" className="text-xs text-accent hover:text-accent-strong">
             ← Back to Discover
           </Link>
         </CardContent>
@@ -119,7 +86,7 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/" className="inline-flex items-center gap-1 text-xs text-ink-muted hover:text-accent">
+      <Link to="/discover" className="inline-flex items-center gap-1 text-xs text-ink-muted hover:text-accent">
         ← Back to Discover
       </Link>
 
@@ -129,52 +96,47 @@ export function ProfilePage() {
         <ComputingScreen source={r.source} ticker={r.ticker} />
       ) : (
         <>
-          <Card className="anim-rise">
-            <CardContent className="flex flex-wrap items-center justify-between gap-x-10 gap-y-4 p-6">
-              <div className="flex items-center gap-4">
-                {r.logo_url && (
-                  <img src={r.logo_url} alt="" className="h-9 w-9 rounded-lg bg-raised object-contain" />
+          <div className="anim-rise flex flex-wrap items-center justify-between gap-x-10 gap-y-4 border-b border-line/60 pb-4">
+            <div className="flex items-center gap-4">
+              {r.logo_url && (
+                <img src={r.logo_url} alt="" className="h-9 w-9 rounded-lg bg-raised object-contain" />
+              )}
+              <div>
+                <h1 className="num title-glow text-xl font-semibold tracking-tight">{r.ticker}</h1>
+                <p className="text-sm text-ink-secondary">{r.company_name || "—"}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <QuoteBadge ticker={r.ticker} />
+              <button
+                onClick={() =>
+                  inPortfolio ? removeFromPortfolio(symbol) : addToPortfolio(symbol)
+                }
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm transition-colors",
+                  inPortfolio
+                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
+                    : "border-line bg-transparent text-ink-secondary hover:border-accent/30 hover:text-ink",
                 )}
-                <div>
-                  <h1 className="num text-xl font-semibold tracking-tight">{r.ticker}</h1>
-                  <p className="text-sm text-ink-secondary">{r.company_name || "—"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-6">
-                <QuoteBadge ticker={r.ticker} />
-                <span
-                  className={cn(
-                    "anim-pop inline-flex rounded-lg border px-3 py-1 text-sm font-medium",
-                    adviceStyle(r.advice),
-                  )}
-                >
-                  {adviceLabel(r.advice)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <BigPicture
-            confidence={r.confidence_score}
-            volatility={r.volatility_score}
-            advice={r.advice}
-            asOf={r.as_of}
-            categories={r.categories}
-          />
+              >
+                {inPortfolio ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    In portfolio
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add to portfolio
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
 
           <ValuationReference fairValue={r.fair_value} targetPrice={r.target_price} />
 
-          <ScoreBreakdown categories={r.categories} />
-
-          {r.buy_plan && (
-            <ExecutionPlan
-              advisedBuyPrice={r.buy_plan.advised_buy_price}
-              stopLossPrice={r.buy_plan.stop_loss_price}
-              holdingStyle={r.buy_plan.holding_style}
-            />
-          )}
-
-          <SubScoreDetail components={r.components} />
+          <TechnicalStats ticker={r.ticker} />
         </>
       )}
     </div>

@@ -4,12 +4,13 @@
 *Refreshed daily via scheduled Dagster jobs, independent of ticker activity.*
 
 - **Commodities** — one table, key `(nominal, date)` — gold/silver spot prices (monthly)
+- **Market indexes** — `raw_fred_market`, key `(series, date)` — CBOE VIX (`VIXCLS`, full history) and S&P 500 price index (`SP500`, ~10y daily per S&P licensing), landed daily from FRED; typed in `stg_fred_market`, aggregated into `m_fred_market` (levels + close-to-close momentum over 5/21/63/126/252d). Serves the ML model datasets as point-in-time market-regime features (daily)
 - **Macro indicators** — one table, key `(indicator, date)` — CPI, unemployment, fed funds, natural gas, inflation, real GDP (one row per indicator/date rather than a separate table per series) (monthly)
 - **Top Gainers/Losers** — own table, key `(ticker, date)` (weekdays)
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
 - **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
-- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, overall_sentiment_score (daily)
-- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — relevance_score, ticker_sentiment_score. This junction table is what makes news joinable to a ticker for the Sentiment category, since one article can mention several tickers and one ticker appears in many articles.
+- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, overall_sentiment_score (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with ticker/date filters so paging never loads the full table)
+- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — relevance_score, ticker_sentiment_score. This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
 ---
 ## Real-Time / Ticker-Partitioned Data
 *Fetched on-demand per ticker via dynamic partitions, gated by a staleness check against `last_updated`.*
@@ -33,7 +34,7 @@
 Monthly: Commodities (AV), Macro indicators (AV), Stock Symbol (FH)
 Weekly: n/a
 Weekdays: IPO Calendar (FH), Earnings Calendar (FH), Top Gainers/Losers (AV)
-Daily: Market News (AV)
+Daily: Market News (AV), Market Indexes (FRED)
 
 On Stock Lookup (Everytime): Quote (FH), Time Series (TD)
 On Stock Lookup (If stale): Company Profile 2 (FH), Basic Financials (FH), Financials As Reported (FH), Insider Sentiment (FH), Recommendation Trends (FH), EPS Surprises (FH), Peers (FH), Earnings Call Transcript (AV)
@@ -46,28 +47,15 @@ flowchart TD
     AV(["Alpha Vantage"])
     FH(["Finnhub"])
     TD(["Twelve Data"])
+    FRED(["FRED"])
 
     subgraph ORCH["Dagster orchestration"]
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
-        SENSOR["ticker_request_sensor<br/>polls control.ticker_requests every 30s"]
-        RUN["On-demand per-ticker run<br/>ticker_data → staging → mart → score"]
+        QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
+        PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
+        RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
         TI["Derivation assets<br/>staging clean → mart aggregates"]
-    end
-
-    subgraph CONTROL["control layer"]
-        Q["ticker_requests<br/>key (ticker) · pending → launched"]
-    end
-
-    subgraph RAW["raw layer — landed API responses · doubles as staleness-aware cache"]
-        R_PERS["Commodities · macro · top gainers/losers · IPO & earnings calendars<br/>raw_news_articles · news_ticker_sentiment"]
-        R_PRC["Price history daily · quotes · company profile 2<br/>basic & as-reported financials · EPS surprises · transcripts<br/>insider sentiment · rec trends · peers"]
-    end
-
-    subgraph STG["staging layer — typed · cleaned · deduped"]
-        S_PRC["stg_prices_daily<br/>exhaustive OHLCV"]
-        S_FUND["Fundamentals + earnings"]
-        S_NEWS["Ticker-level news sentiment"]
     end
 
     subgraph MART["mart layer — aggregated & derived tables the scoring layer reads"]
@@ -75,19 +63,22 @@ flowchart TD
         M_ADV["m_advanced_analytics<br/>rolling stats · max drawdown"]
         M_RESH["m_prices_weekly · m_prices_monthly"]
         M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
+        M_RANK["model_rankings<br/>rank · ticker · sector · score<br/>quarterly snapshot"]
     end
 
-    UI["FastAPI + React SPA<br/>reads mart/raw · writes control"]
+    UI["FastAPI + React SPA<br/>reads mart/raw · launches jobs (no sensors)"]
 
     SCHED -->|"ingest_scheduled<br/>market-wide"| RAW
-    UI -->|"enqueue ticker<br/>(pending) when no snapshot"| Q
-    SENSOR -->|"poll 30s"| Q
-    SENSOR -->|"launch partition run"| RUN
+    QUART -->|"incremental refresh<br/>retrain + export"| RAW
+    QUART -->|"ranking snapshot"| M_RANK
+    UI -->|"POST /api/pipeline/refresh<br/>when no/fresh snapshot"| PUSH
+    PUSH -->|"ingest + derived + score"| RUN
     RUN <--> GATE
     GATE -->|"stale → fetch"| AV
     GATE -->|"stale → fetch"| FH
     GATE -->|"stale → fetch"| TD
-    AV & FH & TD -->|"land responses"| RAW
+    GATE -->|"stale → fetch"| FRED
+    AV & FH & TD & FRED -->|"land responses"| RAW
     RUN -->|"land responses"| RAW
 
     RAW -->|"load / unnest / type"| STG
@@ -98,7 +89,10 @@ flowchart TD
     STG -->|"aggregate / score"| M_RATING
 
     MART -->|"rating snapshot<br/>source=warehouse"| UI
+    M_RANK -->|"GET /api/rankings"| UI
     RAW -->|"quotes · news · commodities · macro"| UI
+    M_RESH -->|"GET /api/prices"| UI
+    M_TECH -->|"GET /api/technicals"| UI
 ```
 
 > Notes on the loop:
@@ -110,19 +104,27 @@ flowchart TD
 >   `mart.model_weights` is seeded from the scoring module's weight spec at
 >   schema init, so displayed weights can't drift from applied weights.
 > - The quote path is **not** a direct frontend→Finnhub call — the UI reads
->   `raw.raw_quotes` from the warehouse; the sensor-driven run refreshes it
->   (TTL ~1 min) whenever the ticker is recomputed.
+>   `raw.raw_quotes` from the warehouse; a refresh run updates it (TTL ~1 min)
+>   whenever the ticker is recomputed.
 > - Snapshot freshness: a search for a ticker with an existing rating serves
 >   the mart snapshot immediately when fresh (younger than 1 day). A stale
->   snapshot is still served (source="refreshing" in the UI) while the
->   request is re-queued for a recompute; a ticker with no snapshot goes
->   straight to the queue (source="pending").
+>   snapshot is still served (source="refreshing" in the UI) while a refresh
+>   job is launched; a ticker with no snapshot launches a job and reports
+>   source="pending" until the mart snapshot lands.
+> - Push model, no sensors: compute requests launch the `refresh_tickers` job
+>   directly over GraphQL (`POST /api/pipeline/refresh`, per-ticker cooldown
+>   dedups the UI's poll loop). The legacy `control.ticker_requests` queue
+>   tables still exist but nothing consumes them.
 > - Scheduled jobs and on-demand runs are independent: schedules warm the
 >   persistent universe (news, calendars, movers, macro); on-demand runs
->   compute per-ticker ratings.
+>   compute per-ticker ratings. The quarterly `quarterly_model_refresh` job
+>   additionally refreshes the whole universe, rebuilds the training dataset,
+>   retrains the ranking model, and exports `mart.model_rankings`.
 >
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
-> over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a read-only REST
-> surface (one exception: rating lookups enqueue to `control.ticker_requests`).
+> over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a mostly-read
+> REST surface (one write path: rating lookups launch refresh jobs).
 > The React SPA (`frontend-react/`) consumes that API with TanStack Query,
-> polling every 10s while a rating is pending/refreshing.
+> polling every 10s while a rating is pending/refreshing. Pages: Model
+> (ranking table from `mart.model_rankings`), Discover (movers, macro,
+> news, calendars), Portfolio (local holdings + P&L), Docs.

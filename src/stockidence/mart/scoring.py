@@ -1,8 +1,9 @@
 """Deterministic scoring layer: reads raw/staging/mart, emits per-ticker
 confidence rating + volatility score + fair value + buy plan.
 
-MODEL.md is the governing spec; every weight/threshold here is a provisional
-constant (centralized below) so backtesting can tune without touching logic.
+TICKER_STATS.md documents the surfaced outputs (fair value, technicals);
+every weight/threshold here is a provisional constant (centralized below)
+so backtesting can tune without touching logic.
 
 Gap policy: when a sub-score's inputs are missing we degrade — a defensible
 proxy substitutes (source="proxy") or the sub-score is neutral 50
@@ -21,7 +22,7 @@ from typing import Any, Iterable
 from ..storage import Warehouse
 
 # ---------------------------------------------------------------------------
-# Model configuration (provisional per MODEL.md — tune here, not in logic)
+# Model configuration (provisional — tune here, not in logic)
 # ---------------------------------------------------------------------------
 
 CONFIDENCE_WEIGHTS: dict[str, float] = {
@@ -88,7 +89,7 @@ VOLATILITY_BANDS: list[tuple[str, float | None]] = [
     ("day trade", None),
 ]
 
-# Sub-score weights within each category (MODEL.md tables)
+# Sub-score weights within each category
 VALUATION_SUB_WEIGHTS: dict[str, float] = {
     "discount_to_fair_value": 0.40,
     "pe_percentile": 0.20,
@@ -351,7 +352,7 @@ def _eps_pe_history(price: float, rows: list[dict[str, Any]]) -> list[float]:
 
 
 _METRIC_ALIASES = {
-    # MODEL.md metric name -> Finnhub /stock/metric name. The API's series are
+    # Canonical metric name -> Finnhub /stock/metric name. The API's series are
     # period-keyed; its scalar `metric` dict is landed at the sentinel period
     # (quarter=0/year=0) with freq "latest".
     "salesPerShareTTM": "revenuePerShareTTM",
@@ -903,7 +904,7 @@ def _volatility_components(con: Any, ticker: str, price: float | None,
 
 
 # ---------------------------------------------------------------------------
-# Fair value (DCF + own-history comparables, per MODEL.md)
+# Fair value (DCF + own-history comparables, per TICKER_STATS.md)
 # ---------------------------------------------------------------------------
 
 def _reported_concepts(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -955,7 +956,7 @@ def _fair_value(con: Any, ticker: str, price: float, basic: list[dict[str, Any]]
     """Blended DCF + history-multiple fair value.
 
     Returns (value, provenance, growth): the same clamped g_fwd feeds both the
-    valuation legs here and the 12-month target price (MODEL.md), so callers
+    valuation legs here and the 12-month target price (TICKER_STATS.md), so callers
     never re-derive growth with a narrower fallback chain.
     """
     if price <= 0:
@@ -1158,7 +1159,7 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
 
         target = None
         if fair_value is not None:
-            # MODEL.md: target = fairValue x (1 + g_fwd), the same resolved
+            # TICKER_STATS.md: target = fairValue x (1 + g_fwd), the same resolved
             # growth (estimate -> trailing-EPS fallback -> proxy) that fair
             # value used -- not a narrower estimate-only lookup.
             target = fair_value * (

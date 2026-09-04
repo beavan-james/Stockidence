@@ -1,14 +1,23 @@
-"""Dagster definitions: registry-driven scheduled jobs + on-demand ticker asset.
+"""Dagster definitions: registry-driven scheduled jobs + model refresh.
 
 The registry (endpoints.py) is the single source of truth: cadence groups
-become jobs, schedules bind them, and the on-demand ticker asset fans a
-partitioned request out through the ingestion engine's staleness gate.
+become jobs and schedules bind them. Transform logic lives in plain
+functions (ingest/staging/mart); Dagster objects are thin wrappers.
 
     dagster dev -f src/stockidence/definitions.py
 
+Triggering model (push, no sensors): the frontend calls
+POST /api/pipeline/refresh, which launches ``refresh_tickers`` directly
+via GraphQL. Nothing polls.
+
 Exposes:
   - monthly_ingest / weekdays_ingest / daily_ingest jobs (schedule-bound)
+  - quarterly_model_refresh job (schedule-bound): universe refresh ->
+    quarterly dataset rebuild -> notebook retrain + ranking export
+  - refresh_tickers job (frontend-triggered): on-demand per-ticker
+    ingest + derived rebuilds + scoring
   - ticker_data asset with a dynamic ticker partition per lookup
+    (manual materialization path)
 """
 
 from datetime import datetime, timezone
@@ -17,40 +26,35 @@ from typing import Any
 from dagster import (
     AssetExecutionContext,
     AssetSelection,
+    Config,
     DefaultScheduleStatus,
-    DefaultSensorStatus,
     Definitions,
     DynamicPartitionsDefinition,
-    RunRequest,
+    OpExecutionContext,
     in_process_executor,
     job,
     op,
     resource,
     schedule,
-    sensor,
     asset,
 )
 
-from .failure_sensor import pipeline_failure_sensor
 from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest.engine import IngestEngine
+from .ingest.refresh import refresh_tickers
 from .mart.mart import (
     rebuild_advanced_analytics,
+    rebuild_fred_market as rebuild_fred_mart,
     rebuild_prices_monthly,
     rebuild_prices_weekly,
     rebuild_technical_indicators,
 )
 from .mart.scoring import score_ticker
+from .staging.staging import rebuild_fred_market as rebuild_fred_staging
 from .staging.staging import rebuild_prices_daily
 from .storage import Warehouse
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
-
-# Max RunRequests emitted per sensor tick. Each run fires provider calls
-# (including one Alpha Vantage transcript), so launching the whole queue at
-# once stampedes free-tier burst limits; a small batch per 30s tick keeps
-# providers paced while still draining the queue within minutes.
-SENSOR_BATCH_SIZE = 2
 
 _ON_DEMAND_ENDPOINTS = tuple(spec.name for spec in on_demand_endpoints())
 
@@ -66,7 +70,14 @@ def engine_resource() -> IngestEngine:
     return IngestEngine(warehouse)
 
 
-def _make_cadence_job(cadence: Cadence):
+def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...] = ()):
+    """Build a scheduled ingestion job for one cadence group.
+
+    `post_derived` is a sequence of (label, rebuild_fn) market-wide derivations
+    that run AFTER the raw lands — used by the daily job to rebuild FRED
+    staging + mart from the freshly fetched index series. Unlike the per-ticker
+    derived assets, these have no API calls and no ticker partition.
+    """
     names = [spec.name for spec in scheduled_endpoints()
              if spec.cadence == cadence]
     if not names:
@@ -80,16 +91,29 @@ def _make_cadence_job(cadence: Cadence):
             context.log.info(
                 f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
 
+    derived_ops: list[Any] = []
+    for i, (label, rebuild) in enumerate(post_derived):
+        @op(name=f"{cadence.value}_{label}_op", required_resource_keys={"engine"})
+        def derive_cadence(context, _rebuild: Any = rebuild, _label: str = label) -> None:
+            rows = _rebuild(context.resources.engine.warehouse)
+            context.log.info(f"[derived:{_label}] rebuilt {rows} rows")
+        derived_ops.append(derive_cadence)
+
     @job(name=f"{cadence.value}_ingest")
     def cadence_job():
         ingest_cadence()
+        for op in derived_ops:
+            op()
 
     return cadence_job
 
 
 monthly_job = _make_cadence_job(Cadence.MONTHLY)
 weekdays_job = _make_cadence_job(Cadence.WEEKDAYS)
-daily_job = _make_cadence_job(Cadence.DAILY)
+daily_job = _make_cadence_job(
+    Cadence.DAILY,
+    post_derived=(("fred_staging", rebuild_fred_staging), ("fred_mart", rebuild_fred_mart)),
+)
 
 
 @schedule(job=monthly_job, cron_schedule="0 2 1 * *",
@@ -116,10 +140,44 @@ def daily_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
+@op(name="ingest_news_op", required_resource_keys={"engine"})
+def ingest_news_op(context) -> None:
+    engine = context.resources.engine
+    result = engine.ingest_scheduled("market_news", now=_now())
+    context.log.info(
+        f"[scheduled:market_news] {result.reason} ({result.rows_written} rows)")
+
+
+@job(name="news_ingest")
+def news_job():
+    """News-only pull (Alpha Vantage market_news, limit=1000, upsert on
+    article_id so repeats are idempotent). The 01:00 daily job also pulls
+    news; these two add the morning/evening refreshes."""
+    ingest_news_op()
+
+
+@schedule(job=news_job, cron_schedule="0 11 * * *",
+          default_status=DefaultScheduleStatus.RUNNING)
+def news_morning_schedule() -> dict:  # noqa: ANN401
+    """11:00 UTC (~7am ET): morning news + sentiment pull."""
+    return {}
+
+
+@schedule(job=news_job, cron_schedule="0 23 * * *",
+          default_status=DefaultScheduleStatus.RUNNING)
+def news_evening_schedule() -> dict:  # noqa: ANN401
+    """23:00 UTC (~7pm ET): evening news + sentiment pull."""
+    return {}
+
+
 @asset(partitions_def=ticker_partitions, required_resource_keys={"engine"})
 def ticker_data(context: AssetExecutionContext) -> None:
-    """On-demand per-ticker fetch: the frontend adds a ticker partition,
-    then the engine's staleness gate decides which endpoints need a call."""
+    """On-demand per-ticker fetch (manual materialization path).
+
+    The staleness gate decides which endpoints need a call; the
+    frontend-triggered path runs the same logic through the
+    ``refresh_tickers`` job instead.
+    """
     ticker = context.partition_key
     engine = context.resources.engine
     for endpoint in _ON_DEMAND_ENDPOINTS:
@@ -152,21 +210,6 @@ def ticker_data(context: AssetExecutionContext) -> None:
         result = engine.ingest_on_demand(endpoint, dimension, now=_now())
         context.log.info(
             f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
-
-
-def stage_ticker_runs(warehouse: Warehouse, instance,
-                      batch_size: int = SENSOR_BATCH_SIZE) -> list[str]:
-    """Consume the request queue: add dynamic ticker partitions and mark
-    launched, oldest requests first, at most `batch_size` per tick. Returns
-    the staged tickers so the sensor can emit one RunRequest each; the rest
-    stay pending for the next tick. Requests whose runs fail are picked up
-    again on the next frontend re-request."""
-    pending = warehouse.pending_ticker_requests()[:batch_size]
-    for ticker in pending:
-        instance.add_dynamic_partitions("ticker", [ticker])
-    if pending:
-        warehouse.mark_ticker_requests_launched(pending)
-    return pending
 
 
 def _derived_asset(name: str, rebuild: Any, deps: AssetSelection | list | object) -> object:
@@ -223,43 +266,96 @@ def ticker_score(context: AssetExecutionContext) -> None:
     )
 
 
-@sensor(
-    target=AssetSelection.keys(
-        "ticker_data", "stg_prices_daily", "m_prices_weekly", "m_prices_monthly",
-        "m_advanced_analytics", "m_technical_indicators", "ticker_score",
-    ),
-    minimum_interval_seconds=30,
-    default_status=DefaultSensorStatus.RUNNING,
-    required_resource_keys={"engine"},
-    description=(
-        "Polls control.ticker_requests (written by the frontend), adds a dynamic "
-        "ticker partition, and materializes ticker_data so the staleness gate can "
-        "decide which endpoints need a fresh call."
-    ),
-)
-def ticker_request_sensor(context) -> None:
-    """Event-driven on-demand ingestion: request queue -> partition -> run.
+class RefreshTickersConfig(Config):
+    """Tickers to refresh, e.g. {"tickers": ["AAPL", "MSFT"]}."""
 
-    No run_key: the queue's pending -> launched transition is the dedup
-    mechanism. A stable run_key here would block re-requests forever after
-    the first run for a ticker (even a failed one), since the daemon skips
-    run_keys it has already seen - a user re-searching a ticker would
-    silently trigger nothing.
+    tickers: list[str]
+
+
+@op(required_resource_keys={"engine"})
+def refresh_tickers_op(context: OpExecutionContext, config: RefreshTickersConfig) -> dict:
+    """Frontend-triggered per-ticker refresh: ingest + derived + score.
+
+    Incremental — with no watermark on record the staleness gate pulls full
+    history automatically, so new tickers need no special-casing.
     """
-    warehouse = context.resources.engine.warehouse
-    for ticker in stage_ticker_runs(warehouse, context.instance):
-        context.log.info(
-            f"[request:{ticker}] launching ticker_data materialization")
-        yield RunRequest(partition_key=ticker)
+    engine = context.resources.engine
+    tickers = [t.strip().upper() for t in config.tickers if t.strip()]
+    return refresh_tickers(engine, tickers, score=True, log=context.log.info)
+
+
+@job(name="refresh_tickers")
+def refresh_tickers_job() -> None:
+    """On-demand job launched by the frontend via POST /api/pipeline/refresh."""
+    refresh_tickers_op()
+
+
+@op(required_resource_keys={"engine"})
+def quarterly_refresh_op(context: OpExecutionContext) -> dict:
+    """Incremental refresh of the whole universe (recent quarter only).
+
+    Watermarks stay intact, so each endpoint fetches only what went stale —
+    prices continue from the high watermark, fundamentals re-pull per TTL.
+    Failed fetches retry 3x each, then are recorded and skipped.
+    """
+    from .quarterly import quarterly_universe
+
+    engine = context.resources.engine
+    universe = quarterly_universe()
+    context.log.info(f"quarterly refresh: {len(universe)} tickers")
+    return refresh_tickers(engine, universe, log=context.log.info)
+
+
+@op
+def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Rebuild train_dataset_quarterly.parquet from the refreshed mart."""
+    from .quarterly import rebuild_quarterly_dataset
+
+    info = rebuild_quarterly_dataset()
+    context.log.info(
+        f"[dataset] {info['rows']} rows, {info['tickers']} tickers "
+        f"({info['date_min']} -> {info['date_max']})"
+    )
+    return {**prev, "dataset": info}
+
+
+@op
+def retrain_model_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Re-execute the ranking notebook: retrains and exports the snapshot
+    to mart.model_rankings (the notebook's final cell)."""
+    from .quarterly import retrain_ranking_model
+
+    info = retrain_ranking_model()
+    context.log.info(f"[retrain] executed {info['cells_executed']} cells")
+    return {**prev, "retrain": info}
+
+
+@job(name="quarterly_model_refresh")
+def quarterly_model_refresh_job() -> None:
+    """Quarterly chain: universe refresh -> dataset rebuild -> retrain."""
+    retrain_model_op(rebuild_dataset_op(quarterly_refresh_op()))
+
+
+@schedule(
+    job=quarterly_model_refresh_job,
+    cron_schedule="0 3 1 1,4,7,10 *",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+def quarterly_schedule() -> dict:  # noqa: ANN401
+    """03:00 UTC on the first day of each quarter (Jan/Apr/Jul/Oct)."""
+    return {}
 
 
 defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
             m_advanced_analytics, m_technical_indicators, ticker_score],
-    jobs=[monthly_job, weekdays_job, daily_job],
-    schedules=[monthly_schedule, weekdays_schedule, daily_schedule],
-    sensors=[ticker_request_sensor, pipeline_failure_sensor],
+    jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
+          quarterly_model_refresh_job],
+    schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
+               news_morning_schedule, news_evening_schedule,
+               quarterly_schedule],
+    # DuckDB is a single-writer file: with the default multiprocess executor
     # DuckDB is a single-writer file: with the default multiprocess executor
     # every step runs in its own subprocess and the four mart siblings (all
     # depending only on stg_prices_daily) launch concurrently and fight over

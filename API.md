@@ -683,6 +683,33 @@ persisted to `raw_gainers_losers` keyed `(ticker, date)`.
 }
 ```
 
+### Market Indexes — VIX / S&P 500 (FRED)
+
+Daily market-wide index series, one call per series, landed to
+`raw_fred_market` keyed `(series, date)`, typed in `stg_fred_market` (value
+cast to DOUBLE; `"."` missing observations dropped), and aggregated into
+`m_fred_market` (levels + close-to-close momentum). Read as point-in-time
+market-regime features by the ML model datasets — not inputs to the
+deterministic scorer.
+
+- `series_id` — `VIXCLS` (CBOE VIX close, since 1990) or `SP500` (S&P 500 price index, ~10y daily history per S&P licensing).
+- `observations` — Array of observations.
+- `realtime_start` / `realtime_end` — Revision window; market series are never revised.
+- `date` — Observation date (the row key — the fetch date is never used, keeping the data point-in-time).
+- `value` — STRING; `"."` marks a missing observation (filtered out at staging).
+
+```json
+{
+    "realtime_start": "2026-08-27",
+    "realtime_end": "2026-08-27",
+    "date": "2026-08-27",
+    "value": "14.51"
+}
+```
+
+> FRED hands the key over the query string (`api_key`) rather than a header;
+> the client redacts it from error messages.
+
 ### News & Sentiments (Alpha Vantage)
 
 ```json
@@ -881,4 +908,62 @@ Kept as reference; no ingestion path exists yet.
   "exchange": "US",
   "timezone": "America/New_York"
 }
+```
+
+---
+
+## Our REST surface (FastAPI → SPA)
+
+Above is every *provider* endpoint the pipeline touches. These are the routes
+our own FastAPI layer (`src/stockidence/api/`) serves to the React SPA
+(`frontend-react/`, dev proxies `/api` → `:8000`). JSON samples as served.
+
+### Rankings (ranking model)
+
+`GET /api/rankings` — full ranked cohort for the latest quarter, read from
+`mart.model_rankings` (written by the quarterly DAG; static snapshot between
+refreshes). Scores are ordinal within-quarter ranks, not expected returns.
+
+```json
+{
+  "as_of": "2026-04-01",
+  "universe_size": 305,
+  "items": [
+    {"rank": 1, "ticker": "MRNA", "sector": "Healthcare", "score": 1.0055}
+  ]
+}
+```
+
+### Price history (portfolio graphs)
+
+`GET /api/prices/{ticker}?months=12` (1–120) — weekly closes ascending,
+from `mart.m_prices_weekly`. Empty list when the ticker has no bars.
+
+```json
+[{"date": "2026-06-08", "close": 291.13}]
+```
+
+### Pipeline trigger (push model)
+
+`POST /api/pipeline/refresh` with `{"tickers": ["AAPL"]}` — launches the
+`refresh_tickers` Dagster job over GraphQL. Returns `202` with the run id,
+`503` when the Dagster webserver is unreachable. Rating lookups call this
+fire-and-forget (per-ticker cooldown) instead of queueing for a sensor —
+there are no sensors; see `ARCHITECTURE.md`.
+
+```json
+{"run_id": "c09c66b8-b0f7-4c68-b8eb-4fe7248ea208", "tickers": ["AAPL"]}
+```
+
+### News (filtered paging)
+
+`GET /api/news?ticker=AAPL&date_from=2026-09-01&date_to=2026-09-04&page=1&page_size=25`
+— ticker substring match, publish-date bounds (YYYY-MM-DD), newest first.
+Filtering, counting, and paging all happen in SQL (`WHERE` + `LIMIT/OFFSET`
+over `raw.raw_news_articles`) so only the requested page is parsed — the
+full table is never loaded.
+
+```json
+{"items": [{"title": "…", "sentiment_tickers": "AAPL, MSFT"}],
+ "total": 1423, "page": 1, "page_size": 25, "page_count": 57}
 ```

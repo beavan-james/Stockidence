@@ -66,6 +66,16 @@ export interface Quote {
   as_of: string | null;
 }
 
+export interface PriceBar {
+  date: string;
+  close: number | null;
+}
+
+export interface TechnicalStats {
+  as_of: string | null;
+  indicators: Record<string, number | null>;
+}
+
 export interface Mover {
   ticker: string;
   price: string;
@@ -109,6 +119,19 @@ export interface NewsEnvelope {
 export interface ModelWeight {
   category: string;
   weight: number;
+}
+
+export interface RankedTicker {
+  rank: number;
+  ticker: string;
+  sector: string | null;
+  score: number | null;
+}
+
+export interface RankingsEnvelope {
+  as_of: string;
+  universe_size: number;
+  items: RankedTicker[];
 }
 
 export interface ComponentSpecEntry {

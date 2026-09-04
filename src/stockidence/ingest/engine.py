@@ -23,6 +23,7 @@ from typing import Any
 
 from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
+from .clients.fred import FredClient
 from .clients.twelve_data import TwelveDataClient
 from .endpoints import EndpointSpec, Provider, get_endpoint
 from .raw_mapping import normalize_for
@@ -33,7 +34,11 @@ _PROVIDER_CLIENTS = {
     Provider.FINNHUB: FinnhubClient,
     Provider.TWELVE_DATA: TwelveDataClient,
     Provider.ALPHA_VANTAGE: AlphaVantageClient,
+    Provider.FRED: FredClient,
 }
+
+# registry endpoint name -> FRED series id (the raw table key column)
+_FRED_SERIES = {"market.vix": "VIXCLS", "market.sp500": "SP500"}
 
 _SCHEDULED_DEFAULT_WINDOW_DAYS = 45
 
@@ -132,6 +137,11 @@ class IngestEngine:
 
     def _scheduled_kwargs(self, spec: EndpointSpec, now: datetime, params: dict[str, Any] | None) -> dict[str, Any]:
         params = dict(params or {})
+        if spec.provider == Provider.FRED:
+            series = _FRED_SERIES.get(spec.name)
+            if series is None:
+                raise ValueError(f"{spec.name}: no FRED series mapped in _FRED_SERIES")
+            return {"series_id": series}
         if spec.name in ("ipo_calendar", "earnings_calendar"):
             if "from_date" not in params or "to_date" not in params:
                 # IPO calendar: backfill the trailing week too, so "recently

@@ -207,6 +207,25 @@ def _macro_name(indicator: str) -> Callable[[dict[str, Any], str, datetime], dic
     return normalize
 
 
+def _fred_series(series: str) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+    """FRED /fred/series/observations: one row per observation, keyed (series, date).
+
+    FRED returns observations oldest-first with `value` as a string; "." is the
+    missing-value sentinel, which staging drops when casting to DOUBLE. The raw
+    row keeps the observation fragment whole (realtime start/end included).
+    """
+
+    def normalize(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+        rows = [
+            {"series": series, "date": _as_date(entry["date"]), "payload": entry}
+            for entry in payload
+            if entry.get("date")
+        ]
+        return _single("raw_fred_market", rows)
+
+    return normalize
+
+
 def _commodity_name(nominal: str) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
     def normalize(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
         rows = [
@@ -305,6 +324,8 @@ NORMALIZERS: dict[str, Normalizer] = {
     "peers": normalize_peers,
     "commodities.gold": _commodity_name("GOLD"),
     "commodities.silver": _commodity_name("SILVER"),
+    "market.vix": _fred_series("VIXCLS"),
+    "market.sp500": _fred_series("SP500"),
     "macro.inflation": _macro_name("inflation"),
     "macro.cpi": _macro_name("cpi"),
     "macro.unemployment": _macro_name("unemployment"),

@@ -27,7 +27,10 @@ from typing import Any
 
 import duckdb
 
-DEFAULT_DB_PATH = os.environ.get("STOCKIDENCE_DB", "data/stockidence.duckdb")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DB_PATH = os.environ.get(
+    "STOCKIDENCE_DB", str(_REPO_ROOT / "data" / "stockidence.duckdb")
+)
 
 # artifact table -> key columns (name, duckdb type). payload + fetched_at are
 # appended to every table. Keys match the registry watermark/artifact names.
@@ -67,6 +70,8 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_insider_sentiment": [("ticker", "VARCHAR"), ("year", "INTEGER"), ("month", "INTEGER")],
     "raw_recommendation_trends": [("ticker", "VARCHAR"), ("period", "DATE")],
     "raw_peers": [("ticker", "VARCHAR")],
+    # market-wide index series from FRED — keyed (series, date), not per ticker
+    "raw_fred_market": [("series", "VARCHAR"), ("date", "DATE")],
 }
 
 
@@ -95,6 +100,12 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("ticker", "VARCHAR"), ("date", "DATE"),
         ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
         ("volume", "DOUBLE"), ("return_1d", "DOUBLE"),
+    ],
+    # typed FRED values: raw's "value" is a string (and "." is the missing
+    # sentinel); staging casts to DOUBLE and keeps only numeric observations.
+    # The PK is (series, date) — market-wide, not per ticker.
+    "stg_fred_market": [
+        ("series", "VARCHAR"), ("date", "DATE"), ("value", "DOUBLE"),
     ],
 }
 
@@ -130,6 +141,16 @@ MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("min_252", "DOUBLE"), ("max_252", "DOUBLE"), ("mean_252", "DOUBLE"),
         ("stddev_252", "DOUBLE"), ("variance_252", "DOUBLE"), ("max_drawdown_252", "DOUBLE"),
         ("min_all", "DOUBLE"), ("max_all", "DOUBLE"), ("mean_all", "DOUBLE"),
+    ],
+    # market-wide regime table (no ticker): VIX + S&P500 levels with
+    # close-to-close momentum over the horizons the dataset snapshots as-of.
+    # NULL before the series' history (S&P500 starts ~2016 on FRED).
+    "m_fred_market": [
+        ("date", "DATE"),
+        ("spx", "DOUBLE"), ("vix", "DOUBLE"),
+        ("spx_ret_5d", "DOUBLE"), ("spx_ret_21d", "DOUBLE"), ("spx_ret_63d", "DOUBLE"),
+        ("spx_ret_126d", "DOUBLE"), ("spx_ret_252d", "DOUBLE"),
+        ("vix_chg_5d", "DOUBLE"), ("vix_chg_21d", "DOUBLE"),
     ],
 }
 
@@ -262,7 +283,9 @@ class Warehouse:
                 )
             for table, keys in STAGING_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
-                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                # staging PK = the first two declared columns: (ticker, date)
+                # for bars, (series, date) for the market-wide FRED table.
+                pk = ", ".join(f'"{name}"' for name, _ in keys[:2])
                 con.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS staging."{table}" (
@@ -273,7 +296,11 @@ class Warehouse:
                 )
             for table, keys in MART_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
-                pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                if "ticker" in {name for name, _ in keys}:
+                    pk = ", ".join(f'"{name}"' for name in ("ticker", "date"))
+                else:
+                    # market-wide table (m_fred_market): one row per date
+                    pk = f'"{keys[0][0]}"'
                 con.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS mart."{table}" (
@@ -347,8 +374,8 @@ class Warehouse:
                 FROM control.ticker_requests
                 """
             )
-            # Model category weights for the confidence blend — provisional
-            # per MODEL.md, held in the warehouse so the frontend never
+            # Model category weights for the confidence blend — provisional,
+            # held in the warehouse so the frontend never
             # hardcodes the scoring spec.
             con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
             # CONFIDENCE_WEIGHTS (mart.scoring) is the single source of truth;
@@ -366,6 +393,36 @@ class Warehouse:
                 ON CONFLICT (category) DO UPDATE SET weight = excluded.weight
                 """
             )
+            # Static model-ranking snapshot for the screening UI: one ranked
+            # cohort (rank, ticker, sector, score) per as_of quarter. Seeded
+            # once from Model/artifacts/latest_rankings.json while the table
+            # is empty; the future Dagster ranking job owns writes after that
+            # and this seed never clobbers its rows.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.model_rankings (
+                    as_of DATE NOT NULL,
+                    rank INTEGER NOT NULL,
+                    ticker VARCHAR NOT NULL,
+                    sector VARCHAR,
+                    score DOUBLE,
+                    PRIMARY KEY (as_of, ticker)
+                )
+                """
+            )
+            if con.execute("SELECT COUNT(*) FROM mart.model_rankings").fetchone()[0] == 0:
+                snapshot = _REPO_ROOT / "Model" / "artifacts" / "latest_rankings.json"
+                if snapshot.exists():
+                    payload = json.loads(snapshot.read_text())
+                    rows = [
+                        (payload["as_of"], r["rank"], r["ticker"], r.get("sector"), r.get("score"))
+                        for r in payload["items"]
+                    ]
+                    con.executemany(
+                        "INSERT INTO mart.model_rankings (as_of, rank, ticker, sector, score)"
+                        " VALUES (?, ?, ?, ?, ?)",
+                        rows,
+                    )
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).

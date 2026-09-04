@@ -11,17 +11,39 @@ Contracts carried over from the Reflex read path:
 """
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
-from ..service import market, rating_service, sub_scores, warehouse
+from ..service import dagster_client, market, ranking, rating_service, sub_scores, warehouse
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
 meta_router = APIRouter(prefix="/api", tags=["meta"])
 
 
+class RefreshRequest(BaseModel):
+    tickers: list[str]
+
+
+@rating_router.post("/pipeline/refresh", status_code=202)
+def trigger_refresh(body: RefreshRequest) -> dict:
+    """Launch the refresh_tickers Dagster job for the given tickers.
+
+    This is the push path the frontend uses instead of the old sensor queue:
+    returns the Dagster run id, or 503 when the webserver is unreachable.
+    """
+    tickers = [t.strip().upper() for t in body.tickers if t.strip()]
+    if not tickers:
+        raise HTTPException(status_code=422, detail="no tickers to refresh")
+    try:
+        run_id = dagster_client.submit_refresh_run(tickers)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"run_id": run_id, "tickers": tickers}
+
+
 @rating_router.get("/rating/{ticker}")
 def get_rating(ticker: str) -> dict:
-    """Full confidence rating for one ticker (queues a compute if needed)."""
+    """Full confidence rating for one ticker (launches a compute if needed)."""
     try:
         return rating_service.get_rating(ticker)
     except ValueError as exc:
@@ -43,10 +65,30 @@ def get_quote(ticker: str) -> dict | None:
     return market.get_quote(ticker)
 
 
+@market_router.get("/prices/{ticker}")
+def get_price_history(
+    ticker: str, months: int = Query(default=12, ge=1, le=120)
+) -> list[dict]:
+    """Weekly closes, ascending — feeds portfolio holding graphs."""
+    return market.get_price_history(ticker, months=months)
+
+
+@market_router.get("/technicals/{ticker}")
+def get_technicals(ticker: str) -> dict | None:
+    """Latest raw technical statistics — feeds the ticker profile page."""
+    return market.get_technicals(ticker)
+
+
 @market_router.get("/movers")
 def get_movers() -> dict:
     """Top gainers, losers, and most actively traded, with snapshot day."""
     return market.get_market_movers()
+
+
+@market_router.get("/rankings")
+def get_rankings() -> dict:
+    """Model ranking cohort for the latest quarter: rank/ticker/sector/score."""
+    return ranking.get_rankings()
 
 
 @market_router.get("/calendar/ipos")
@@ -73,28 +115,24 @@ def get_commodities() -> list[dict]:
 @market_router.get("/news")
 def get_news(
     ticker: str = "",
+    date_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
 ) -> dict:
-    """News items, newest first, filtered and paged server-side.
+    """News items, newest first, filtered and paged in SQL.
 
     `ticker` matches articles whose sentiment_tickers mention it
-    (case-insensitive substring, same semantics as the Reflex filter).
+    (case-insensitive substring, same semantics as the Reflex filter);
+    `date_from`/`date_to` bound the publish date (YYYY-MM-DD).
+    Only the requested page is parsed — the full table is never loaded.
     Returns an envelope so the client pager needs no total-count guess.
     """
-    news = market.get_market_news()
-    query = ticker.strip().upper()
-    if query:
-        news = [n for n in news if query in (n.get("sentiment_tickers") or "").upper()]
-    start = (page - 1) * page_size
-    items = news[start : start + page_size]
-    return {
-        "items": items,
-        "total": len(news),
-        "page": page,
-        "page_size": page_size,
-        "page_count": max(1, -(-len(news) // page_size)),
-    }
+    start = (date_from or "").replace("-", "") or None
+    end = (date_to or "").replace("-", "") or None
+    return market.get_news_page(
+        ticker=ticker, date_from=start, date_to=end, page=page, page_size=page_size
+    )
 
 
 @meta_router.get("/model-weights")

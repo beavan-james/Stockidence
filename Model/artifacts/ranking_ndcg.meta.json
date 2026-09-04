@@ -1,0 +1,47 @@
+{
+  "model": "ranking_ndcg",
+  "objective": "rank:ndcg",
+  "grain": "quarterly",
+  "features": [
+    "price_to_sma200",
+    "stddev_252",
+    "max_drawdown_252",
+    "atr_pct",
+    "return_3m",
+    "return_12m",
+    "distance_from_52wk_high",
+    "roe",
+    "roa",
+    "debt_equity",
+    "current_ratio",
+    "cash_to_assets",
+    "fcf_to_assets"
+  ],
+  "excluded": [
+    "AMBP",
+    "BE",
+    "BRK.B",
+    "CRM",
+    "FI",
+    "NBIS"
+  ],
+  "n_rounds": 150,
+  "params": {
+    "objective": "rank:ndcg",
+    "tree_method": "hist",
+    "max_depth": 3,
+    "eta": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "seed": 42,
+    "nthread": -1
+  },
+  "n_tickers": 377,
+  "n_rows": 15874,
+  "date_range": [
+    "2012-07-01",
+    "2026-04-01"
+  ]
+}
