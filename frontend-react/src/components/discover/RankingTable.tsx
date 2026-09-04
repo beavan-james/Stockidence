@@ -73,10 +73,10 @@ export function RankingTable() {
         <p className="pt-4 text-sm text-ink-muted">No tickers match “{query.trim()}”.</p>
       ) : (
         <motion.div
+          key={`${safePage}-${query}`}
           variants={containerVariants}
           initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.1 }}
+          animate="visible"
           className="pt-2"
         >
           <table className="w-full text-sm">
