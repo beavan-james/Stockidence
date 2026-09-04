@@ -6,14 +6,14 @@ import { useActiveSection } from "@/hooks/useActiveSection";
 import { mdComponents } from "@/components/markdown";
 import readme from "../../../README.md?raw";
 import architecture from "../../../ARCHITECTURE.md?raw";
-import model from "../../../MODEL.md?raw";
+import model from "../../../TICKER_STATS.md?raw";
 import api from "../../../API.md?raw";
 import rankingModel from "../../../Model/README.md?raw";
 
 const SECTIONS = [
   { id: "readme", label: "Overview", content: readme },
   { id: "architecture", label: "Architecture", content: architecture },
-  { id: "model", label: "Scoring Model", content: model },
+  { id: "model", label: "Ticker Stats", content: model },
   { id: "ranking-model", label: "Ranking Model", content: rankingModel },
   { id: "api", label: "APIs Used", content: api },
 ] as const;

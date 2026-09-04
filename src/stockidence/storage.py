@@ -374,8 +374,8 @@ class Warehouse:
                 FROM control.ticker_requests
                 """
             )
-            # Model category weights for the confidence blend — provisional
-            # per MODEL.md, held in the warehouse so the frontend never
+            # Model category weights for the confidence blend — provisional,
+            # held in the warehouse so the frontend never
             # hardcodes the scoring spec.
             con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
             # CONFIDENCE_WEIGHTS (mart.scoring) is the single source of truth;

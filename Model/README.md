@@ -32,13 +32,15 @@ outperform while pooled return accuracy stays noisy.
 - No news/sentiment features — history only goes back ~1 year, which would
   sparsify the dataset. Technicals + fundamentals only.
 
-## Validation (walk-forward, 26 quarters 2019→2025, 357-ticker universe)
+## Validation (walk-forward, 26 quarters 2019→2025, 7,661 test rows)
 
-- Rank IC (pooled): **+0.175**
-- Top-10 excess: **+3.13 pp/qtr** (t=1.19) · Top-25: **+4.56** (t=2.26) ·
-  Top-quintile: **+2.68** (t=2.24)
-- Precision@10: **11.5%** (random 3.6%)
-- Top-20 vs S&P 500: **+5.51 pp/qtr**, beating the index 73% of quarters
+- Rank IC (pooled): **+0.163**
+- Top-10 excess: **+3.90 pp/qtr** (t=+1.44, positive 73% of quarters)
+- Top-25 excess: **+5.08 pp/qtr** (t=+2.39, positive 77% of quarters)
+- Top-quintile excess: **+2.99 pp/qtr** (t=+2.22, positive 73% of quarters)
+- Precision@10: **14.6%** (random 3.4%) · Precision@25: **22.8%** (random 8.5%)
+- Top-20 vs S&P 500: **+5.53 pp/qtr** (+9.27%/qtr vs +3.74%/qtr),
+  beating the index 73% of quarters
 
 ## Refresh pipeline (quarterly DAG)
 

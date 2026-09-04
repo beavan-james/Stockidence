@@ -10,7 +10,7 @@
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
 - **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
 - **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, overall_sentiment_score (daily)
-- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — relevance_score, ticker_sentiment_score. This junction table is what makes news joinable to a ticker for the Sentiment category, since one article can mention several tickers and one ticker appears in many articles.
+- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — relevance_score, ticker_sentiment_score. This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
 ---
 ## Real-Time / Ticker-Partitioned Data
 *Fetched on-demand per ticker via dynamic partitions, gated by a staleness check against `last_updated`.*
@@ -91,6 +91,8 @@ flowchart TD
     MART -->|"rating snapshot<br/>source=warehouse"| UI
     M_RANK -->|"GET /api/rankings"| UI
     RAW -->|"quotes · news · commodities · macro"| UI
+    M_RESH -->|"GET /api/prices"| UI
+    M_TECH -->|"GET /api/technicals"| UI
 ```
 
 > Notes on the loop:

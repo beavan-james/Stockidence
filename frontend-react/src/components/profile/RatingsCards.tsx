@@ -43,7 +43,7 @@ export function ValuationReference({
   );
 }
 
-/** Entry / stop / horizon for buy-rated tickers (MODEL.md contract). */
+/** Entry / stop / horizon for buy-rated tickers (scoring.py BUY_PLAN contract). */
 export function ExecutionPlan({
   advisedBuyPrice,
   stopLossPrice,

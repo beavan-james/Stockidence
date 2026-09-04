@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Per-component sub-score display spec (labels, sources, direction rules).
 
-Mirrors the sub-score tables in MODEL.md — the governing spec. Weights come
+Mirrors the scoring engine's sub-score tables. Weights come
 from the mart rows at read time, never from here; this file only carries the
 human-readable provenance text (label + API source fields) and the direction
 semantics so the UI can explain why a sub-score reads as buy-friendly or not.
