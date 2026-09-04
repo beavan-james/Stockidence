@@ -23,6 +23,7 @@ import type {
   RankingsEnvelope,
   Rating,
   RatingSource,
+  TechnicalStats,
 } from "@/types/api";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -91,6 +92,16 @@ export function usePriceHistory(ticker: string | undefined, months = 12) {
     queryKey: ["prices", ticker, months],
     queryFn: () => client.prices(ticker!, months),
     // Weekly bars barely move intraday.
+    staleTime: 60 * 60_000,
+  });
+}
+
+export function useTechnicals(ticker: string | undefined) {
+  return useQuery<TechnicalStats | null>({
+    enabled: Boolean(ticker),
+    queryKey: ["technicals", ticker],
+    queryFn: () => client.technicals(ticker!),
+    // Derived once a day from landed bars.
     staleTime: 60 * 60_000,
   });
 }

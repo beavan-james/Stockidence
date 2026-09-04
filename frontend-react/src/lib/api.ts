@@ -43,6 +43,11 @@ export const client = {
       `/api/prices/${encodeURIComponent(ticker)}?months=${months}`,
     ),
 
+  technicals: (ticker: string) =>
+    api<import("@/types/api").TechnicalStats | null>(
+      `/api/technicals/${encodeURIComponent(ticker)}`,
+    ),
+
   movers: () => api<import("@/types/api").Movers>("/api/movers"),
 
   news: (params: { ticker?: string; page?: number; pageSize?: number }) => {

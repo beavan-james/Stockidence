@@ -71,6 +71,11 @@ export interface PriceBar {
   close: number | null;
 }
 
+export interface TechnicalStats {
+  as_of: string | null;
+  indicators: Record<string, number | null>;
+}
+
 export interface Mover {
   ticker: string;
   price: string;

@@ -1,17 +1,14 @@
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
 
-import { BigPicture } from "@/components/profile/BigPicture";
 import { ComputingScreen } from "@/components/profile/ComputingScreen";
 import { QuoteBadge } from "@/components/profile/QuoteBadge";
-import { ExecutionPlan, ValuationReference } from "@/components/profile/RatingsCards";
-import { SubScoreDetail } from "@/components/profile/SubScoreDetail";
+import { ValuationReference } from "@/components/profile/RatingsCards";
+import { TechnicalStats } from "@/components/profile/TechnicalStats";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRating } from "@/hooks/queries";
 import { usePortfolio, addToPortfolio, isInPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
-import { adviceLabel, adviceStyle } from "@/lib/format";
-import { categoryColor, categoryLabel } from "@/lib/viz";
 import type { RatingSource } from "@/types/api";
 import { cn } from "@/lib/utils";
 import { Plus, Check } from "lucide-react";
@@ -39,41 +36,6 @@ function SourceNotice({ source }: { source: RatingSource }) {
       {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
       {copy}
     </div>
-  );
-}
-
-function ScoreBreakdown({
-  categories,
-}: {
-  categories: { category: string; score: number; weight: number }[];
-}) {
-  return (
-    <Card className="anim-rise" style={{ animationDelay: "140ms" }}>
-      <CardContent className="space-y-4 p-6">
-        <h3 className="font-semibold tracking-tight">Score breakdown</h3>
-        {categories.map((c, i) => (
-          <div key={c.category} className="flex items-center gap-4 text-sm">
-            <span className="w-24 shrink-0 text-ink-secondary">
-              {categoryLabel(c.category).replace(" (separate)", "")}
-            </span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-raised">
-              <div
-                className="anim-bar h-full rounded-full"
-                style={{
-                  width: `${Math.max(c.score, 2)}%`,
-                  backgroundColor: categoryColor(c.category),
-                  animationDelay: `${200 + i * 90}ms`,
-                }}
-              />
-            </div>
-            <span className="num w-16 text-right text-xs text-ink-muted">
-              {(c.weight * 100).toFixed(0)}% weight
-            </span>
-            <span className="num w-8 text-right">{c.score.toFixed(0)}</span>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -147,14 +109,6 @@ export function ProfilePage() {
               </div>
               <div className="flex items-center gap-6">
                 <QuoteBadge ticker={r.ticker} />
-                <span
-                  className={cn(
-                    "anim-pop inline-flex rounded-lg border px-3 py-1 text-sm font-medium",
-                    adviceStyle(r.advice),
-                  )}
-                >
-                  {adviceLabel(r.advice)}
-                </span>
                 <button
                   onClick={() =>
                     inPortfolio ? removeFromPortfolio(symbol) : addToPortfolio(symbol)
@@ -182,27 +136,9 @@ export function ProfilePage() {
             </CardContent>
           </Card>
 
-          <BigPicture
-            confidence={r.confidence_score}
-            volatility={r.volatility_score}
-            advice={r.advice}
-            asOf={r.as_of}
-            categories={r.categories}
-          />
-
           <ValuationReference fairValue={r.fair_value} targetPrice={r.target_price} />
 
-          <ScoreBreakdown categories={r.categories} />
-
-          {r.buy_plan && (
-            <ExecutionPlan
-              advisedBuyPrice={r.buy_plan.advised_buy_price}
-              stopLossPrice={r.buy_plan.stop_loss_price}
-              holdingStyle={r.buy_plan.holding_style}
-            />
-          )}
-
-          <SubScoreDetail components={r.components} />
+          <TechnicalStats ticker={r.ticker} />
         </>
       )}
     </div>
