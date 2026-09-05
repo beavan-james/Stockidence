@@ -18,3 +18,8 @@ ViewSchemas.ipynb
 .ruff_cache/
 Model/datasets/*.parquet 
 Model/artifacts/ranking_ndcg.json
+# Dev/experiment notebooks (untracked, kept locally). The production
+# notebook stays tracked: the quarterly DAG retrains by executing it.
+Model/notebooks/dev_notebook.ipynb
+Model/notebooks/gradient_boosted_trees.ipynb
+Model/notebooks/ridge_regression.ipynb
