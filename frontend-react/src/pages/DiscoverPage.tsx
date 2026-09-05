@@ -92,7 +92,7 @@ export function DiscoverPage() {
                     transition={{ duration: 0.7, ease }}
                     className="space-y-4 pt-4"
                 >
-                    <h2 className="text-lg font-semibold tracking-tight">
+                    <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                         Daily Movement
                     </h2>
                     <div className="grid gap-4 lg:grid-cols-3">
@@ -114,7 +114,7 @@ export function DiscoverPage() {
                 transition={{ duration: 0.7, ease, delay: 0.08 }}
                 className="space-y-4 pt-4"
             >
-                <h2 className="text-lg font-semibold tracking-tight">
+                <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                     Economy &amp; commodities
                 </h2>
                 {macro.data && macro.data.length > 0 && (
@@ -133,7 +133,7 @@ export function DiscoverPage() {
                 transition={{ duration: 0.7, ease, delay: 0.16 }}
                 className="space-y-4 pt-4"
             >
-                <h2 className="text-lg font-semibold tracking-tight">
+                <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                     News &amp; sentiment
                 </h2>
                 <NewsTable />
@@ -147,7 +147,7 @@ export function DiscoverPage() {
                 transition={{ duration: 0.7, ease, delay: 0.24 }}
                 className="space-y-4 pt-4"
             >
-                <h2 className="text-lg font-semibold tracking-tight">
+                <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                     Calendars
                 </h2>
                 <div className="grid gap-4 lg:grid-cols-2">

@@ -14,7 +14,7 @@ import { useEffect, useRef } from "react";
 const GRID =
   "linear-gradient(color-mix(in srgb, var(--color-accent) __ALPHA__%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-accent) __ALPHA__%, transparent) 1px, transparent 1px)";
 
-const HIGHLIGHT_RADIUS = 340;
+const HIGHLIGHT_RADIUS = 300;
 
 export function GridGlowBackground() {
   const highlightRef = useRef<HTMLDivElement | null>(null);
@@ -35,8 +35,7 @@ export function GridGlowBackground() {
     window.addEventListener("pointermove", onMove, { passive: true });
 
     const paint = (x: number, y: number) => {
-      const mask =
-        `radial-gradient(circle ${HIGHLIGHT_RADIUS}px at ${x}px ${y}px, black 0%, transparent 70%)`;
+      const mask = `radial-gradient(circle ${HIGHLIGHT_RADIUS}px at ${x}px ${y}px, black 0%, transparent 70%)`;
       el.style.maskImage = mask;
       el.style.webkitMaskImage = mask;
     };
@@ -65,7 +64,7 @@ export function GridGlowBackground() {
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: GRID.replaceAll("__ALPHA__", "4"),
+          backgroundImage: GRID.replaceAll("__ALPHA__", "7"),
           backgroundSize: "32px 32px",
           maskImage:
             "radial-gradient(ellipse 90% 70% at 50% 30%, black 30%, transparent 75%)",
@@ -78,7 +77,7 @@ export function GridGlowBackground() {
         ref={highlightRef}
         className="absolute inset-0 will-change-[mask-image]"
         style={{
-          backgroundImage: GRID.replaceAll("__ALPHA__", "13"),
+          backgroundImage: GRID.replaceAll("__ALPHA__", "21"),
           backgroundSize: "32px 32px",
         }}
       />

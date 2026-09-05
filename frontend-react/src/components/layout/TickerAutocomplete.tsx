@@ -89,7 +89,7 @@ export function TickerAutocomplete({
         className="num"
       />
       {open && debounced && (
-        <div className="absolute top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-2xl shadow-black/50">
+        <div className="anim-drop absolute top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-2xl shadow-black/50">
           {suggestions.length === 0 ? (
             <p className="px-4 py-3 text-sm text-ink-muted">
               No symbols match “{debounced}”.
