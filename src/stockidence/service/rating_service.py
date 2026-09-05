@@ -79,4 +79,8 @@ def get_rating(ticker: str) -> dict:
         "fair_value": None,
         "target_price": None,
         "source": "pending",
+        # Present only when the refresh launch itself failed (e.g. daemon
+        # down) — lets the UI distinguish "pipeline running" from "pipeline
+        # never started" instead of an endless spinner for both.
+        "pipeline_error": dagster_client.last_launch_error(normalized),
     }

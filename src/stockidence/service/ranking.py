@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from .models import RankedTicker
-from .warehouse import _config_db_path
 
 # Static fallback mirroring the notebook's latest-cohort head, so the
 # rankings section renders before the warehouse seed lands (fresh checkout
@@ -32,38 +29,27 @@ def get_rankings() -> dict:
     job owns writes). Falls back to the inline demo head when the warehouse
     is absent or the table is empty so the UI never hard-fails.
     """
-    db_path = Path(_config_db_path())
-    if db_path.exists():
-        try:
-            import duckdb
-        except ImportError:
-            duckdb = None
-        if duckdb is not None:
-            try:
-                con = duckdb.connect(str(db_path), read_only=True)
-            except Exception:
-                con = None
-            if con is not None:
-                try:
-                    rows = con.execute(
-                        "SELECT as_of, rank, ticker, sector, score"
-                        " FROM mart.model_rankings ORDER BY rank ASC"
-                    ).fetchall()
-                    if rows:
-                        as_of = rows[0][0].isoformat() if hasattr(rows[0][0], "isoformat") else str(rows[0][0])
-                        items = [
-                            RankedTicker(
-                                rank=int(r[1]),
-                                ticker=str(r[2]),
-                                sector=r[3],
-                                score=float(r[4]) if r[4] is not None else None,
-                            ).to_dict()
-                            for r in rows
-                        ]
-                        return {"as_of": as_of, "universe_size": len(items), "items": items}
-                except Exception:
-                    pass
-                finally:
-                    con.close()
+    try:
+        from .warehouse import read_connect
+
+        with read_connect() as con:
+            rows = con.execute(
+                "SELECT as_of, rank, ticker, sector, score"
+                " FROM mart.model_rankings ORDER BY rank ASC"
+            ).fetchall()
+    except Exception:
+        rows = []
+    if rows:
+        as_of = rows[0][0].isoformat() if hasattr(rows[0][0], "isoformat") else str(rows[0][0])
+        items = [
+            RankedTicker(
+                rank=int(r[1]),
+                ticker=str(r[2]),
+                sector=r[3],
+                score=float(r[4]) if r[4] is not None else None,
+            ).to_dict()
+            for r in rows
+        ]
+        return {"as_of": as_of, "universe_size": len(items), "items": items}
     items = [RankedTicker(**r).to_dict() for r in _DEMO_RANKINGS]
     return {"as_of": _DEMO_AS_OF, "universe_size": len(items), "items": items}

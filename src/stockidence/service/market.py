@@ -8,33 +8,20 @@ has nothing, so the UI never hard-fails during build-out. Every getter is
 self-contained: one bad section degrades to demo, never to a page error.
 """
 
-import os
 from datetime import datetime, timezone
-
-_PATH = None
-
-
-def _db_path() -> str:
-    global _PATH
-    if _PATH is None:
-        _PATH = os.environ.get(
-            "STOCKIDENCE_DB",
-            str(os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "stockidence.duckdb")),
-        )
-    return _PATH
 
 
 def _read(sql: str, params: list | None = None) -> list[tuple] | None:
-    """Run a read query against the warehouse; None on any failure."""
+    """Run a read query against the warehouse; None on any failure.
+
+    Goes through the retrying connect so market sections wait out a
+    pipeline write lock instead of degrading to demo data mid-run.
+    """
     try:
-        import duckdb
-    except ImportError:
-        return None
-    try:
-        con = duckdb.connect(_db_path(), read_only=True)
-        rows = con.execute(sql, params or []).fetchall()
-        con.close()
-        return rows
+        from .warehouse import read_connect
+
+        with read_connect() as con:
+            return con.execute(sql, params or []).fetchall()
     except Exception:
         return None
 
