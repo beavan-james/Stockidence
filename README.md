@@ -137,6 +137,27 @@ feature set, and refresh pipeline are documented in
 [`Model/README.md`](Model/README.md).
 
 ---
+## Deploy
+
+One EC2 box runs the whole stack via Docker Compose — FastAPI, Dagster
+(webserver + daemon; the push model needs both up for ticker refreshes),
+and the SPA behind nginx on port 80:
+
+```bash
+cp .env.example .env   # fill in provider keys
+docker compose up --build -d
+```
+
+- `t3.small` (~$15/mo) is the sweet spot; `t3.micro` risks OOM on the
+  quarterly retrain. The 1.4 GB warehouse rides along as a `./data` volume
+  (back it up — EBS snapshots are the simplest story).
+- First boot against an empty `./data`: run a backfill
+  (`Model/scripts/run_backfill.py`), then open `:80`. The Dagster UI is
+  bound to localhost only — reach `:3000` over an SSH tunnel.
+- EC2 security group needs only port 80 (and 22 for you). HTTPS: put the
+  box behind an ALB with an ACM cert, or add certbot to the nginx service.
+
+---
 ## Docs
 
 | Doc              | What it covers                                        |
