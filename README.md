@@ -12,10 +12,11 @@ itself rather than the algorithm. The scoring layer has since been
 good time, and I don't have time to research it."* The app outputs, for any
 ticker:
 
-- a **confidence rating** + advice (`strong buy / buy / hold / sell / strong sell`)
-- a **separate volatility score**
-- for buy-rated tickers: an **advised buy price**, **stop-loss price**, and
-  **holding-style advice** (long-term hold / swing trade / day trade)
+- a **valuation reference** which contains a fair value anchor based on ...
+- Technical statistics (RSI, ATR, BBANDS, SMA, EMA, ...)
+
+Additionally the app contains other resources such as the model page, which shows the models ranking for tickers in the S&P 500 universe, and a discover page which contains useful information such as top gainers/losers, IPOs, earnings calendar, economy & commodities, and market news.
+
 ---
 ## How it's built
 
@@ -61,19 +62,16 @@ The full endpoint list — grouped by the scoring category each feeds — is in
 > computed in-Dagster from raw price bars as pure derivations, not API calls.
 
 ---
-## Scoring Model
+## Models
 
-Deterministic, rule-based, weighted formula — no ML/LLM in the core score.
-Weights are **provisional** (v2, backtest-informed: Valuation 62%, Trend 24%,
-Sentiment 10%, Moat 4%; volatility is a separate output, not blended in). See
+Ticker pages show no confidence score, advice, or buy/sell recommendation —
+just a **fair value** anchor (blended DCF + own-history comparables) and raw
+**technical statistics** (RSI, CCI, MACD, moving averages, …). See
 [`TICKER_STATS.md`](TICKER_STATS.md) for the fair-value methodology and the
-technical statistics shown on ticker pages.
+full stat list.
 
-An LLM layer may be added *on top of* the deterministic score later for
-narrative analysis — it will never replace or obscure the deterministic core.
-
-Alongside the per-ticker rating, a quarterly **XGBoost `rank:ndcg` model**
-orders the whole universe by expected next-quarter return (ranking only, no
+Alongside it, a quarterly **XGBoost `rank:ndcg` model**
+orders the stocks in the S&P 500 by expected next-quarter return (ranking only, no
 price prediction). The website's Model page serves it from
 `mart.model_rankings`. See [`Model/README.md`](Model/README.md).
 
@@ -118,6 +116,13 @@ Year-by-year top-20 vs S&P (pp/qtr, hit rate): 2019 +4.01 (75%), 2020
   regime shifts (e.g. 2021–2022, when the model roughly tracked the index)
   take quarters to detect, and 26 quarters is a small sample for t-stats
   near ±2.
+- **Why validation starts in 2019 when data goes back to 2012.** 2019-01-01
+  is the first walk-forward *test* cutoff (`CUTOFFS` in the notebook), not a
+  data filter — `build_dataset.py` loads everything from 2012 on. The
+  2012→2018 years are not discarded: they train every cutoff's model and
+  warm up the trailing features (SMA200, 252-day vol/drawdown, 12-month
+  returns all need a year-plus of history before the first test quarter).
+  Starting tests earlier would grade the model on barely-trained fits.
 - **Momentum/risk concentration.** The ranker leans into names with strong
   trailing momentum and drawdown profiles; top cohorts can concentrate in
   high-beta growth — it ranks, it does not manage risk.
