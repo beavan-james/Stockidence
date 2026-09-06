@@ -77,7 +77,7 @@ export function GridGlowBackground() {
         ref={highlightRef}
         className="absolute inset-0 will-change-[mask-image]"
         style={{
-          backgroundImage: GRID.replaceAll("__ALPHA__", "21"),
+          backgroundImage: GRID.replaceAll("__ALPHA__", "25"),
           backgroundSize: "32px 32px",
         }}
       />
