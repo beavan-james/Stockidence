@@ -1,11 +1,11 @@
-# Deploy to the production box on push to main (plus manual dispatch).
+# Deploy to the production box on push to master (plus manual dispatch).
 #
 # One-time setup:
 #   1. Provision the box (Ubuntu 24.04, 2 OCPU / 12 GB), install Docker +
 #      Compose plugin.
 #   2. Clone the repo (read-only deploy key is enough) and create .env
 #      from .env.example with real provider keys.
-#   3. First boot + data load manually, then every push to main redeploys.
+#   3. First boot + data load manually, then every push to master redeploys.
 #   4. Add these repo secrets (Settings → Secrets → Actions):
 #        SSH_HOST         public hostname/IP of the box
 #        SSH_USER         SSH user (e.g. ubuntu)
@@ -20,7 +20,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
@@ -43,7 +43,7 @@ jobs:
             set -euo pipefail
             cd "${PROJECT_DIR:-~/Stockidence}"
             git fetch origin
-            git reset --hard origin/main
+            git reset --hard origin/master
             docker compose up --build -d
             sleep 20
             curl -sf http://localhost/api/health

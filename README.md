@@ -163,7 +163,7 @@ docker compose up --build -d
 ### CI deploy
 
 `.github/workflows/deploy.yml` redeploys on every push to `main` (plus manual
-dispatch): it SSHes in, hard-resets to `origin/main`, rebuilds, and curls
+dispatch): it SSHes in, hard-resets to `origin/master`, rebuilds, and curls
 `/api/health`. `dev` pushes never deploy. Setup is four repo secrets —
 `SSH_HOST`, `SSH_USER`, `SSH_KEY`, optional `PROJECT_DIR` — documented
 at the top of the workflow file. The box itself needs Docker, a clone, and a
