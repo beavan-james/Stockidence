@@ -338,7 +338,9 @@ export function PortfolioPage() {
             <h2 className="text-lg font-semibold tracking-tight">Allocation</h2>
             <div className="space-y-2.5">
               {totalValue > 0 ? (
-                rows.map(({ holding, value }) => {
+                [...rows]
+                  .sort((a, b) => b.value - a.value)
+                  .map(({ holding, value }) => {
                   const pct = (value / totalValue) * 100;
                   return (
                     <div key={holding.symbol} className="flex items-center gap-3 text-sm">

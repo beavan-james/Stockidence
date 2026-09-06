@@ -1,16 +1,20 @@
 """Push trigger for Dagster jobs: the frontend (via the API) launches runs
 directly over GraphQL instead of queueing rows for a sensor to poll.
 
-Nothing here raises into the rating flow — launch failures degrade to the
-existing pending/refreshing UX and the next poll retries.
+Launch failures are logged (uvicorn picks these up) and recorded per ticker
+so the pending response can tell the UI the pipeline never started — a
+silent swallow here used to look identical to a slow-but-working refresh.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from urllib.parse import urlparse
 
 from ..config import load_settings
+
+logger = logging.getLogger(__name__)
 
 REFRESH_JOB_NAME = "refresh_tickers"
 REFRESH_OP_NAME = "refresh_tickers_op"
@@ -20,6 +24,10 @@ REFRESH_OP_NAME = "refresh_tickers_op"
 # spawn a duplicate run.
 _LAUNCH_COOLDOWN_SECONDS = 600.0
 _last_launch: dict[str, float] = {}
+# Latest launch failure per ticker, cleared on the next successful launch.
+# Lets the pending response distinguish "pipeline running" from "pipeline
+# never started" instead of both looking like an endless spinner.
+_last_error: dict[str, str] = {}
 
 
 def _client_and_config():
@@ -60,8 +68,18 @@ def request_refresh(tickers: list[str]) -> str | None:
         return None
     try:
         run_id = submit_refresh_run(due)
-    except Exception:
+    except Exception as exc:
+        msg = str(exc)
+        logger.warning("Dagster refresh launch failed for %s: %s", due, msg)
+        for t in due:
+            _last_error[t.strip().upper()] = msg
         return None
     for t in due:
         _last_launch[t.strip().upper()] = now
+        _last_error.pop(t.strip().upper(), None)
     return run_id
+
+
+def last_launch_error(ticker: str) -> str | None:
+    """Most recent launch failure for a ticker, if its launch never succeeded."""
+    return _last_error.get(ticker.strip().upper())

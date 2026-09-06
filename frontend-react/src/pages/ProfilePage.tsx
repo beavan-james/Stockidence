@@ -92,6 +92,14 @@ export function ProfilePage() {
 
       <SourceNotice source={r.source} />
 
+      {r.pipeline_error && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-line bg-raised px-4 py-2.5 text-xs text-ink-secondary">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-loss" />
+          Pipeline couldn&apos;t start ({r.pipeline_error}) — is Dagster running?
+          Retrying automatically.
+        </div>
+      )}
+
       {loading ? (
         <ComputingScreen source={r.source} ticker={r.ticker} />
       ) : (
@@ -134,7 +142,7 @@ export function ProfilePage() {
             </div>
           </div>
 
-          <ValuationReference fairValue={r.fair_value} targetPrice={r.target_price} />
+          <ValuationReference fairValue={r.fair_value} />
 
           <TechnicalStats ticker={r.ticker} />
         </>

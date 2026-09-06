@@ -1,0 +1,63 @@
+# Single-box production stack: FastAPI + Dagster + static SPA.
+# Secrets come from .env (see .env.example) — never baked into images.
+#
+# DuckDB is single-writer by design: api, webserver and daemon all mount
+# ./data, and every reader already retries on lock contention. The api runs
+# one uvicorn worker (in-memory refresh cooldown assumes a single process).
+
+services:
+  api:
+    build: .
+    image: stockidence-backend:latest
+    command: uvicorn stockidence.api.app:app --host 0.0.0.0 --port 8000 --workers 1
+    env_file:
+      - .env
+    environment:
+      DAGSTER_WEB_URL: http://dagster-webserver:3000
+      STOCKIDENCE_DB: /app/data/stockidence.duckdb
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - dagster-webserver
+    restart: unless-stopped
+
+  dagster-webserver:
+    build: .
+    image: stockidence-backend:latest
+    command: dagster-webserver -w /app/workspace.yaml -h 0.0.0.0 -p 3000
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /app/dagster_home
+      STOCKIDENCE_DB: /app/data/stockidence.duckdb
+    volumes:
+      - ./data:/app/data
+      - ./dagster_home:/app/dagster_home
+    # Admin UI on localhost only; reach it via SSH tunnel, not the open internet.
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+
+  dagster-daemon:
+    build: .
+    image: stockidence-backend:latest
+    command: dagster-daemon run -w /app/workspace.yaml
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /app/dagster_home
+      STOCKIDENCE_DB: /app/data/stockidence.duckdb
+    volumes:
+      - ./data:/app/data
+      - ./dagster_home:/app/dagster_home
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend-react/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped

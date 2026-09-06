@@ -1,0 +1,22 @@
+# Never bake secrets, local state, or regenerable artifacts into the image.
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+src/dagster_home/
+Model/datasets/
+Model/notebooks/.ipynb_checkpoints/
+frontend/
+frontend-react/node_modules/
+frontend-react/dist/
+tests/
+.git/
+.gitignore
+*.duckdb
+*.parquet
+FutureAdditions.md
+ViewSchemas.ipynb
+Jupyter/
+main.py

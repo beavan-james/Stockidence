@@ -48,6 +48,8 @@ export interface Rating {
   fair_value: number | null;
   target_price: number | null;
   source: RatingSource;
+  /** Set on pending responses when the refresh launch itself failed. */
+  pipeline_error?: string | null;
 }
 
 export interface Suggestion {

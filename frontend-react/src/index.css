@@ -33,6 +33,12 @@
 html {
   background-color: var(--color-bg);
   color-scheme: dark;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -45,6 +51,15 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+}
+
+/* Scrollable region with the scrollbar hidden but scrolling intact */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Page titles glow in the accent color on hover */
@@ -100,6 +115,22 @@ body {
 
 .anim-pop {
   animation: pop-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Autocomplete dropdown: fade + slide down */
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.anim-drop {
+  animation: drop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Score bars grow from the left */
@@ -158,6 +189,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .anim-rise,
   .anim-pop,
+  .anim-drop,
   .anim-bar,
   .anim-radar,
   .sk-shimmer,

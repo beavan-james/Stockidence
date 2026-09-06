@@ -1,14 +1,16 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { GridGlowBackground } from "@/components/layout/GridGlowBackground";
+import { ScrollIndicator } from "@/components/layout/ScrollIndicator";
 import { SearchBar } from "@/components/layout/SearchBar";
 
 export function AppShell() {
     const location = useLocation();
 
     return (
-        <div className="min-h-screen bg-bg text-ink">
-            <GridGlowBackground />
+    <div className="min-h-screen bg-bg text-ink">
+      <GridGlowBackground />
+      <ScrollIndicator />
             <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
                 <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6">
                     <Link to="/" className="title-glow flex items-center gap-2.5">

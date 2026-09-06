@@ -49,7 +49,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.1 }}
-        className={cn("overflow-y-auto pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
+          className={cn("overflow-y-auto no-scrollbar pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
       >
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
@@ -117,7 +117,7 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.1 }}
-        className={cn("overflow-y-auto pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
+          className={cn("overflow-y-auto no-scrollbar pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
       >
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">

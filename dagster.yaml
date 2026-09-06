@@ -1,0 +1,31 @@
+# Local-instance storage for the container. Mirrors the current
+# src/dagster_home layout; DAGSTER_HOME=/app/dagster_home in compose.
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class_name: LocalComputeLogManager
+  config:
+    base_dir: /app/dagster_home/storage
+
+local_artifact_storage:
+  module: dagster.core.storage.root
+  class_name: LocalArtifactStorage
+  config:
+    base_dir: /app/dagster_home
+
+run_storage:
+  module: dagster.core.storage.runs
+  class_name: SqliteRunStorage
+  config:
+    base_dir: /app/dagster_home/history
+
+event_log_storage:
+  module: dagster.core.storage.event_log
+  class_name: SqliteEventLogStorage
+  config:
+    base_dir: /app/dagster_home/history/runs
+
+schedule_storage:
+  module: dagster.core.storage.schedules
+  class_name: SqliteScheduleStorage
+  config:
+    base_dir: /app/dagster_home/schedules
