@@ -35,7 +35,9 @@ log "deploying $REMOTE (was $LOCAL)"
 git reset -q --hard origin/master
 if "$DOCKER" compose up --build -d >>"$LOG" 2>&1; then
     sleep 20
-    if curl -sf http://localhost/api/health >>"$LOG" 2>&1; then
+    # Hit the API container directly: host-level http://localhost/api
+    # only proves the nginx redirect, and https needs SNI for the domain.
+    if "$DOCKER" compose exec -T api curl -sf http://localhost:8000/api/health >>"$LOG" 2>&1; then
         log "deploy ok"
     else
         log "HEALTH CHECK FAILED after deploy to $REMOTE"
