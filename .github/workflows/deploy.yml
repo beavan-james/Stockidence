@@ -1,21 +1,22 @@
-# Deploy to EC2 on push to main (plus manual dispatch).
+# Deploy to the production box on push to main (plus manual dispatch).
 #
 # One-time setup:
-#   1. Provision the box (t3.small, Ubuntu), install Docker + Compose plugin.
+#   1. Provision the box (Ubuntu 24.04, 2 OCPU / 12 GB), install Docker +
+#      Compose plugin.
 #   2. Clone the repo (read-only deploy key is enough) and create .env
 #      from .env.example with real provider keys.
-#   3. First boot + backfill manually, then every push to main redeploys.
+#   3. First boot + data load manually, then every push to main redeploys.
 #   4. Add these repo secrets (Settings → Secrets → Actions):
-#        EC2_HOST         public hostname/IP of the box
-#        EC2_USER         SSH user (e.g. ubuntu or ec2-user)
-#        EC2_SSH_KEY      private key with access to the box
-#        EC2_PROJECT_DIR  (optional) repo path on the box; default ~/Stockidence
+#        SSH_HOST         public hostname/IP of the box
+#        SSH_USER         SSH user (e.g. ubuntu)
+#        SSH_KEY          private key with access to the box
+#        PROJECT_DIR      (optional) repo path on the box; default ~/Stockidence
 #
 # Safety notes: data/ is a mounted volume and gitignored, so `git reset`
 # never touches the warehouse; .env is untracked so keys survive deploys.
-# Snapshot the EBS volume before enabling this if the warehouse matters.
+# Take a volume backup before enabling this if the warehouse matters.
 
-name: Deploy to EC2
+name: Deploy
 
 on:
   push:
@@ -23,7 +24,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ec2-deploy
+  group: production-deploy
   cancel-in-progress: false
 
 jobs:
@@ -34,13 +35,13 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
           script_stop: true
           script: |
             set -euo pipefail
-            cd "${EC2_PROJECT_DIR:-~/Stockidence}"
+            cd "${PROJECT_DIR:-~/Stockidence}"
             git fetch origin
             git reset --hard origin/main
             docker compose up --build -d
@@ -48,4 +49,4 @@ jobs:
             curl -sf http://localhost/api/health
             docker compose ps
         env:
-          EC2_PROJECT_DIR: ${{ secrets.EC2_PROJECT_DIR }}
+          PROJECT_DIR: ${{ secrets.PROJECT_DIR }}

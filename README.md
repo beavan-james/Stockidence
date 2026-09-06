@@ -17,6 +17,8 @@ ticker:
 
 Additionally the app contains other resources such as the model page, which shows the models ranking for tickers in the S&P 500 universe, and a discover page which contains useful information such as top gainers/losers, IPOs, earnings calendar, economy & commodities, and market news.
 
+`Website Link:` [stockidence.com](https://stockidence.com)
+
 ---
 ## How it's built
 
@@ -139,30 +141,31 @@ feature set, and refresh pipeline are documented in
 ---
 ## Deploy
 
-One EC2 box runs the whole stack via Docker Compose — FastAPI, Dagster
-(webserver + daemon; the push model needs both up for ticker refreshes),
-and the SPA behind nginx on port 80:
+One always-free Oracle Ampere box (2 OCPU / 12 GB) runs the whole stack via
+Docker Compose — FastAPI, Dagster (webserver + daemon; the push model needs
+both up for ticker refreshes), and the SPA behind nginx on port 80:
 
 ```bash
 cp .env.example .env   # fill in provider keys
 docker compose up --build -d
 ```
 
-- `t3.small` (~$15/mo) is the sweet spot; `t3.micro` risks OOM on the
-  quarterly retrain. The 1.4 GB warehouse rides along as a `./data` volume
-  (back it up — EBS snapshots are the simplest story).
-- First boot against an empty `./data`: run a backfill
+- The 1.4 GB warehouse rides along as a `./data` volume (back it up — a
+  boot-volume backup policy is the simplest story).
+- First boot against an empty `./data`: copy the warehouse up (don't
+  re-backfill through rate-limited APIs) or run a backfill
   (`Model/scripts/run_backfill.py`), then open `:80`. The Dagster UI is
   bound to localhost only — reach `:3000` over an SSH tunnel.
-- EC2 security group needs only port 80 (and 22 for you). HTTPS: put the
-  box behind an ALB with an ACM cert, or add certbot to the nginx service.
+- Firewall needs only port 80 (and 443 once HTTPS is on, plus 22 for you).
+  HTTPS: certbot on the box against your domain (Route 53 A record →
+  reserved public IP).
 
 ### CI deploy
 
 `.github/workflows/deploy.yml` redeploys on every push to `main` (plus manual
 dispatch): it SSHes in, hard-resets to `origin/main`, rebuilds, and curls
 `/api/health`. `dev` pushes never deploy. Setup is four repo secrets —
-`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, optional `EC2_PROJECT_DIR` — documented
+`SSH_HOST`, `SSH_USER`, `SSH_KEY`, optional `PROJECT_DIR` — documented
 at the top of the workflow file. The box itself needs Docker, a clone, and a
 filled-in `.env` once; `./data` and `.env` are untracked so deploys can't
 clobber the warehouse or keys.
