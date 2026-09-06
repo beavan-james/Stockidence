@@ -157,6 +157,16 @@ docker compose up --build -d
 - EC2 security group needs only port 80 (and 22 for you). HTTPS: put the
   box behind an ALB with an ACM cert, or add certbot to the nginx service.
 
+### CI deploy
+
+`.github/workflows/deploy.yml` redeploys on every push to `main` (plus manual
+dispatch): it SSHes in, hard-resets to `origin/main`, rebuilds, and curls
+`/api/health`. `dev` pushes never deploy. Setup is four repo secrets —
+`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, optional `EC2_PROJECT_DIR` — documented
+at the top of the workflow file. The box itself needs Docker, a clone, and a
+filled-in `.env` once; `./data` and `.env` are untracked so deploys can't
+clobber the warehouse or keys.
+
 ---
 ## Docs
 
