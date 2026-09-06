@@ -1,4 +1,7 @@
 # Stockidence
+
+**Live: [stockidence.com](stockidence.com)** · [GitHub](https://github.com/beavan-james/Stockidence)
+
 --- 
 ## What this is
 
@@ -16,8 +19,6 @@ ticker:
 - Technical statistics (RSI, ATR, BBANDS, SMA, EMA, ...)
 
 Additionally the app contains other resources such as the model page, which shows the models ranking for tickers in the S&P 500 universe, and a discover page which contains useful information such as top gainers/losers, IPOs, earnings calendar, economy & commodities, and market news.
-
-`Website Link:` [stockidence.com](https://stockidence.com)
 
 ---
 ## How it's built
@@ -162,7 +163,7 @@ docker compose up --build -d
 
 ### CI deploy
 
-`.github/workflows/deploy.yml` redeploys on every push to `main` (plus manual
+`.github/workflows/deploy.yml` redeploys on every push to `master` (plus manual
 dispatch): it SSHes in, hard-resets to `origin/master`, rebuilds, and curls
 `/api/health`. `dev` pushes never deploy. Setup is four repo secrets —
 `SSH_HOST`, `SSH_USER`, `SSH_KEY`, optional `PROJECT_DIR` — documented
