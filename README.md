@@ -161,15 +161,21 @@ docker compose up --build -d
   HTTPS: certbot on the box against your domain (Route 53 A record →
   reserved public IP).
 
-### CI deploy
+### Auto-deploy (cron pull)
 
-`.github/workflows/deploy.yml` redeploys on every push to `master` (plus manual
-dispatch): it SSHes in, hard-resets to `origin/master`, rebuilds, and curls
-`/api/health`. `dev` pushes never deploy. Setup is four repo secrets —
-`SSH_HOST`, `SSH_USER`, `SSH_KEY`, optional `PROJECT_DIR` — documented
-at the top of the workflow file. The box itself needs Docker, a clone, and a
-filled-in `.env` once; `./data` and `.env` are untracked so deploys can't
-clobber the warehouse or keys.
+Push-to-deploy over SSH is intentionally unsupported: port 22 allows one
+admin IP only, and Actions runners egress from unallowlistable Azure ranges.
+Instead the box polls itself — `scripts/auto-deploy.sh` on a 5-minute cron
+fast-forwards to `origin/master` and rebuilds + health-checks only when the
+commit moved (lock-guarded, logs to `auto-deploy.log`):
+
+```bash
+(crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/Stockidence/scripts/auto-deploy.sh >> $HOME/Stockidence/auto-deploy.log 2>&1") | crontab -
+```
+
+`./data` and `.env` are untracked so deploys can't clobber the warehouse or
+keys. (If push deploys are ever wanted back, the path is a Tailscale tailnet
+so runners get a private route to the box — not opening SSH to the world.)
 
 ---
 ## Docs
