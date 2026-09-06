@@ -1,6 +1,6 @@
 # Stockidence
 
-**Live: [stockidence.com](stockidence.com)** · [GitHub](https://github.com/beavan-james/Stockidence)
+**Live:** [stockidence.com](https://stockidence.com) · [GitHub](https://github.com/beavan-james/Stockidence)
 
 --- 
 ## What this is
