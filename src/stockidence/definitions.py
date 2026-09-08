@@ -16,6 +16,8 @@ Exposes:
     quarterly dataset rebuild -> notebook retrain + ranking export
   - refresh_tickers job (frontend-triggered): on-demand per-ticker
     ingest + derived rebuilds + scoring
+  - refresh_quotes job (frontend-triggered): quote-only pull for explicit
+    user refresh (portfolio button) — no rebuilds, no scoring
   - ticker_data asset with a dynamic ticker partition per lookup
     (manual materialization path)
 """
@@ -290,6 +292,37 @@ def refresh_tickers_job() -> None:
     refresh_tickers_op()
 
 
+class RefreshQuotesConfig(Config):
+    """Tickers whose cached quotes should be refreshed, e.g. {"tickers": ["AAPL", "MSFT"]}."""
+
+    tickers: list[str]
+
+
+@op(required_resource_keys={"engine"})
+def refresh_quotes_op(context: OpExecutionContext, config: RefreshQuotesConfig) -> dict:
+    """Quote-only refresh for explicit user action (portfolio Refresh button).
+
+    One staleness-gated Finnhub call per ticker (1-minute TTL) — no derived
+    rebuilds, no scoring, so it stays cheap enough to run on demand for a
+    whole portfolio.
+    """
+    engine = context.resources.engine
+    tickers = [t.strip().upper() for t in config.tickers if t.strip()][:25]
+    now = _now()
+    status = {}
+    for t in tickers:
+        result = engine.ingest_on_demand("quote", t, now=now)
+        status[t] = {"fetched": result.fetched, "reason": result.reason}
+        context.log.info(f"[quote:{t}] {result.reason} ({result.rows_written} rows)")
+    return {"tickers": tickers, "status": status}
+
+
+@job(name="refresh_quotes")
+def refresh_quotes_job() -> None:
+    """Quote-only pull launched by the frontend via POST /api/quotes/refresh."""
+    refresh_quotes_op()
+
+
 @op(required_resource_keys={"engine"})
 def quarterly_refresh_op(context: OpExecutionContext) -> dict:
     """Incremental refresh of the whole universe (recent quarter only).
@@ -351,7 +384,7 @@ defs = Definitions(
     assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
             m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
-          quarterly_model_refresh_job],
+          refresh_quotes_job, quarterly_model_refresh_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
                news_morning_schedule, news_evening_schedule,
                quarterly_schedule],

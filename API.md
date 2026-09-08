@@ -955,6 +955,18 @@ there are no sensors; see `ARCHITECTURE.md`.
 {"run_id": "c09c66b8-b0f7-4c68-b8eb-4fe7248ea208", "tickers": ["AAPL"]}
 ```
 
+### Quotes (live prices)
+
+`GET /api/quote/{ticker}` — latest cached Finnhub quote from
+`raw.raw_quotes` (`price`, `high`/`low`/`open`/`prev_close`, `as_of`, plus
+`fetched_at` landing time). Null when the ticker has no quote row.
+
+`POST /api/quotes/refresh` with `{"tickers": ["AAPL", "MSFT"]}` — launches
+the quote-only `refresh_quotes` job (one staleness-gated Finnhub call per
+ticker, 1-minute TTL, no derived rebuilds). Manual path behind the
+portfolio Refresh button; callers poll `GET /api/quote/{ticker}` until
+`fetched_at` moves past the button press. Capped at 25 tickers per call.
+
 ### News (filtered paging)
 
 `GET /api/news?ticker=AAPL&date_from=2026-09-01&date_to=2026-09-04&page=1&page_size=25`

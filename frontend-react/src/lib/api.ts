@@ -38,6 +38,13 @@ export const client = {
   quote: (ticker: string) =>
     api<import("@/types/api").Quote | null>(`/api/quote/${encodeURIComponent(ticker)}`),
 
+  quotesRefresh: (tickers: string[]) =>
+    api<{ run_id: string; tickers: string[] }>("/api/quotes/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tickers }),
+    }),
+
   prices: (ticker: string, months = 12) =>
     api<import("@/types/api").PriceBar[]>(
       `/api/prices/${encodeURIComponent(ticker)}?months=${months}`,

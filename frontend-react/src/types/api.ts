@@ -66,6 +66,7 @@ export interface Quote {
   open: number | null;
   prev_close: number | null;
   as_of: string | null;
+  fetched_at: string | null;
 }
 
 export interface PriceBar {

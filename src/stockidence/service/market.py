@@ -72,7 +72,8 @@ def get_quote(ticker: str) -> dict | None:
                json_extract_string(payload, '$.l'),
                json_extract_string(payload, '$.o'),
                json_extract_string(payload, '$.pc'),
-               json_extract_string(payload, '$.t')
+               json_extract_string(payload, '$.t'),
+               fetched_at
         FROM raw.raw_quotes
         WHERE ticker = ?
         """,
@@ -80,13 +81,17 @@ def get_quote(ticker: str) -> dict | None:
     )
     if not rows or not rows[0][0]:
         return None
-    c, h, l, o, pc, t = rows[0]
+    c, h, l, o, pc, t, fetched_at = rows[0]
     ts = None
     if t:
         try:
             ts = datetime.fromtimestamp(int(t), tz=timezone.utc).isoformat()
         except (ValueError, OSError):
             ts = None
+    if hasattr(fetched_at, "isoformat"):
+        fetched_at = fetched_at.isoformat()
+    elif fetched_at is not None:
+        fetched_at = str(fetched_at)
     return {
         "price": _num(c),
         "high": _num(h),
@@ -94,6 +99,7 @@ def get_quote(ticker: str) -> dict | None:
         "open": _num(o),
         "prev_close": _num(pc),
         "as_of": ts,
+        "fetched_at": fetched_at,
     }
 
 

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { HoldingSparkline } from "@/components/portfolio/HoldingSparkline";
 import { TickerAutocomplete } from "@/components/layout/TickerAutocomplete";
@@ -12,8 +13,10 @@ import {
   type Holding,
 } from "@/hooks/portfolio";
 import { usePriceHistory, useQuote } from "@/hooks/queries";
+import { client } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Pencil, Plus, X } from "lucide-react";
+import type { Quote } from "@/types/api";
+import { Pencil, Plus, RefreshCw, X } from "lucide-react";
 
 function fmtMoney(v: number | null, digits = 2): string {
   if (v == null || !isFinite(v)) return "N/A";
@@ -295,9 +298,71 @@ export function PortfolioPage() {
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : null;
   const dayPnl = rows.reduce((s, r) => s + r.dayValue, 0);
 
+  // Manual quote refresh: launches the quote-only Dagster job, then polls
+  // the cached quotes until every holding's fetch landing is newer than the
+  // button press (or 60s elapse). The 60s tolerance treats an already-fresh
+  // row as done — the 1-minute quote TTL gate makes repeat presses cheap
+  // no-ops pipeline-side.
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const pollTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (pollTimer.current) window.clearInterval(pollTimer.current);
+    },
+    [],
+  );
+
+  async function refreshQuotes() {
+    if (refreshing || symbols.length === 0) return;
+    setRefreshing(true);
+    setRefreshError(null);
+    const startedAt = Date.now();
+    try {
+      await client.quotesRefresh(symbols);
+    } catch (e) {
+      setRefreshError(e instanceof Error ? e.message : "Quote refresh failed");
+      setRefreshing(false);
+      return;
+    }
+    let stopped = false;
+    const stop = () => {
+      if (pollTimer.current) window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+      stopped = true;
+      setRefreshing(false);
+    };
+    const tick = async () => {
+      await queryClient.refetchQueries({ queryKey: ["quote"] });
+      const fresh = symbols.every((s) => {
+        const q = queryClient.getQueryData<Quote | null>(["quote", s]);
+        return q?.fetched_at != null && Date.parse(q.fetched_at) >= startedAt - 60_000;
+      });
+      if (fresh || Date.now() - startedAt > 60_000) stop();
+    };
+    await tick();
+    if (!stopped) {
+      pollTimer.current = window.setInterval(() => void tick(), 5_000);
+    }
+  }
+
   return (
     <div className="space-y-10">
-      <h1 className="title-glow text-xl font-semibold tracking-tight">Portfolio</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="title-glow text-xl font-semibold tracking-tight">Portfolio</h1>
+        {holdings.length > 0 && (
+          <button
+            onClick={() => void refreshQuotes()}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-transparent px-3 py-1.5 text-sm text-ink-secondary transition-colors hover:border-accent/30 hover:text-ink disabled:opacity-40"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            {refreshing ? "Refreshing prices…" : "Refresh prices"}
+          </button>
+        )}
+      </div>
+      {refreshError && <p className="-mt-6 text-xs text-loss">{refreshError}</p>}
 
       <AddHoldingForm />
 

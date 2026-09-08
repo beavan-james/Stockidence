@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 REFRESH_JOB_NAME = "refresh_tickers"
 REFRESH_OP_NAME = "refresh_tickers_op"
+QUOTES_JOB_NAME = "refresh_quotes"
+QUOTES_OP_NAME = "refresh_quotes_op"
+# Upper bound per manual refresh; the quote TTL gate already prevents API
+# spend on fresh tickers, this just bounds the run size.
+MAX_QUOTES_REFRESH = 25
 
 # Skip re-launching a ticker refreshed this recently. The profile page polls
 # /api/rating every 10s while pending, so without this each poll would
@@ -83,3 +88,22 @@ def request_refresh(tickers: list[str]) -> str | None:
 def last_launch_error(ticker: str) -> str | None:
     """Most recent launch failure for a ticker, if its launch never succeeded."""
     return _last_error.get(ticker.strip().upper())
+
+
+def submit_quotes_run(tickers: list[str]) -> str:
+    """Launch the quote-only refresh_quotes job. Returns the run id.
+
+    Explicit user action (portfolio Refresh button), so no cooldown — the
+    1-minute quote TTL gate makes repeat runs cheap no-ops. Raises
+    RuntimeError when Dagster is unreachable or rejects the launch.
+    """
+    clean = [t.strip().upper() for t in tickers if t.strip()][:MAX_QUOTES_REFRESH]
+    if not clean:
+        raise ValueError("no tickers to refresh")
+    run_config = {"ops": {QUOTES_OP_NAME: {"config": {"tickers": clean}}}}
+    try:
+        return _client_and_config().submit_job_execution(
+            QUOTES_JOB_NAME, run_config=run_config
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Dagster launch failed: {exc}") from exc

@@ -65,6 +65,25 @@ def get_quote(ticker: str) -> dict | None:
     return market.get_quote(ticker)
 
 
+@market_router.post("/quotes/refresh", status_code=202)
+def trigger_quotes_refresh(body: RefreshRequest) -> dict:
+    """Launch the quote-only refresh_quotes Dagster job for the given tickers.
+
+    Manual path behind the portfolio Refresh button: one staleness-gated
+    Finnhub call per ticker, no derived rebuilds. Returns the run id —
+    callers poll GET /api/quote/{ticker} until `as_of` moves past the
+    button press. 503 when the Dagster webserver is unreachable.
+    """
+    tickers = [t.strip().upper() for t in body.tickers if t.strip()]
+    if not tickers:
+        raise HTTPException(status_code=422, detail="no tickers to refresh")
+    try:
+        run_id = dagster_client.submit_quotes_run(tickers)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"run_id": run_id, "tickers": tickers}
+
+
 @market_router.get("/prices/{ticker}")
 def get_price_history(
     ticker: str, months: int = Query(default=12, ge=1, le=120)
