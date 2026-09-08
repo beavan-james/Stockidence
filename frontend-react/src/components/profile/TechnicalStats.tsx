@@ -69,7 +69,7 @@ const GROUPS: { title: string; stats: StatDef[] }[] = [
   },
 ];
 
-/** Raw technical statistics — the numbers behind the old sub-scores, no scoring. */
+/** Raw technical statistics: the numbers behind the old sub-scores. No scoring. */
 export function TechnicalStats({ ticker }: { ticker: string }) {
   const stats = useTechnicals(ticker);
 
@@ -113,7 +113,7 @@ export function TechnicalStats({ ticker }: { ticker: string }) {
                       </span>
                     </dt>
                     <dd className={cn("num text-right", v == null && "text-ink-muted")}>
-                      {v == null ? "—" : s.format(v)}
+                      {v == null ? "N/A" : s.format(v)}
                     </dd>
                   </div>
                 );

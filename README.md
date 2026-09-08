@@ -15,7 +15,7 @@ itself rather than the algorithm. The scoring layer has since been
 good time, and I don't have time to research it."* The app outputs, for any
 ticker:
 
-- a **valuation reference** which contains a fair value anchor based on ...
+- a **valuation reference** which contains a fair value anchor based on a 50/50 blend of discounted cash flow and own-history comparables
 - Technical statistics (RSI, ATR, BBANDS, SMA, EMA, ...)
 
 Additionally the app contains other resources such as the model page, which shows the models ranking for tickers in the S&P 500 universe, and a discover page which contains useful information such as top gainers/losers, IPOs, earnings calendar, economy & commodities, and market news.

@@ -10,20 +10,28 @@ self-contained: one bad section degrades to demo, never to a page error.
 
 from datetime import datetime, timezone
 
+from .warehouse import _resilient
+
 
 def _read(sql: str, params: list | None = None) -> list[tuple] | None:
     """Run a read query against the warehouse; None on any failure.
 
-    Goes through the retrying connect so market sections wait out a
-    pipeline write lock instead of degrading to demo data mid-run.
+    Transient contention is retried inside; anything else degrades to demo
+    data mid-run via None.
     """
     try:
-        from .warehouse import read_connect
-
-        with read_connect() as con:
-            return con.execute(sql, params or []).fetchall()
+        return _execute_read(sql, params)
     except Exception:
         return None
+
+
+@_resilient
+def _execute_read(sql: str, params: list | None = None) -> list[tuple]:
+    """Execute one warehouse read; raises on failure (retried by decorator)."""
+    from .warehouse import read_connect
+
+    with read_connect() as con:
+        return con.execute(sql, params or []).fetchall()
 
 
 def _latest_macro_series(indicator: str, points: int = 8) -> list[dict]:

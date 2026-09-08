@@ -24,7 +24,7 @@
   --color-ink-secondary: #a1a1aa;
   --color-ink-muted: #71717a;
 
-  /* Data colors — reserved for numbers and sentiment, never decoration */
+  /* Data colors: reserved for numbers and sentiment, never decoration */
   --color-gain: #34d399;
   --color-loss: #f87171;
   --color-neutral-data: #94a3b8;

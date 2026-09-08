@@ -3,7 +3,7 @@
 import type { Advice } from "@/types/api";
 
 export function formatMoney(value: number | null | undefined): string {
-  if (value == null) return "—";
+  if (value == null) return "N/A";
   return `$${value.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -11,7 +11,7 @@ export function formatMoney(value: number | null | undefined): string {
 }
 
 export function formatPct(value: number | null | undefined, digits = 1): string {
-  if (value == null) return "—";
+  if (value == null) return "N/A";
   return `${value.toFixed(digits)}%`;
 }
 

@@ -46,8 +46,8 @@ export function RankingTable() {
           <h2 className="text-lg font-semibold tracking-tight">Rankings</h2>
           <p className="pt-1 text-xs text-ink-muted">
             {rankings.data
-              ? `As of ${rankings.data.as_of} · ${rankings.data.universe_size} tickers — scores order tickers within the cohort; they are not expected returns.`
-              : "Quarterly ranking model — scores order tickers within the cohort; they are not expected returns."}
+              ? `As of ${rankings.data.as_of} · ${rankings.data.universe_size} tickers. Scores order tickers within the cohort; they are not expected returns.`
+              : "Quarterly ranking model. Scores order tickers within the cohort; they are not expected returns."}
           </p>
         </div>
         <input
@@ -99,8 +99,8 @@ export function RankingTable() {
                 >
                   <td className="num px-3 py-2.5 text-ink-secondary">{r.rank}</td>
                   <td className="num px-3 py-2.5 font-semibold">{r.ticker}</td>
-                  <td className="px-3 py-2.5 text-ink-secondary">{r.sector ?? "—"}</td>
-                  <td className="num px-3 py-2.5 text-right">{r.score?.toFixed(4) ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-ink-secondary">{r.sector ?? "N/A"}</td>
+                  <td className="num px-3 py-2.5 text-right">{r.score?.toFixed(4) ?? "N/A"}</td>
                 </motion.tr>
               ))}
             </tbody>

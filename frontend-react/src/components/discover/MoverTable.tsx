@@ -49,7 +49,7 @@ export function MoverTable({ title, rows }: { title: string; rows: Mover[] }) {
                     {m.change_display ?? m.change_percentage}
                   </td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-secondary sm:table-cell">
-                    {m.volume_display ?? "—"}
+                    {m.volume_display ?? "N/A"}
                   </td>
                 </motion.tr>
               );

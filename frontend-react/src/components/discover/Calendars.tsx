@@ -21,7 +21,7 @@ const containerVariants: Variants = {
 function hourBadge(hour: string | null): { label: string; cls: string } {
   if (hour === "amc") return { label: "AMC", cls: "bg-accent-dim text-accent-strong" };
   if (hour === "bmo") return { label: "BMO", cls: "bg-raised text-ink-secondary" };
-  return { label: "—", cls: "" };
+  return { label: "N/A", cls: "" };
 }
 
 function statusPill(status: string | null): { label: string; cls: string } | null {
@@ -76,7 +76,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
                 >
                   <td className="num px-3 py-2.5 text-ink-secondary">{ipo.date}</td>
                   <td className="px-3 py-2.5">
-                    <span className="num font-semibold">{ipo.symbol ?? "—"}</span>
+                    <span className="num font-semibold">{ipo.symbol ?? "N/A"}</span>
                     {pill && (
                       <span className={cn("ml-2 text-[11px]", pill.cls)}>
                         {pill.label}
@@ -85,7 +85,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
                   </td>
                   <td className="max-w-40 truncate px-3 py-2.5 text-ink-secondary">{ipo.name}</td>
                   <td className={cn("num px-3 py-2.5 text-right", ipo.price ? "font-medium" : "text-ink-muted")}>
-                    {ipo.price ? `$${ipo.price}` : "—"}
+                    {ipo.price ? `$${ipo.price}` : "N/A"}
                   </td>
                 </motion.tr>
               );
@@ -143,12 +143,12 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
                   <td className="num px-3 py-2.5 text-ink-secondary">{e.date}</td>
                   <td className="num px-3 py-2.5 font-semibold">{e.symbol}</td>
                   <td className="px-3 py-2.5">
-                    {badge.label !== "—" ? (
+                    {badge.label !== "N/A" ? (
                       <span className={cn("inline-flex rounded-md px-2 py-0.5 text-xs font-medium", badge.cls)}>
                         {badge.label}
                       </span>
                     ) : (
-                      <span className="text-ink-muted">—</span>
+                      <span className="text-ink-muted">N/A</span>
                     )}
                   </td>
                   <td
@@ -161,10 +161,10 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
                           : "text-loss",
                     )}
                   >
-                    {e.eps_estimate?.toFixed(2) ?? "—"}
+                    {e.eps_estimate?.toFixed(2) ?? "N/A"}
                   </td>
                   <td className="num px-3 py-2.5 text-right text-ink-secondary">
-                    {e.revenue_estimate_display ?? "—"}
+                    {e.revenue_estimate_display ?? "N/A"}
                   </td>
                 </motion.tr>
               );

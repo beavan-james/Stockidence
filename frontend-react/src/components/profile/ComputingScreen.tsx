@@ -25,9 +25,9 @@ function headline(source: string, ticker?: string): string {
 
 function subtitle(source: string): string {
   if (source === "pending")
-    return "Assembling its full history from scratch — this is the slow path.";
+    return "Assembling its full history from scratch. This is the slow path.";
   if (source === "refreshing")
-    return "The stored snapshot is over a day old — updating market inputs.";
+    return "The stored snapshot is over a day old. Updating market inputs.";
   return "The pipeline was queued.";
 }
 
@@ -135,7 +135,7 @@ export function ComputingScreen({ source, ticker }: { source: string; ticker?: s
       </motion.p>
 
       <p className="text-xs text-ink-muted">
-        Still working — fundamentals are the slow part. This page updates itself the moment
+        Still working. Fundamentals are the slow part. This page updates itself the moment
         the numbers land.
       </p>
     </motion.div>

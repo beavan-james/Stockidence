@@ -1,8 +1,8 @@
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Scale } from "lucide-react";
 
-/** Fair value anchor. Always rendered once the rating loads — a missing
- * value (thin fundamentals on a fresh ticker) shows as "—", never $0.00. */
+/** Fair value anchor. Always rendered once the rating loads. A missing
+ * value (thin fundamentals on a fresh ticker) shows as "N/A", never $0.00. */
 export function ValuationReference({
   fairValue,
 }: {
@@ -23,7 +23,7 @@ export function ValuationReference({
             className="text-2xl font-semibold"
           />
         ) : (
-          <p className="num text-2xl font-semibold text-ink-muted">—</p>
+          <p className="num text-2xl font-semibold text-ink-muted">N/A</p>
         )}
       </div>
     </div>

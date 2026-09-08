@@ -31,7 +31,7 @@ const HIGHLIGHTS = [
 
 export function ModelPage() {
     useEffect(() => {
-        document.title = "Model — Stockidence";
+        document.title = "Model | Stockidence";
     }, []);
 
     return (

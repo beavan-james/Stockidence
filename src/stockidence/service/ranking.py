@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .models import RankedTicker
+from .warehouse import _resilient
 
 # Static fallback mirroring the notebook's latest-cohort head, so the
 # rankings section renders before the warehouse seed lands (fresh checkout
@@ -22,6 +23,12 @@ _DEMO_RANKINGS: list[dict] = [
 _DEMO_AS_OF = "2026-04-01"
 
 
+def _demo_rankings() -> dict:
+    """Inline demo head used when the warehouse has no rankings yet."""
+    items = [RankedTicker(**r).to_dict() for r in _DEMO_RANKINGS]
+    return {"as_of": _DEMO_AS_OF, "universe_size": len(items), "items": items}
+
+
 def get_rankings() -> dict:
     """Full ranked cohort for the latest quarter: rank/ticker/sector/score.
 
@@ -30,15 +37,26 @@ def get_rankings() -> dict:
     is absent or the table is empty so the UI never hard-fails.
     """
     try:
-        from .warehouse import read_connect
+        return _fetch_rankings()
+    except (FileNotFoundError, ImportError):
+        # No warehouse (or no duckdb) on this host: demo fallback below.
+        return _demo_rankings()
 
-        with read_connect() as con:
-            rows = con.execute(
-                "SELECT as_of, rank, ticker, sector, score"
-                " FROM mart.model_rankings ORDER BY rank ASC"
-            ).fetchall()
-    except Exception:
-        rows = []
+
+@_resilient
+def _fetch_rankings() -> dict:
+    """Load the ranked cohort; raises on failure (retried by decorator).
+
+    Transient contention is retried; missing tables and other errors
+    propagate to the route (unchanged behavior).
+    """
+    from .warehouse import read_connect
+
+    with read_connect() as con:
+        rows = con.execute(
+            "SELECT as_of, rank, ticker, sector, score"
+            " FROM mart.model_rankings ORDER BY rank ASC"
+        ).fetchall()
     if rows:
         as_of = rows[0][0].isoformat() if hasattr(rows[0][0], "isoformat") else str(rows[0][0])
         items = [
@@ -51,5 +69,4 @@ def get_rankings() -> dict:
             for r in rows
         ]
         return {"as_of": as_of, "universe_size": len(items), "items": items}
-    items = [RankedTicker(**r).to_dict() for r in _DEMO_RANKINGS]
-    return {"as_of": _DEMO_AS_OF, "universe_size": len(items), "items": items}
+    return _demo_rankings()

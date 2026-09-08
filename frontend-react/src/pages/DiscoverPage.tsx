@@ -55,7 +55,7 @@ export function DiscoverPage() {
     const earnings = useEarnings();
 
     useEffect(() => {
-        document.title = "Discover — Stockidence";
+        document.title = "Discover | Stockidence";
     }, []);
 
     const { sortedGainers, sortedLosers, sortedActive } = useMemo(

@@ -2,8 +2,9 @@
  * TanStack Query hooks over the API client.
  *
  * useRating replicates the Reflex poll loop: while the pipeline reports
- * pending/refreshing, refetch every 10s up to 30 attempts, then stop and
- * show whatever we have.
+ * pending/refreshing, refetch every 10s up to 60 attempts (~10 min, enough
+ * for a cold full-history backfill), then stop and let the page offer a
+ * manual re-check.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -27,7 +28,7 @@ import type {
 } from "@/types/api";
 
 const POLL_INTERVAL_MS = 10_000;
-const POLL_MAX_ATTEMPTS = 30;
+export const POLL_MAX_ATTEMPTS = 60;
 
 function shouldPoll(source: RatingSource | undefined, attempts: number): boolean {
   if (source !== "pending" && source !== "refreshing") return false;
@@ -85,6 +86,9 @@ export function useQuote(ticker: string | undefined) {
     queryKey: ["quote", ticker],
     queryFn: () => client.quote(ticker!),
     staleTime: 30_000,
+    // Quotes land mid-refresh (before the rating snapshot), so keep polling:
+    // the badge and portfolio rows pick the fresh row up without a remount.
+    refetchInterval: 60_000,
   });
 }
 

@@ -23,7 +23,7 @@ export function DocsPage() {
   const activeId = useActiveSection(ids);
 
   useEffect(() => {
-    document.title = "Documentation — Stockidence";
+    document.title = "Documentation | Stockidence";
   }, []);
 
   return (

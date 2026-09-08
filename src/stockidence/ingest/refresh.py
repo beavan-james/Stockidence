@@ -27,10 +27,12 @@ from ..mart.mart import rebuild_all_for_ticker
 from ..mart.scoring import score_ticker
 from ..storage import Warehouse
 
-# Hot-path quote endpoint — not needed for refreshes. ticker_news is the
-# only Alpha Vantage endpoint and the ML feature set no longer uses
-# news/sentiment (also avoids the 25/day free-tier limit entirely).
-SKIP_ENDPOINTS = frozenset({"quote", "ticker_news"})
+# ticker_news is the only Alpha Vantage endpoint and the ML feature set no
+# longer uses news/sentiment (also avoids the 25/day free-tier limit
+# entirely). The hot-path quote stays IN: the profile badge and portfolio
+# rows read raw_quotes, and its 1-minute TTL gate keeps the extra Finnhub
+# call to one per ticker per refresh.
+SKIP_ENDPOINTS = frozenset({"ticker_news"})
 
 # Needs special dimension_key handling (SYM|Q|YYYY); only the ticker_data
 # asset resolves that, so the runner skips it like the backfill scripts do.

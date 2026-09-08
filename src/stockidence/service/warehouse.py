@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import functools
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,16 +26,13 @@ def _config_db_path() -> str:
     )
 
 
-def read_connect(db_path: str | Path | None = None, max_attempts: int = 30):
-    """Open a read-only warehouse connection, retrying on lock contention.
+def read_connect(db_path: str | Path | None = None, max_attempts: int = 10):
+    """Open a read-only warehouse connection, retrying briefly on contention.
 
-    DuckDB's file lock is exclusive per process: while a pipeline run holds
-    the write lock, a plain read_only open fails immediately — which used to
-    surface as demo/sample data mid-run even though the warehouse exists and
-    the fetch just needs time. Retrying (same policy family as
-    Warehouse.connect, capped for interactive latency) makes API reads wait
-    out a refresh instead. Raises on persistent failure (missing DB, no
-    duckdb) so callers keep their existing fallbacks.
+    Interactive budget (~11s worst case): API handlers must not hang for
+    minutes, so this is far shorter than Warehouse.connect's pipeline-side
+    budget. Callers that need a multi-statement read to survive longer
+    contention use @_resilient on top.
     """
     from ..storage import Warehouse
 
@@ -43,6 +42,55 @@ def read_connect(db_path: str | Path | None = None, max_attempts: int = 30):
     return Warehouse(path).connect(read_only=True, max_attempts=max_attempts)
 
 
+def _transient_errors() -> tuple:
+    """DuckDB error classes worth retrying (lock contention and reads
+    invalidated mid-flight by a concurrent writer). Anything else —
+    missing tables on a fresh checkout, programming errors — fails fast
+    so callers hit their fallbacks immediately instead of sleeping."""
+    try:
+        import duckdb
+    except ImportError:
+        return ()
+    return tuple(
+        getattr(duckdb, name)
+        for name in ("IOException", "ConnectionException", "TransactionException")
+        if hasattr(duckdb, name)
+    )
+
+
+_TRANSIENT_ERRORS = _transient_errors()
+
+
+def _resilient(fn=None, *, attempts: int = 3):
+    """Retry a warehouse read thunk on transient DuckDB errors, then re-raise.
+
+    Contract: the wrapped function must RAISE on failure (never swallow into
+    a fallback) so retries actually happen; public wrappers below catch
+    everything into their documented fallbacks. Missing-DB / missing-duckdb
+    (FileNotFoundError, ImportError) are never retried.
+    """
+    def decorate(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_error: Exception | None = None
+            for attempt in range(attempts):
+                try:
+                    return func(*args, **kwargs)
+                except (FileNotFoundError, ImportError):
+                    raise
+                except _TRANSIENT_ERRORS as exc:
+                    last_error = exc
+                    time.sleep(1.0 * (attempt + 1))
+                except Exception:
+                    raise
+            raise last_error or RuntimeError("warehouse read failed")
+
+        return wrapper
+
+    return decorate(fn) if fn is not None else decorate
+
+
+@_resilient
 def is_warehouse_reachable() -> bool:
     """True when a readable mart schema is present (vs. a missing DB)."""
     try:
@@ -82,8 +130,21 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
         return None
 
     try:
-        with read_connect(db_path) as con:
-            row = con.execute(
+        return _fetch_rating(db_path, ticker)
+    except Exception:
+        return None
+
+
+@_resilient(attempts=5)
+def _fetch_rating(db_path: Path, ticker: str) -> Rating | None:
+    """Load one rating snapshot; raises on failure (retried by decorator).
+
+    Returns None only when the ticker genuinely has no snapshot — never
+    used as an error fallback, so the decorator can't mistake "no data"
+    for "try again".
+    """
+    with read_connect(db_path) as con:
+        row = con.execute(
             """
             SELECT ticker, company_name, logo, as_of, confidence_score, advice,
                    volatility_score, fair_value, target_price
@@ -176,8 +237,6 @@ def load_rating_from_warehouse(ticker: str) -> Rating | None:
             target_price=float(target_price) if target_price is not None else None,
             source="warehouse",
         )
-    except Exception:
-        return None
 
 
 def search_tickers(query: str, limit: int = 8) -> list[dict]:
@@ -191,23 +250,29 @@ def search_tickers(query: str, limit: int = 8) -> list[dict]:
     if not q:
         return []
     try:
-        with read_connect() as con:
-            rows = con.execute(
-                """
-                SELECT symbol, payload->>'description' AS description,
-                       mic, payload->>'type' AS security_type
-                FROM raw.raw_stock_symbols
-                WHERE mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
-                  AND (symbol ILIKE ? OR COALESCE(payload->>'description', '') ILIKE ?)
-                ORDER BY CASE WHEN upper(symbol) = upper(?) THEN 0
-                              WHEN symbol ILIKE ? THEN 1
-                              ELSE 2 END, symbol
-                LIMIT ?
-                """,
-                [f"{q}%", f"%{q}%", q, f"{q}%", limit],
-            ).fetchall()
+        return _search_symbols(q, limit)
     except Exception:
         return []
+
+
+@_resilient
+def _search_symbols(q: str, limit: int) -> list[dict]:
+    """Run the autocomplete query; raises on failure (retried by decorator)."""
+    with read_connect() as con:
+        rows = con.execute(
+            """
+            SELECT symbol, payload->>'description' AS description,
+                   mic, payload->>'type' AS security_type
+            FROM raw.raw_stock_symbols
+            WHERE mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
+              AND (symbol ILIKE ? OR COALESCE(payload->>'description', '') ILIKE ?)
+            ORDER BY CASE WHEN upper(symbol) = upper(?) THEN 0
+                          WHEN symbol ILIKE ? THEN 1
+                          ELSE 2 END, symbol
+            LIMIT ?
+            """,
+            [f"{q}%", f"%{q}%", q, f"{q}%", limit],
+        ).fetchall()
     return [
         {
             "symbol": r[0],
@@ -233,15 +298,21 @@ def get_model_weights() -> list[dict]:
         {"category": "moat", "weight": 0.04},
     ]
     try:
-        with read_connect() as con:
-            rows = con.execute(
-                "SELECT category, weight FROM mart.model_weights ORDER BY weight DESC"
-            ).fetchall()
+        return _fetch_model_weights() or defaults
     except Exception:
         return defaults
-    if not rows:
-        return defaults
-    return [{"category": r[0], "weight": float(r[1])} for r in rows]
+
+
+@_resilient
+def _fetch_model_weights() -> list[dict]:
+    """Read the persisted weights; raises on failure (retried by decorator)."""
+    with read_connect() as con:
+        return [
+            {"category": r[0], "weight": float(r[1])}
+            for r in con.execute(
+                "SELECT category, weight FROM mart.model_weights ORDER BY weight DESC"
+            ).fetchall()
+        ]
 
 
 def ticker_exists(ticker: str) -> bool | None:
@@ -253,18 +324,24 @@ def ticker_exists(ticker: str) -> bool | None:
     block every search.
     """
     try:
-        with read_connect() as con:
-            row = con.execute(
-                """
-                SELECT 1 FROM raw.raw_stock_symbols
-                WHERE symbol = ? AND mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
-                LIMIT 1
-                """,
-                [ticker.upper()],
-            ).fetchone()
-            return row is not None
+        return _check_ticker(ticker)
     except Exception:
         return None
+
+
+@_resilient
+def _check_ticker(ticker: str) -> bool:
+    """Run the coverage query; raises on failure (retried by decorator)."""
+    with read_connect() as con:
+        row = con.execute(
+            """
+            SELECT 1 FROM raw.raw_stock_symbols
+            WHERE symbol = ? AND mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
+            LIMIT 1
+            """,
+            [ticker.upper()],
+        ).fetchone()
+        return row is not None
 
 
 def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
@@ -275,19 +352,25 @@ def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
     'no recent failures' rather than an error.
     """
     try:
-        with read_connect() as con:
-            rows = con.execute(
-                """
-                SELECT job_name, failed_at, error_message
-                FROM control.pipeline_failures
-                WHERE failed_at >= CURRENT_TIMESTAMP - INTERVAL (?) DAY
-                ORDER BY failed_at DESC
-                LIMIT ?
-                """,
-                [days, limit],
-            ).fetchall()
+        return _fetch_recent_failures(days, limit)
     except Exception:
         return []
+
+
+@_resilient
+def _fetch_recent_failures(days: int, limit: int) -> list[dict]:
+    """Run the failures query; raises on failure (retried by decorator)."""
+    with read_connect() as con:
+        rows = con.execute(
+            """
+            SELECT job_name, failed_at, error_message
+            FROM control.pipeline_failures
+            WHERE failed_at >= CURRENT_TIMESTAMP - INTERVAL (?) DAY
+            ORDER BY failed_at DESC
+            LIMIT ?
+            """,
+            [days, limit],
+        ).fetchall()
     return [
             {
                 "job_name": r[0],

@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { Pencil, Plus, X } from "lucide-react";
 
 function fmtMoney(v: number | null, digits = 2): string {
-  if (v == null || !isFinite(v)) return "—";
+  if (v == null || !isFinite(v)) return "N/A";
   return v.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
@@ -26,7 +26,7 @@ function fmtMoney(v: number | null, digits = 2): string {
 }
 
 function PnL({ value, pct }: { value: number | null; pct: number | null }) {
-  if (value == null) return <span className="num text-sm text-ink-muted">—</span>;
+  if (value == null) return <span className="num text-sm text-ink-muted">N/A</span>;
   const up = value >= 0;
   return (
     <span className={cn("num text-sm font-medium", up ? "text-gain" : "text-loss")}>
@@ -120,7 +120,7 @@ function HoldingCard({ holding }: { holding: Holding }) {
           ) : quote.isPending ? (
             <Skeleton className="h-6 w-20" />
           ) : (
-            <span className="text-sm text-ink-muted">—</span>
+            <span className="text-sm text-ink-muted">N/A</span>
           )}
           {dayPct != null && (
             <span className={cn("num text-xs", dayPct >= 0 ? "text-gain" : "text-loss")}>
@@ -160,16 +160,16 @@ function HoldingCard({ holding }: { holding: Holding }) {
         ) : (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
             <dt className="text-ink-muted">Shares</dt>
-            <dd className="num text-right">{shares > 0 ? shares : "—"}</dd>
+            <dd className="num text-right">{shares > 0 ? shares : "N/A"}</dd>
             <dt className="text-ink-muted">Avg cost</dt>
             <dd className="num text-right">
-              {avgCost > 0 ? fmtMoney(avgCost) : "—"}
+              {avgCost > 0 ? fmtMoney(avgCost) : "N/A"}
             </dd>
             <dt className="text-ink-muted">Market value</dt>
             <dd className="num text-right">{fmtMoney(marketValue)}</dd>
             <dt className="text-ink-muted">P&amp;L</dt>
             <dd className="text-right">
-              {hasPosition ? <PnL value={pnl} pct={pnlPct} /> : <span className="text-ink-muted">—</span>}
+              {hasPosition ? <PnL value={pnl} pct={pnlPct} /> : <span className="text-ink-muted">N/A</span>}
             </dd>
           </dl>
         )}
@@ -272,7 +272,7 @@ export function PortfolioPage() {
   const market = usePortfolioMarket(symbols);
 
   useEffect(() => {
-    document.title = "Portfolio — Stockidence";
+    document.title = "Portfolio | Stockidence";
   }, []);
 
   const rows = useMemo(
@@ -303,8 +303,8 @@ export function PortfolioPage() {
 
       {holdings.length === 0 ? (
         <p className="py-12 text-center text-sm text-ink-muted">
-          Your portfolio is empty. Add a holding above to get started —
-          shares and avg cost are optional.
+          Your portfolio is empty. Add a holding above to get started.
+          Shares and avg cost are optional.
         </p>
       ) : (
         <>
