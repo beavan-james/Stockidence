@@ -27,7 +27,7 @@ import type {
   TechnicalStats,
 } from "@/types/api";
 
-const POLL_INTERVAL_MS = 10_000;
+export const POLL_INTERVAL_MS = 10_000;
 export const POLL_MAX_ATTEMPTS = 60;
 
 function shouldPoll(source: RatingSource | undefined, attempts: number): boolean {

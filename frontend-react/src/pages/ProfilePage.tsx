@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { ComputingScreen } from "@/components/profile/ComputingScreen";
@@ -8,7 +8,7 @@ import { ValuationReference } from "@/components/profile/RatingsCards";
 import { TechnicalStats } from "@/components/profile/TechnicalStats";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { POLL_MAX_ATTEMPTS, useRating } from "@/hooks/queries";
+import { POLL_INTERVAL_MS, POLL_MAX_ATTEMPTS, useRating } from "@/hooks/queries";
 import { usePortfolio, addToPortfolio, isInPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
 import type { RatingSource } from "@/types/api";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,12 @@ export function ProfilePage() {
   const queryClient = useQueryClient();
   usePortfolio();
   useDocumentTitle(symbol);
+  // When auto-polling for this symbol started; resets on navigation so the
+  // ~10 min budget applies per ticker, not per page mount.
+  const [pollStart, setPollStart] = useState(() => Date.now());
+  useEffect(() => {
+    setPollStart(Date.now());
+  }, [symbol]);
 
   if (!symbol) return null;
 
@@ -87,8 +93,10 @@ export function ProfilePage() {
   const loading = r.source === "pending" || r.source === "refreshing" || r.advice === "PENDING";
   // Auto-polling stops after ~10 min; if the pipeline is still going, offer
   // a manual re-check instead of stranding the user on the spinner.
+  // Time-based (not poll-count-based): poll count isn't exposed on the
+  // observer result across Query versions.
   const pollExhausted =
-    loading && !rating.isFetching && (rating.dataUpdatedCount ?? 0) >= POLL_MAX_ATTEMPTS;
+    loading && !rating.isFetching && Date.now() - pollStart > POLL_MAX_ATTEMPTS * POLL_INTERVAL_MS;
 
   return (
     <div className="space-y-4">
