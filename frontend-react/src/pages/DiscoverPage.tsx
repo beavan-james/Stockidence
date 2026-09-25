@@ -83,7 +83,7 @@ export function DiscoverPage() {
                 )}
             </div>
 
-            {movers.data && (
+            {movers.data || movers.isError ? (
                 <motion.section
                     variants={sectionVariants}
                     initial="hidden"
@@ -95,6 +95,11 @@ export function DiscoverPage() {
                     <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                         Daily Movement
                     </h2>
+                    {!movers.data ? (
+                        <p className="text-sm text-ink-muted">
+                            Market movers unavailable right now.
+                        </p>
+                    ) : (
                     <div className="grid gap-4 lg:grid-cols-3">
                         <MoverTable title="Top gainers" rows={sortedGainers} />
                         <MoverTable title="Top losers" rows={sortedLosers} />
@@ -103,8 +108,9 @@ export function DiscoverPage() {
                             rows={sortedActive}
                         />
                     </div>
+                    )}
                 </motion.section>
-            )}
+            ) : null}
 
             <motion.section
                 variants={sectionVariants}

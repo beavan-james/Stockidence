@@ -186,3 +186,9 @@ so runners get a private route to the box — not opening SSH to the world.)
 | `API.md`          | Every endpoint used, grouped by scoring category, with JSON samples |
 | `TICKER_STATS.md` | Fair-value methodology and the technical statistics on ticker pages |
 | `Model/README.md` | Ranking model spec, validation, quarterly refresh pipeline |
+
+---
+## Startup Commands
+uv run uvicorn stockidence.api.app:app --reload 
+dagster dev
+npm run dev
