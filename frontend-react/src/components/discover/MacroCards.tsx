@@ -1,5 +1,3 @@
-import { motion, type Variants } from "framer-motion";
-
 import type { Commodity, MacroMetric, SeriesPoint } from "@/types/api";
 
 function Sparkline({ points }: { points: SeriesPoint[] }) {
@@ -24,30 +22,12 @@ function Sparkline({ points }: { points: SeriesPoint[] }) {
   );
 }
 
-const cardVariants: Variants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0 },
-};
-
-const ease = [0.22, 1, 0.36, 1] as const;
-
 /** Macro indicator cards: latest reading + sparkline of the recent series. */
 export function MacroGrid({ metrics }: { metrics: MacroMetric[] }) {
   return (
-    <motion.div
-      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.15 }}
-      variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
-    >
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {metrics.map((m) => (
-        <motion.div
-          key={m.label}
-          variants={cardVariants}
-          transition={{ duration: 0.4, ease }}
-          className="space-y-2 border-b border-line/60 pb-4"
-        >
+        <div key={m.label} className="space-y-2 border-b border-line/60 pb-4">
           <div className="flex items-baseline justify-between">
             <p className="text-sm font-medium">{m.label}</p>
             <p className="num text-lg font-semibold">
@@ -59,28 +39,17 @@ export function MacroGrid({ metrics }: { metrics: MacroMetric[] }) {
           <p className="text-[11px] text-ink-muted">
             {m.detail} · as of {m.as_of}
           </p>
-        </motion.div>
+        </div>
       ))}
-    </motion.div>
+    </div>
   );
 }
 
 export function CommoditiesRow({ commodities }: { commodities: Commodity[] }) {
   return (
-    <motion.div
-      className="grid gap-4 sm:grid-cols-2"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.15 }}
-      variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
-    >
+    <div className="grid gap-4 sm:grid-cols-2">
       {commodities.map((c) => (
-        <motion.div
-          key={c.nominal}
-          variants={cardVariants}
-          transition={{ duration: 0.4, ease }}
-          className="flex items-baseline justify-between border-b border-line/60 pb-4"
-        >
+        <div key={c.nominal} className="flex items-baseline justify-between border-b border-line/60 pb-4">
           <p className="text-sm font-medium">{c.label}</p>
           <div className="text-right">
             <p className="num text-lg font-semibold">
@@ -88,8 +57,8 @@ export function CommoditiesRow({ commodities }: { commodities: Commodity[] }) {
             </p>
             <p className="text-[11px] text-ink-muted">{c.unit}</p>
           </div>
-        </motion.div>
+        </div>
       ))}
-    </motion.div>
+    </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import { motion, type Variants } from "framer-motion";
 
 import { CommoditiesRow, MacroGrid } from "@/components/discover/MacroCards";
 import { EarningsCalendar, IpoCalendar } from "@/components/discover/Calendars";
@@ -13,13 +12,6 @@ import {
     useMovers,
 } from "@/hooks/queries";
 import type { Mover } from "@/types/api";
-
-const ease = [0.22, 1, 0.36, 1] as const;
-
-const sectionVariants: Variants = {
-    hidden: { opacity: 0, y: 14 },
-    visible: { opacity: 1, y: 0 },
-};
 
 function parseVolume(m: Mover): number {
     return parseInt(m.volume, 10) || 0;
@@ -84,14 +76,7 @@ export function DiscoverPage() {
             </div>
 
             {movers.data || movers.isError ? (
-                <motion.section
-                    variants={sectionVariants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, amount: 0.15 }}
-                    transition={{ duration: 0.7, ease }}
-                    className="space-y-4 pt-4"
-                >
+                <section className="anim-rise space-y-4 pt-4">
                     <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                         Daily Movement
                     </h2>
@@ -109,17 +94,10 @@ export function DiscoverPage() {
                         />
                     </div>
                     )}
-                </motion.section>
+                </section>
             ) : null}
 
-            <motion.section
-                variants={sectionVariants}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, amount: 0.15 }}
-                transition={{ duration: 0.7, ease, delay: 0.08 }}
-                className="space-y-4 pt-4"
-            >
+            <section className="anim-rise space-y-4 pt-4">
                 <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                     Economy &amp; commodities
                 </h2>
@@ -129,30 +107,16 @@ export function DiscoverPage() {
                 {commodities.data && (
                     <CommoditiesRow commodities={commodities.data} />
                 )}
-            </motion.section>
+            </section>
 
-            <motion.section
-                variants={sectionVariants}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, amount: 0.15 }}
-                transition={{ duration: 0.7, ease, delay: 0.16 }}
-                className="space-y-4 pt-4"
-            >
+            <section className="anim-rise space-y-4 pt-4">
                 <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                     News &amp; sentiment
                 </h2>
                 <NewsTable />
-            </motion.section>
+            </section>
 
-            <motion.section
-                variants={sectionVariants}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, amount: 0.15 }}
-                transition={{ duration: 0.7, ease, delay: 0.24 }}
-                className="space-y-4 pt-4"
-            >
+            <section className="anim-rise space-y-4 pt-4">
                 <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
                     Calendars
                 </h2>
@@ -164,7 +128,7 @@ export function DiscoverPage() {
                         <EarningsCalendar releases={earnings.data} />
                     )}
                 </div>
-            </motion.section>
+            </section>
         </div>
     );
 }

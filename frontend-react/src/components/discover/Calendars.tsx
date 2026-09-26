@@ -1,22 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
-import { motion, type Variants } from "framer-motion";
 
 import type { EarningsRelease, IpoListing } from "@/types/api";
 import { cn } from "@/lib/utils";
 
-const ease = [0.22, 1, 0.36, 1] as const;
 const MAX_VISIBLE = 10;
-
-const rowVariants: Variants = {
-  hidden: { opacity: 0, x: -6 },
-  visible: { opacity: 1, x: 0 },
-};
-
-const containerVariants: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.03 } },
-};
 
 function hourBadge(hour: string | null): { label: string; cls: string } {
   if (hour === "amc") return { label: "AMC", cls: "bg-accent-dim text-accent-strong" };
@@ -44,11 +32,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
 
   return (
     <div>
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.1 }}
+      <div
           className={cn("overflow-y-auto no-scrollbar pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
       >
         <table className="w-full text-sm">
@@ -64,10 +48,8 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
             {sorted.map((ipo, i) => {
               const pill = statusPill(ipo.status);
               return (
-                <motion.tr
+                <tr
                   key={`${ipo.symbol ?? i}-${ipo.date}`}
-                  variants={rowVariants}
-                  transition={{ duration: 0.35, ease }}
                   className={cn(
                     "border-t border-line/60 transition-colors",
                     ipo.symbol ? "cursor-pointer hover:bg-raised/60" : "",
@@ -87,12 +69,12 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
                   <td className={cn("num px-3 py-2.5 text-right", ipo.price ? "font-medium" : "text-ink-muted")}>
                     {ipo.price ? `$${ipo.price}` : "N/A"}
                   </td>
-                </motion.tr>
+                </tr>
               );
             })}
           </tbody>
         </table>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -112,11 +94,7 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
 
   return (
     <div>
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.1 }}
+      <div
           className={cn("overflow-y-auto no-scrollbar pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
       >
         <table className="w-full text-sm">
@@ -133,10 +111,8 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
             {sorted.map((e, i) => {
               const badge = hourBadge(e.hour);
               return (
-                <motion.tr
+                <tr
                   key={`${e.symbol}-${i}`}
-                  variants={rowVariants}
-                  transition={{ duration: 0.35, ease }}
                   className="cursor-pointer border-t border-line/60 transition-colors hover:bg-raised/60"
                   onClick={() => void navigate(`/stocks/${e.symbol}`)}
                 >
@@ -166,12 +142,12 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
                   <td className="num px-3 py-2.5 text-right text-ink-secondary">
                     {e.revenue_estimate_display ?? "N/A"}
                   </td>
-                </motion.tr>
+                </tr>
               );
             })}
           </tbody>
         </table>
-      </motion.div>
+      </div>
     </div>
   );
 }
