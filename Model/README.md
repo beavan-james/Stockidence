@@ -47,14 +47,17 @@ outperform while pooled return accuracy stays noisy.
 `quarterly_model_refresh` in `src/stockidence/definitions.py`, cron
 `0 3 1 1,4,7,10 *`:
 
-1. **Refresh universe** — incremental re-ingest of all tickers (watermarks
+1. **Refresh universe** — incremental re-ingest of every ticker in the warehouse (watermarks
    intact; failed fetches retried 3× then recorded and skipped)
 2. **Rebuild dataset** — `build_dataset(freq="quarterly")` →
-   `Model/datasets/train_dataset_quarterly.parquet`
+   `Model/datasets/train_dataset_quarterly.parquet` (quarters whose forward
+   quarter has closed) + `score_dataset_quarterly.parquet` (the newest
+   quarter, forward return not yet known)
 3. **Retrain** — re-executes `Model/notebooks/production_ranking_model.ipynb`,
    which refits on all history, overwrites
-   `Model/artifacts/ranking_ndcg.{json,meta.json}`, and exports the full
-   ranked cohort to **`mart.model_rankings`** + `latest_rankings.json`
+   `Model/artifacts/ranking_ndcg.{json,meta.json}`, scores the newest
+   quarter, and exports that ranked cohort to **`mart.model_rankings`** +
+   `latest_rankings.json` (the API serves the latest `as_of`)
 
 ## Serving
 

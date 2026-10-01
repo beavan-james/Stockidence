@@ -793,25 +793,35 @@ def _add_target(df: pd.DataFrame, freq: str = "monthly",
     bars) would look complete. Marginal ~5 business days at quarter-end are
     treated as closed to absorb holidays/weekends.
     """
-    df = df.sort_values(["ticker", "date"])
-    df["target_return"] = df.groupby("ticker")["close"].pct_change().shift(-1)
+    df = df.sort_values(["ticker", "date"]).reset_index(drop=True)
+    g = df.groupby("ticker")
+    df["target_return"] = g["close"].shift(-1) / df["close"] - 1
     if freq == "quarterly" and last_trade is not None:
-        own_end = (df["date"] + pd.offsets.QuarterEnd()).dt.normalize()
+        # The target spans the NEXT quarter, so that quarter must be closed
+        # (label is the period start: +2 quarter-ends = forward quarter end).
+        fwd_end = (df["date"] + pd.offsets.QuarterEnd(2)).dt.normalize()
         lt = df[["ticker"]].merge(last_trade, on="ticker", how="left")
         closed = pd.to_datetime(lt["last_date"]) >= (
-            own_end - pd.Timedelta(days=5))
-        df.loc[~closed, "target_return"] = np.nan
+            fwd_end - pd.Timedelta(days=5))
+        # ...and the next row must actually be the adjacent quarter, not a
+        # later one after a data gap.
+        adjacent = g["date"].shift(-1) == df["date"] + pd.DateOffset(months=3)
+        df.loc[~(closed & adjacent), "target_return"] = np.nan
     return df
 
 
 # ── Main ────────────────────────────────────────────────────────────────────────
 
 def build_dataset(freq: str = "monthly",
-                  tickers: list[str] | None = None) -> pd.DataFrame:
+                  tickers: list[str] | None = None,
+                  keep_unlabeled: bool = False) -> pd.DataFrame:
     """Build the full training dataset for one bar frequency.
 
     `tickers` restricts every load to the curated training universe; None
     falls back to TRAIN_TICKERS, then to every ticker in the warehouse.
+    `keep_unlabeled` keeps rows whose target isn't known yet (the latest
+    period) so the caller can score the live cohort; training must still
+    drop them.
     """
     wh = Warehouse()
 
@@ -913,7 +923,8 @@ def build_dataset(freq: str = "monthly",
     dataset = _add_target(dataset, freq, last_trade)
 
     # Drop rows with no target (last period per ticker)
-    dataset = dataset.dropna(subset=["target_return"])
+    if not keep_unlabeled:
+        dataset = dataset.dropna(subset=["target_return"])
 
     print(
         f"\nDataset: {len(dataset)} rows, {dataset['ticker'].nunique()} tickers")

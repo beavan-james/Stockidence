@@ -347,7 +347,8 @@ def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
     info = rebuild_quarterly_dataset()
     context.log.info(
         f"[dataset] {info['rows']} rows, {info['tickers']} tickers "
-        f"({info['date_min']} -> {info['date_max']})"
+        f"({info['date_min']} -> {info['date_max']}); "
+        f"scoring cohort {info['score_cohort']} ({info['score_tickers']} tickers)"
     )
     return {**prev, "dataset": info}
 
