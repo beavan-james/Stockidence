@@ -19,20 +19,30 @@ DOCKER=/usr/bin/docker
 
 log() { echo "[$(date -u +%FT%TZ)] $*" >> "$LOG"; }
 
-# Skip (quietly) if a previous run is still building.
-exec 9>/tmp/stockidence-deploy.lock
-flock -n 9 || exit 0
+if [ -z "${DEPLOY_REMOTE:-}" ]; then
+    # Skip (quietly) if a previous run is still building.
+    exec 9>/tmp/stockidence-deploy.lock
+    flock -n 9 || exit 0
 
-cd "$REPO_DIR"
-git fetch -q origin
-LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse origin/master)
-if [ "$LOCAL" = "$REMOTE" ]; then
-    exit 0
+    cd "$REPO_DIR"
+    git fetch -q origin
+    LOCAL=$(git rev-parse HEAD)
+    REMOTE=$(git rev-parse origin/master)
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        exit 0
+    fi
+
+    log "deploying $REMOTE (was $LOCAL)"
+    git reset -q --hard origin/master
+    # Bash keeps reading the copy of this script it opened, so without this
+    # an edit to the deploy steps below would only apply one deploy late.
+    # Re-exec the fresh checkout; it inherits fd 9, so the lock stays held.
+    DEPLOY_REMOTE="$REMOTE" exec /bin/bash "$REPO_DIR/scripts/auto-deploy.sh"
 fi
 
-log "deploying $REMOTE (was $LOCAL)"
-git reset -q --hard origin/master
+# Second pass (fresh script): build, restart and health-check.
+REMOTE="$DEPLOY_REMOTE"
+cd "$REPO_DIR"
 if "$DOCKER" compose up --build -d >>"$LOG" 2>&1; then
     sleep 20
     # Hit the API container directly: host-level http://localhost/api
