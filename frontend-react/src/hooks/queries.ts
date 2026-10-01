@@ -19,7 +19,6 @@ import type {
   Movers,
   ModelWeight,
   NewsEnvelope,
-  PriceBar,
   Quote,
   RankingsEnvelope,
   Rating,
@@ -87,18 +86,8 @@ export function useQuote(ticker: string | undefined) {
     queryFn: () => client.quote(ticker!),
     staleTime: 30_000,
     // Quotes land mid-refresh (before the rating snapshot), so keep polling:
-    // the badge and portfolio rows pick the fresh row up without a remount.
+    // the badge picks the fresh row up without a remount.
     refetchInterval: 60_000,
-  });
-}
-
-export function usePriceHistory(ticker: string | undefined, months = 12) {
-  return useQuery<PriceBar[]>({
-    enabled: Boolean(ticker),
-    queryKey: ["prices", ticker, months],
-    queryFn: () => client.prices(ticker!, months),
-    // Weekly bars barely move intraday.
-    staleTime: 60 * 60_000,
   });
 }
 

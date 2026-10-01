@@ -127,4 +127,4 @@ flowchart TD
 > The React SPA (`frontend-react/`) consumes that API with TanStack Query,
 > polling every 10s while a rating is pending/refreshing. Pages: Model
 > (ranking table from `mart.model_rankings`), Discover (movers, macro,
-> news, calendars), Portfolio (local holdings + P&L), Docs.
+> news, calendars), stock profile, Docs.

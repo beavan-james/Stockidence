@@ -6,10 +6,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /**
- * Ticker autocomplete input shared by the header SearchBar and the
- * portfolio add-holding form. Debounced lookup over the landed symbol
- * universe with keyboard navigation; Enter picks the highlighted
- * suggestion (or the raw typed symbol).
+ * Ticker autocomplete input used by the header SearchBar. Debounced
+ * lookup over the landed symbol universe with keyboard navigation; Enter
+ * picks the highlighted suggestion (or the raw typed symbol).
  */
 export function TickerAutocomplete({
   value,

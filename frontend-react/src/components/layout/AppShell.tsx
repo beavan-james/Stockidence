@@ -36,12 +36,6 @@ export function AppShell() {
                             Discover
                         </Link>
                         <Link
-                            to="/portfolio"
-                            className="nav-glow rounded-lg px-3 py-1.5"
-                        >
-                            Portfolio
-                        </Link>
-                        <Link
                             to="/docs"
                             className="nav-glow rounded-lg px-3 py-1.5"
                         >

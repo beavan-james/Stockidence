@@ -9,10 +9,8 @@ import { TechnicalStats } from "@/components/profile/TechnicalStats";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { POLL_INTERVAL_MS, POLL_MAX_ATTEMPTS, useRating } from "@/hooks/queries";
-import { usePortfolio, addToPortfolio, isInPortfolio, removeFromPortfolio } from "@/hooks/portfolio";
 import type { RatingSource } from "@/types/api";
 import { cn } from "@/lib/utils";
-import { Plus, Check } from "lucide-react";
 
 const SOURCE_COPY: Record<RatingSource, string> = {
   warehouse: "",
@@ -53,7 +51,6 @@ export function ProfilePage() {
   const symbol = useParams().symbol?.toUpperCase();
   const rating = useRating(symbol);
   const queryClient = useQueryClient();
-  usePortfolio();
   useDocumentTitle(symbol);
   // When auto-polling for this symbol started; resets on navigation so the
   // ~10 min budget applies per ticker, not per page mount.
@@ -63,8 +60,6 @@ export function ProfilePage() {
   }, [symbol]);
 
   if (!symbol) return null;
-
-  const inPortfolio = isInPortfolio(symbol);
 
   if (rating.isPending) {
     return (
@@ -145,29 +140,6 @@ export function ProfilePage() {
             </div>
             <div className="flex items-center gap-6">
               <QuoteBadge ticker={r.ticker} />
-              <button
-                onClick={() =>
-                  inPortfolio ? removeFromPortfolio(symbol) : addToPortfolio(symbol)
-                }
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm transition-colors",
-                  inPortfolio
-                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
-                    : "border-line bg-transparent text-ink-secondary hover:border-accent/30 hover:text-ink",
-                )}
-              >
-                {inPortfolio ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" />
-                    In portfolio
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-3.5 w-3.5" />
-                    Add to portfolio
-                  </>
-                )}
-              </button>
             </div>
           </div>
 
