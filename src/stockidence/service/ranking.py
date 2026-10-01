@@ -55,7 +55,9 @@ def _fetch_rankings() -> dict:
     with read_connect() as con:
         rows = con.execute(
             "SELECT as_of, rank, ticker, sector, score"
-            " FROM mart.model_rankings ORDER BY rank ASC"
+            " FROM mart.model_rankings"
+            " WHERE as_of = (SELECT MAX(as_of) FROM mart.model_rankings)"
+            " ORDER BY rank ASC"
         ).fetchall()
     if rows:
         as_of = rows[0][0].isoformat() if hasattr(rows[0][0], "isoformat") else str(rows[0][0])

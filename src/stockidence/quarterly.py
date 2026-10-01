@@ -23,6 +23,8 @@ SCRIPTS_DIR = REPO_ROOT / "Model" / "scripts"
 DATASETS_DIR = REPO_ROOT / "Model" / "datasets"
 NOTEBOOK_PATH = REPO_ROOT / "Model" / "notebooks" / "production_ranking_model.ipynb"
 QUARTERLY_PARQUET = DATASETS_DIR / "train_dataset_quarterly.parquet"
+# Latest, not-yet-realized quarter: what the website ranking is scored on.
+SCORE_PARQUET = DATASETS_DIR / "score_dataset_quarterly.parquet"
 
 # Dedicated kernel provisioned at retrain time so notebook execution never
 # depends on (or clobbers) the user's own kernelspecs.
@@ -61,22 +63,35 @@ def quarterly_universe(warehouse: Warehouse | None = None) -> list[str]:
 
 
 def rebuild_quarterly_dataset() -> dict:
-    """Rebuild train_dataset_quarterly.parquet — same as the CLI with --freq quarterly."""
+    """Rebuild train_dataset_quarterly.parquet — same as the CLI with --freq quarterly.
+
+    Also writes score_dataset_quarterly.parquet: the newest quarter's
+    snapshot, whose forward return isn't known yet. The notebook ranks that
+    cohort for the website instead of the last (already realized) training
+    quarter.
+    """
     spec = importlib.util.spec_from_file_location(
         "build_dataset", SCRIPTS_DIR / "build_dataset.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    dataset = module.build_dataset(freq="quarterly")
+    full = module.build_dataset(freq="quarterly", keep_unlabeled=True)
+    labeled = full["target_return"].notna()
+    dataset = full[labeled]
+    latest = full["date"].max()
+    score = full[~labeled & (full["date"] == latest)]
     QUARTERLY_PARQUET.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_parquet(QUARTERLY_PARQUET, index=False)
+    score.to_parquet(SCORE_PARQUET, index=False)
     return {
         "parquet": str(QUARTERLY_PARQUET),
         "rows": int(len(dataset)),
         "tickers": int(dataset["ticker"].nunique()),
         "date_min": str(dataset["date"].min()),
         "date_max": str(dataset["date"].max()),
+        "score_cohort": str(latest),
+        "score_tickers": int(score["ticker"].nunique()),
     }
 
 
