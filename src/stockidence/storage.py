@@ -27,7 +27,9 @@ from typing import Any
 
 import duckdb
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from .config import repo_root
+
+_REPO_ROOT = repo_root()
 DEFAULT_DB_PATH = os.environ.get(
     "STOCKIDENCE_DB", str(_REPO_ROOT / "data" / "stockidence.duckdb")
 )

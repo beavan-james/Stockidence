@@ -2,9 +2,12 @@
 # Python 3.12 to match local dev (.python-version). libgomp1 is for xgboost.
 FROM python:3.12-slim
 
+# STOCKIDENCE_ROOT: the package installs into site-packages, so it can't
+# find Model/ (quarterly job) relative to its own files.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_SYSTEM_PYTHON=1
+    UV_SYSTEM_PYTHON=1 \
+    STOCKIDENCE_ROOT=/app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \

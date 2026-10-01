@@ -15,10 +15,12 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .config import repo_root
+
 if TYPE_CHECKING:
     from .storage import Warehouse
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = repo_root()
 SCRIPTS_DIR = REPO_ROOT / "Model" / "scripts"
 DATASETS_DIR = REPO_ROOT / "Model" / "datasets"
 NOTEBOOK_PATH = REPO_ROOT / "Model" / "notebooks" / "production_ranking_model.ipynb"

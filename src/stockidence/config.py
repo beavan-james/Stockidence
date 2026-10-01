@@ -11,7 +11,27 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SOURCE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def repo_root() -> Path:
+    """Directory holding Model/, data/ and .env.
+
+    Path(__file__) only reaches it from a source checkout; in the Docker
+    image the package is installed into site-packages, so the image sets
+    STOCKIDENCE_ROOT=/app. Falls back to the cwd when that has Model/.
+    """
+    env = os.environ.get("STOCKIDENCE_ROOT")
+    if env:
+        return Path(env)
+    if (_SOURCE_ROOT / "Model").is_dir():
+        return _SOURCE_ROOT
+    if (Path.cwd() / "Model").is_dir():
+        return Path.cwd()
+    return _SOURCE_ROOT
+
+
+_PROJECT_ROOT = repo_root()
 
 
 def _load_env() -> None:
