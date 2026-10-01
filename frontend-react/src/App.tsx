@@ -5,7 +5,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { DiscoverPage } from "@/pages/DiscoverPage";
 import { ModelPage } from "@/pages/ModelPage";
 import { ProfilePage } from "@/pages/ProfilePage";
-import { PortfolioPage } from "@/pages/PortfolioPage";
 import { DocsPage } from "@/pages/DocsPage";
 
 const queryClient = new QueryClient({
@@ -26,7 +25,6 @@ export default function App() {
             <Route index element={<ModelPage />} />
             <Route path="/discover" element={<DiscoverPage />} />
             <Route path="/stocks/:symbol" element={<ProfilePage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/docs" element={<DocsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

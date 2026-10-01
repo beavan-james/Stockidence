@@ -44,7 +44,7 @@ def main() -> None:
         print(f"Deleted {before} price watermarks (raw.raw_prices_daily)")
 
     # 2. Refresh the whole universe with full backfills.
-    universe = quarterly_universe()
+    universe = quarterly_universe(wh)
     print(f"Refreshing {len(universe)} tickers (full backfill)...")
     summary = refresh_tickers(engine, universe, full_backfill=True)
 

@@ -325,7 +325,7 @@ def refresh_quotes_job() -> None:
 
 @op(required_resource_keys={"engine"})
 def quarterly_refresh_op(context: OpExecutionContext) -> dict:
-    """Incremental refresh of the whole universe (recent quarter only).
+    """Incremental refresh of every ticker in the warehouse (recent quarter only).
 
     Watermarks stay intact, so each endpoint fetches only what went stale —
     prices continue from the high watermark, fundamentals re-pull per TTL.
@@ -334,7 +334,7 @@ def quarterly_refresh_op(context: OpExecutionContext) -> dict:
     from .quarterly import quarterly_universe
 
     engine = context.resources.engine
-    universe = quarterly_universe()
+    universe = quarterly_universe(engine.warehouse)
     context.log.info(f"quarterly refresh: {len(universe)} tickers")
     return refresh_tickers(engine, universe, log=context.log.info)
 

@@ -69,11 +69,6 @@ export interface Quote {
   fetched_at: string | null;
 }
 
-export interface PriceBar {
-  date: string;
-  close: number | null;
-}
-
 export interface TechnicalStats {
   as_of: string | null;
   indicators: Record<string, number | null>;

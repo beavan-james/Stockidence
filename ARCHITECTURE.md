@@ -118,7 +118,7 @@ flowchart TD
 > - Scheduled jobs and on-demand runs are independent: schedules warm the
 >   persistent universe (news, calendars, movers, macro); on-demand runs
 >   compute per-ticker ratings. The quarterly `quarterly_model_refresh` job
->   additionally refreshes the whole universe, rebuilds the training dataset,
+>   additionally refreshes every ticker in the warehouse, rebuilds the training dataset,
 >   retrains the ranking model, and exports `mart.model_rankings`.
 >
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
@@ -127,4 +127,4 @@ flowchart TD
 > The React SPA (`frontend-react/`) consumes that API with TanStack Query,
 > polling every 10s while a rating is pending/refreshing. Pages: Model
 > (ranking table from `mart.model_rankings`), Discover (movers, macro,
-> news, calendars), Portfolio (local holdings + P&L), Docs.
+> news, calendars), stock profile, Docs.

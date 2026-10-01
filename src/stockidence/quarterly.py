@@ -13,6 +13,10 @@ from __future__ import annotations
 import importlib.util
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .storage import Warehouse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "Model" / "scripts"
@@ -25,8 +29,13 @@ QUARTERLY_PARQUET = DATASETS_DIR / "train_dataset_quarterly.parquet"
 KERNEL_NAME = "stockidence"
 
 
-def quarterly_universe() -> list[str]:
-    """Full refresh universe: ALL_TICKERS from Model/scripts/run_backfill.py."""
+def quarterly_universe(warehouse: Warehouse | None = None) -> list[str]:
+    """Full refresh universe: every ticker in the warehouse.
+
+    Unions tickers with landed prices or a company profile (seed backfill
+    plus anything users have looked up since) with ALL_TICKERS from
+    Model/scripts/run_backfill.py, so a fresh warehouse still gets seeded.
+    """
     spec = importlib.util.spec_from_file_location(
         "run_backfill", SCRIPTS_DIR / "run_backfill.py"
     )
@@ -34,7 +43,20 @@ def quarterly_universe() -> list[str]:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     tickers = [t.strip().upper() for t in module.ALL_TICKERS if t.strip()]
-    # Preserve order, drop accidental duplicates.
+
+    if warehouse is not None:
+        with warehouse.connect(read_only=True) as con:
+            rows = con.execute(
+                """
+                SELECT ticker FROM raw.raw_prices_daily
+                UNION
+                SELECT ticker FROM raw.raw_company_profile
+                ORDER BY ticker
+                """
+            ).fetchall()
+        tickers += [str(t).strip().upper() for (t,) in rows if t and str(t).strip()]
+
+    # Preserve order (seed list first), drop duplicates.
     return list(dict.fromkeys(tickers))
 
 
