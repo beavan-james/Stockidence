@@ -81,8 +81,41 @@ def rebuild_quarterly_dataset() -> dict:
     full = module.build_dataset(freq="quarterly", keep_unlabeled=True)
     labeled = full["target_return"].notna()
     dataset = full[labeled]
-    latest = full["date"].max()
-    score = full[~labeled & (full["date"] == latest)]
+
+    # Price freshness: a ticker whose prices stopped early still gets a row
+    # for the newest quarter, but its features are a stale snapshot.
+    from .storage import Warehouse
+
+    with Warehouse().connect(read_only=True) as con:
+        last_trade = dict(con.execute(
+            "SELECT ticker, MAX(date) FROM staging.stg_prices_daily GROUP BY ticker"
+        ).fetchall())
+    newest = max(last_trade.values())
+    fresh = {t for t, d in last_trade.items() if (newest - d).days <= 7}
+
+    # Score the newest quarter that most tickers have reached — a few
+    # tickers with an early bar of the next quarter must not become the
+    # whole website ranking — using only tickers with fresh prices.
+    unlabeled = full[~labeled & full["ticker"].isin(fresh)]
+    counts = unlabeled.groupby("date")["ticker"].nunique()
+    latest = counts[counts >= 0.5 * counts.max()].index.max()
+    score = unlabeled[unlabeled["date"] == latest]
+
+    # Refuse to publish a ranking over a fraction of the universe (e.g. the
+    # price refresh failed for most tickers): fail loudly and leave the
+    # current website ranking in place.
+    # Reference: typical recent cohort (the newest training quarter is thin
+    # too when prices are stale, so it can't be the yardstick).
+    last_cohort = int(dataset.groupby("date")["ticker"].nunique().tail(4).median())
+    n_score = int(score["ticker"].nunique())
+    if n_score < 0.5 * last_cohort:
+        stale = sorted(set(last_trade) - fresh)
+        raise RuntimeError(
+            f"only {n_score} tickers have fresh prices for the {latest} cohort "
+            f"(recent cohorts: ~{last_cohort}); {len(stale)} tickers' prices are "
+            f"more than 7 days behind {newest}, e.g. {', '.join(stale[:20])}. "
+            "Check the refresh step's failed fetches, then re-run."
+        )
     QUARTERLY_PARQUET.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_parquet(QUARTERLY_PARQUET, index=False)
     score.to_parquet(SCORE_PARQUET, index=False)
@@ -94,6 +127,12 @@ def rebuild_quarterly_dataset() -> dict:
         "date_max": str(dataset["date"].max()),
         "score_cohort": str(latest),
         "score_tickers": int(score["ticker"].nunique()),
+        "newest_price": str(newest),
+        "stale_price_tickers": sorted(set(last_trade) - fresh),
+        "recent_cohort_sizes": {
+            str(d.date()): int(n)
+            for d, n in dataset.groupby("date")["ticker"].nunique().tail(4).items()
+        },
     }
 
 

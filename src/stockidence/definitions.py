@@ -336,7 +336,16 @@ def quarterly_refresh_op(context: OpExecutionContext) -> dict:
     engine = context.resources.engine
     universe = quarterly_universe(engine.warehouse)
     context.log.info(f"quarterly refresh: {len(universe)} tickers")
-    return refresh_tickers(engine, universe, log=context.log.info)
+    summary = refresh_tickers(engine, universe, log=context.log.info)
+    if summary["errors"]:
+        by_endpoint: dict[str, int] = {}
+        for err in summary["errors"]:
+            by_endpoint[err["endpoint"]] = by_endpoint.get(err["endpoint"], 0) + 1
+        context.log.warning(
+            f"quarterly refresh: {len(summary['errors'])} failed fetches by endpoint "
+            f"{by_endpoint}; e.g. {summary['errors'][0]['error'][:200]}"
+        )
+    return summary
 
 
 @op
@@ -348,8 +357,16 @@ def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
     context.log.info(
         f"[dataset] {info['rows']} rows, {info['tickers']} tickers "
         f"({info['date_min']} -> {info['date_max']}); "
-        f"scoring cohort {info['score_cohort']} ({info['score_tickers']} tickers)"
+        f"scoring cohort {info['score_cohort']} ({info['score_tickers']} tickers); "
+        f"recent cohort sizes {info['recent_cohort_sizes']}"
     )
+    stale = info["stale_price_tickers"]
+    if stale:
+        context.log.warning(
+            f"[dataset] {len(stale)} tickers have prices more than 7 days behind "
+            f"{info['newest_price']} and are left out of the ranking: "
+            f"{', '.join(stale[:50])}{' ...' if len(stale) > 50 else ''}"
+        )
     return {**prev, "dataset": info}
 
 
