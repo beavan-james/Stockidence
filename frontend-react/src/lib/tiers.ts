@@ -28,10 +28,16 @@ export function topPercent(rank: number, universeSize: number): number {
   return Math.max(1, Math.round((rank / Math.max(universeSize, 1)) * 100));
 }
 
-/** "Q2 2026" from a quarter-start ISO date ("2026-04-01"). */
+/**
+ * The quarter a ranking or track-record row is *for*. Model dates label the
+ * quarter whose end-of-quarter data was used ("2026-07-01" = data to Sep 30),
+ * and that data ranks stocks for the following quarter, so 2026-07-01 is the
+ * Q4 2026 ranking and its track-record return is Q4's.
+ */
 export function quarterLabel(isoDate: string): string {
   const [year, month] = isoDate.split("-").map(Number);
-  return `Q${Math.floor((month - 1) / 3) + 1} ${year}`;
+  const next = Math.floor((month - 1) / 3) + 1; // 0-based index of the next quarter
+  return next === 4 ? `Q1 ${year + 1}` : `Q${next + 1} ${year}`;
 }
 
 /** Headline sector: the one holding the largest share of the top fifth. */

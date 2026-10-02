@@ -67,6 +67,13 @@ per-input SHAP contributions (`mart.model_contributions`; they sum exactly to
 the score), cohort-wide input weights (`mart.model_feature_importance`) and the
 walk-forward track record (`mart.model_track_record`).
 
+**Dates.** Rows are labelled by quarter start but use that quarter's
+end-of-quarter data, and the target is the *next* quarter's return. So the
+`as_of` 2026-07-01 ranking is built from data to Sep 30 and ranks stocks for
+Q4 2026 (the site labels it by the quarter it ranks for). Only finished
+quarters are scored; a quarter a few days old would turn `return_3m` into a
+few days' return.
+
 ## Serving
 
 - `GET /api/rankings` → `{as_of, universe_size, items: [{rank, ticker,

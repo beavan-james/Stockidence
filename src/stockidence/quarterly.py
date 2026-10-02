@@ -96,10 +96,23 @@ def rebuild_quarterly_dataset() -> dict:
     # Score the newest quarter that most tickers have reached — a few
     # tickers with an early bar of the next quarter must not become the
     # whole website ranking — using only tickers with fresh prices.
+    # Only a quarter that has finished can be scored: features are
+    # end-of-quarter snapshots (return_3m is the whole quarter's return), so
+    # a quarter a few days old would feed the model a few days' return as
+    # "3-month return". The 2026-07-01 row (data to Sep 30) ranks Oct-Dec.
+    import pandas as pd
+
     unlabeled = full[~labeled & full["ticker"].isin(fresh)]
-    counts = unlabeled.groupby("date")["ticker"].nunique()
+    quarter_end = unlabeled["date"] + pd.offsets.QuarterEnd(1)
+    complete = unlabeled[quarter_end <= pd.Timestamp(newest) + pd.Timedelta(days=5)]
+    counts = complete.groupby("date")["ticker"].nunique()
+    if counts.empty:
+        raise RuntimeError(
+            f"no finished quarter to score: newest price is {newest} and no ticker "
+            "has an unlabeled, completed quarter"
+        )
     latest = counts[counts >= 0.5 * counts.max()].index.max()
-    score = unlabeled[unlabeled["date"] == latest]
+    score = complete[complete["date"] == latest]
 
     # Refuse to publish a ranking over a fraction of the universe (e.g. the
     # price refresh failed for most tickers): fail loudly and leave the
