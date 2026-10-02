@@ -348,9 +348,8 @@ def quarterly_refresh_op(context: OpExecutionContext) -> dict:
     return summary
 
 
-@op
-def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
-    """Rebuild train_dataset_quarterly.parquet from the refreshed mart."""
+def _rebuild_dataset(context: OpExecutionContext) -> dict:
+    """Rebuild train_dataset_quarterly.parquet (+ scoring cohort) from the mart."""
     from .quarterly import rebuild_quarterly_dataset
 
     info = rebuild_quarterly_dataset()
@@ -367,7 +366,19 @@ def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
             f"{info['newest_price']} and are left out of the ranking: "
             f"{', '.join(stale[:50])}{' ...' if len(stale) > 50 else ''}"
         )
-    return {**prev, "dataset": info}
+    return info
+
+
+@op
+def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Rebuild the training dataset from the freshly refreshed mart."""
+    return {**prev, "dataset": _rebuild_dataset(context)}
+
+
+@op
+def rebuild_dataset_only_op(context: OpExecutionContext) -> dict:
+    """Rebuild the training dataset from the mart as it stands (no refresh)."""
+    return {"dataset": _rebuild_dataset(context)}
 
 
 @op
@@ -387,6 +398,16 @@ def quarterly_model_refresh_job() -> None:
     retrain_model_op(rebuild_dataset_op(quarterly_refresh_op()))
 
 
+@job(name="model_retrain")
+def model_retrain_job() -> None:
+    """Second half of the quarterly chain: dataset rebuild -> retrain.
+
+    Skips the hours-long universe refresh — for re-running the retrain once
+    the data is already fresh (e.g. after a notebook failure).
+    """
+    retrain_model_op(rebuild_dataset_only_op())
+
+
 @schedule(
     job=quarterly_model_refresh_job,
     cron_schedule="0 3 1 1,4,7,10 *",
@@ -402,7 +423,7 @@ defs = Definitions(
     assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
             m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
-          refresh_quotes_job, quarterly_model_refresh_job],
+          refresh_quotes_job, quarterly_model_refresh_job, model_retrain_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
                news_morning_schedule, news_evening_schedule,
                quarterly_schedule],

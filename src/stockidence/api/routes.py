@@ -110,6 +110,24 @@ def get_rankings() -> dict:
     return ranking.get_rankings()
 
 
+@market_router.get("/rankings/{ticker}")
+def get_ranking_detail(ticker: str) -> dict:
+    """One ranked stock: rank context and the per-input score breakdown.
+
+    404 when the ticker isn't in the latest ranking cohort.
+    """
+    detail = ranking.get_ranking_detail(ticker)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"{ticker.upper()} is not in the latest ranking")
+    return detail
+
+
+@market_router.get("/model/overview")
+def get_model_overview() -> dict:
+    """Cohort-wide input weights and the quarterly track record."""
+    return ranking.get_model_overview()
+
+
 @market_router.get("/calendar/ipos")
 def get_ipo_calendar(limit: int = Query(default=10, ge=1, le=50)) -> list[dict]:
     return market.get_ipo_calendar(limit)

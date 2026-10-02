@@ -14,7 +14,7 @@ function Sparkline({ points }: { points: SeriesPoint[] }) {
       <polyline
         points={coords}
         fill="none"
-        stroke="#F3037E"
+        stroke="var(--color-accent)"
         strokeWidth="2"
         vectorEffect="non-scaling-stroke"
       />

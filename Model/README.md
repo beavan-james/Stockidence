@@ -59,12 +59,23 @@ outperform while pooled return accuracy stays noisy.
    quarter, and exports that ranked cohort to **`mart.model_rankings`** +
    `latest_rankings.json` (the API serves the latest `as_of`)
 
+Re-running only steps 2–3 (data already fresh, e.g. after a notebook failure):
+launch the **`model_retrain`** job, which skips the hours-long refresh.
+
+The retrain also exports, for the newest cohort, each stock's model inputs and
+per-input SHAP contributions (`mart.model_contributions`; they sum exactly to
+the score), cohort-wide input weights (`mart.model_feature_importance`) and the
+walk-forward track record (`mart.model_track_record`).
+
 ## Serving
 
 - `GET /api/rankings` → `{as_of, universe_size, items: [{rank, ticker,
   sector, score}]}` from `mart.model_rankings`
-- Website Model page renders the table (searchable, 20/page); scores are
-  ordinal within-quarter ranks, not expected returns
+- `GET /api/rankings/{ticker}` → rank, tier, sector rank, previous-quarter
+  rank and the per-input score breakdown (stock page)
+- `GET /api/model/overview` → input weights + track record (Model page)
+- Scores are ordinal within-quarter ranks, not expected returns; the site
+  shows rank, percentile and quintile tier instead of raw scores
 
 ## Parked
 

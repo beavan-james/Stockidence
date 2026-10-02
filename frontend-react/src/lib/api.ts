@@ -27,21 +27,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const client = {
-  rating: (ticker: string, signal?: AbortSignal) =>
-    api<import("@/types/api").Rating>(`/api/rating/${encodeURIComponent(ticker)}`, { signal }),
-
-  search: (q: string, limit = 8) =>
-    api<import("@/types/api").Suggestion[]>(
-      `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`,
-    ),
-
   quote: (ticker: string) =>
     api<import("@/types/api").Quote | null>(`/api/quote/${encodeURIComponent(ticker)}`),
-
-  technicals: (ticker: string) =>
-    api<import("@/types/api").TechnicalStats | null>(
-      `/api/technicals/${encodeURIComponent(ticker)}`,
-    ),
 
   movers: () => api<import("@/types/api").Movers>("/api/movers"),
 
@@ -55,12 +42,12 @@ export const client = {
     return api<import("@/types/api").NewsEnvelope>(`/api/news?${qs.toString()}`);
   },
 
-  modelWeights: () => api<import("@/types/api").ModelWeight[]>("/api/model-weights"),
-
   rankings: () => api<import("@/types/api").RankingsEnvelope>("/api/rankings"),
 
-  componentSpec: () =>
-    api<import("@/types/api").ComponentSpec>("/api/component-spec"),
+  rankingDetail: (ticker: string) =>
+    api<import("@/types/api").RankingDetail>(`/api/rankings/${encodeURIComponent(ticker)}`),
+
+  modelOverview: () => api<import("@/types/api").ModelOverview>("/api/model/overview"),
 
   macro: () => api<import("@/types/api").MacroMetric[]>("/api/macro"),
 

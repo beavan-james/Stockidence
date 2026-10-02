@@ -4,61 +4,6 @@
  * the API contract evolves.
  */
 
-export type Advice =
-  | "STRONG_BUY"
-  | "BUY"
-  | "HOLD"
-  | "SELL"
-  | "STRONG_SELL";
-
-export type RatingSource = "warehouse" | "refreshing" | "pending" | "demo";
-
-export interface CategoryScore {
-  category: string;
-  score: number;
-  weight: number;
-}
-
-export interface ComponentScore {
-  category: string;
-  component: string;
-  score: number;
-  weight: number;
-  source: string;
-}
-
-export interface BuyPlan {
-  advised_buy_price: number;
-  stop_loss_price: number;
-  holding_style: string;
-}
-
-export interface Rating {
-  ticker: string;
-  company_name: string;
-  as_of: string;
-  confidence_score: number;
-  /** The pending placeholder response reports advice="PENDING". */
-  advice: Advice | "PENDING";
-  volatility_score: number;
-  categories: CategoryScore[];
-  components: ComponentScore[];
-  buy_plan: BuyPlan | null;
-  logo_url: string | null;
-  fair_value: number | null;
-  target_price: number | null;
-  source: RatingSource;
-  /** Set on pending responses when the refresh launch itself failed. */
-  pipeline_error?: string | null;
-}
-
-export interface Suggestion {
-  symbol: string;
-  description: string;
-  mic: string;
-  type: string;
-}
-
 export interface Quote {
   price: number | null;
   high: number | null;
@@ -67,11 +12,6 @@ export interface Quote {
   prev_close: number | null;
   as_of: string | null;
   fetched_at: string | null;
-}
-
-export interface TechnicalStats {
-  as_of: string | null;
-  indicators: Record<string, number | null>;
 }
 
 export interface Mover {
@@ -114,11 +54,6 @@ export interface NewsEnvelope {
   page_count: number;
 }
 
-export interface ModelWeight {
-  category: string;
-  weight: number;
-}
-
 export interface RankedTicker {
   rank: number;
   ticker: string;
@@ -132,13 +67,50 @@ export interface RankingsEnvelope {
   items: RankedTicker[];
 }
 
-export interface ComponentSpecEntry {
-  label: string;
-  sources: string;
-  direction: string;
+export interface FeatureContribution {
+  feature: string;
+  value: number | null;
+  median: number | null;
+  contribution: number;
 }
 
-export type ComponentSpec = Record<string, ComponentSpecEntry>;
+export interface RankingDetail {
+  as_of: string;
+  ticker: string;
+  company_name: string | null;
+  sector: string | null;
+  rank: number;
+  universe_size: number;
+  tier: number;
+  percentile_above: number;
+  sector_rank: number;
+  sector_size: number;
+  score: number | null;
+  base_score: number | null;
+  previous: { as_of: string; rank: number } | null;
+  /** Empty until a retrain has exported contributions for this cohort. */
+  features: FeatureContribution[];
+}
+
+export interface TrackRecordQuarter {
+  quarter: string;
+  top20_return: number | null;
+  universe_return: number | null;
+  spx_return: number | null;
+  n_stocks: number | null;
+  source: "backtest" | "live";
+}
+
+export interface ModelOverview {
+  as_of: string | null;
+  weights: { feature: string; share: number }[];
+  track_record: TrackRecordQuarter[];
+  summary: {
+    quarters: number;
+    avg_excess_vs_spx: number | null;
+    hit_rate_vs_spx: number | null;
+  };
+}
 
 export interface SeriesPoint {
   date: string;
