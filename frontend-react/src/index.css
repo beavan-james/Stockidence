@@ -1,30 +1,37 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/500.css";
-@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource-variable/inter-tight";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Inter Tight Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
 
-  /* Surfaces: near-black canvas, layered panels, hairline borders */
-  --color-bg: #0a0a0b;
-  --color-surface: #131316;
-  --color-raised: #1a1a1f;
-  --color-line: #26262b;
+  /* Surfaces: blue-black canvas, layered panels, hairline borders */
+  --color-bg: #090c14;
+  --color-surface: #0f1320;
+  --color-raised: #161b2a;
+  --color-line: #1f2534;
 
-  /* Ruby accent */
-  --color-accent: #F3037E;
-  --color-accent-strong: #FF5CA8;
-  --color-accent-dim: rgba(243, 3, 126, 0.14);
+  /* Brand gradient: light blue -> cobalt. Accent = interactive/brand text. */
+  --color-accent: #8fd8ff;
+  --color-accent-strong: #bfe9ff;
+  --color-cobalt: #2f5bea;
+  --color-accent-dim: rgba(143, 216, 255, 0.12);
 
   /* Text ramp */
-  --color-ink: #f4f4f5;
-  --color-ink-secondary: #a1a1aa;
-  --color-ink-muted: #71717a;
+  --color-ink: #ecedf2;
+  --color-ink-secondary: #a6abb8;
+  --color-ink-muted: #6e7381;
 
-  /* Data colors: reserved for numbers and sentiment, never decoration */
+  /* Ranking tiers, top fifth -> bottom fifth: brighter = more favoured */
+  --color-tier-1: #a5e3ff;
+  --color-tier-2: #62b6f7;
+  --color-tier-3: #3b82f6;
+  --color-tier-4: #2d55d8;
+  --color-tier-5: #28304f;
+
+  /* Data colors: reserved for prices and sentiment, never decoration */
   --color-gain: #34d399;
   --color-loss: #f87171;
   --color-neutral-data: #94a3b8;
@@ -33,12 +40,6 @@
 html {
   background-color: var(--color-bg);
   color-scheme: dark;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-html::-webkit-scrollbar {
-  display: none;
 }
 
 body {
@@ -46,123 +47,43 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* All figures render tabular so columns of prices align */
+/* Figures render tabular so columns of numbers align */
 .num {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+}
+
+/* Text filled with the brand gradient (used once per page, on the lede) */
+.text-gradient {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-cobalt));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Soft brand glow behind a page header; the only decorative gradient */
+.hero-glow {
+  position: relative;
+  isolation: isolate;
+}
+.hero-glow::before {
+  content: "";
+  position: absolute;
+  inset: -240px -20vw auto -20vw;
+  height: 720px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(560px 340px at 20% 45%, rgba(47, 91, 234, 0.4), transparent 70%),
+    radial-gradient(520px 320px at 80% 25%, rgba(143, 216, 255, 0.16), transparent 70%);
+  filter: blur(10px);
 }
 
 /* Scrollable region with the scrollbar hidden but scrolling intact */
 .no-scrollbar {
   scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
-}
-
-/* Page titles glow in the accent color on hover */
-.title-glow {
-  transition: text-shadow 0.3s ease;
-}
-.title-glow:hover {
-  text-shadow:
-    0 0 18px color-mix(in srgb, var(--color-accent) 75%, transparent),
-    0 0 46px color-mix(in srgb, var(--color-accent) 40%, transparent);
-}
-
-/* Header nav links glow instead of a card-background hover */
-.nav-glow {
-  transition: color 0.25s ease, text-shadow 0.25s ease;
-}
-.nav-glow:hover {
-  color: var(--color-ink);
-  text-shadow:
-    0 0 14px color-mix(in srgb, var(--color-accent) 80%, transparent),
-    0 0 36px color-mix(in srgb, var(--color-accent) 45%, transparent);
-}
-
-/* --- Motion system (all disabled under prefers-reduced-motion) --- */
-
-/* Entrance: fade + rise, staggerable via inline animation-delay */
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.anim-rise {
-  animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Advice badge / chips: subtle pop */
-@keyframes pop-in {
-  from {
-    opacity: 0;
-    transform: scale(0.94);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.anim-pop {
-  animation: pop-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Autocomplete dropdown: fade + slide down */
-@keyframes drop-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.anim-drop {
-  animation: drop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Score bars grow from the left */
-@keyframes bar-grow {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.anim-bar {
-  transform-origin: left;
-  animation: bar-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Snowflake radar draws outward from center */
-@keyframes radar-in {
-  from {
-    opacity: 0;
-    transform: scale(0.55);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.anim-radar {
-  transform-origin: center;
-  animation: radar-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Skeleton shimmer sweep */
@@ -179,7 +100,7 @@ body {
   background-image: linear-gradient(
     100deg,
     var(--color-raised) 40%,
-    #232329 50%,
+    #1e2436 50%,
     var(--color-raised) 60%
   );
   background-size: 200% 100%;
@@ -187,68 +108,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .anim-rise,
-  .anim-pop,
-  .anim-drop,
-  .anim-bar,
-  .anim-radar,
-  .sk-shimmer,
-  .cg-gauge-sweep,
-  .cg-fade {
+  .sk-shimmer {
     animation: none;
-  }
-  .cg-reassure {
-    animation-duration: 0.01s;
-    animation-delay: 0s;
-    opacity: 1;
-  }
-}
-
-/* Computing screen: gauge sweep, tenet crossfade, reassurance fade-in */
-@keyframes cg-gauge-sweep {
-  from {
-    stroke-dashoffset: 0;
-    transform: rotate(0deg);
-  }
-  to {
-    stroke-dashoffset: -302;
-    transform: rotate(360deg);
-  }
-}
-
-.cg-gauge-sweep {
-  animation: cg-gauge-sweep 2.6s linear infinite;
-}
-
-@keyframes cg-fade {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.cg-fade {
-  animation: cg-fade 0.5s ease-out;
-}
-
-.cg-reassure {
-  opacity: 0;
-  animation: cg-fade 1s ease-out forwards;
-  animation-delay: 8s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cg-gauge-sweep,
-  .cg-fade {
-    animation: none;
-  }
-  .cg-reassure {
-    animation-duration: 0.01s;
-    animation-delay: 0s;
-    opacity: 1;
   }
 }

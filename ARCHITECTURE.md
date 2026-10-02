@@ -124,7 +124,8 @@ flowchart TD
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
 > over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a mostly-read
 > REST surface (one write path: rating lookups launch refresh jobs).
-> The React SPA (`frontend-react/`) consumes that API with TanStack Query,
-> polling every 10s while a rating is pending/refreshing. Pages: Model
-> (ranking table from `mart.model_rankings`), Discover (movers, macro,
-> news, calendars), stock profile, Docs.
+> The React SPA (`frontend-react/`) consumes that API with TanStack Query.
+> Pages: Rankings (home: the latest `mart.model_rankings` cohort with an
+> in-ranking lookup), stock page (rank context + per-input SHAP breakdown),
+> Model (track record, input weights, methodology), Market (movers, macro,
+> news, calendars), Docs.

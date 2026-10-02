@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 
+import { useIsRanked } from "@/hooks/queries";
 import type { EarningsRelease, IpoListing } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +24,6 @@ function statusPill(status: string | null): { label: string; cls: string } | nul
 }
 
 export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
-  const navigate = useNavigate();
-
   const sorted = useMemo(
     () => [...listings].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "")),
     [listings],
@@ -50,11 +49,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
               return (
                 <tr
                   key={`${ipo.symbol ?? i}-${ipo.date}`}
-                  className={cn(
-                    "border-t border-line/60 transition-colors",
-                    ipo.symbol ? "cursor-pointer hover:bg-raised/60" : "",
-                  )}
-                  onClick={ipo.symbol ? () => void navigate(`/stocks/${ipo.symbol}`) : undefined}
+                  className="border-t border-line/60"
                 >
                   <td className="num px-3 py-2.5 text-ink-secondary">{ipo.date}</td>
                   <td className="px-3 py-2.5">
@@ -81,6 +76,7 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
 
 export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) {
   const navigate = useNavigate();
+  const isRanked = useIsRanked();
 
   const sorted = useMemo(
     () =>
@@ -113,8 +109,11 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
               return (
                 <tr
                   key={`${e.symbol}-${i}`}
-                  className="cursor-pointer border-t border-line/60 transition-colors hover:bg-raised/60"
-                  onClick={() => void navigate(`/stocks/${e.symbol}`)}
+                  className={cn(
+                    "border-t border-line/60",
+                    isRanked(e.symbol) && "cursor-pointer transition-colors hover:bg-raised/60",
+                  )}
+                  onClick={isRanked(e.symbol) ? () => void navigate(`/stocks/${e.symbol}`) : undefined}
                 >
                   <td className="num px-3 py-2.5 text-ink-secondary">{e.date}</td>
                   <td className="num px-3 py-2.5 font-semibold">{e.symbol}</td>

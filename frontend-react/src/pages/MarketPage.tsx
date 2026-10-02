@@ -39,7 +39,7 @@ function processMovers(gainers: Mover[], losers: Mover[], active: Mover[]) {
     return { sortedGainers, sortedLosers, sortedActive };
 }
 
-export function DiscoverPage() {
+export function MarketPage() {
     const movers = useMovers();
     const macro = useMacro();
     const commodities = useCommodities();
@@ -47,7 +47,7 @@ export function DiscoverPage() {
     const earnings = useEarnings();
 
     useEffect(() => {
-        document.title = "Discover | Stockidence";
+        document.title = "Market | Stockidence";
     }, []);
 
     const { sortedGainers, sortedLosers, sortedActive } = useMemo(
@@ -63,22 +63,26 @@ export function DiscoverPage() {
     );
 
     return (
-        <div className="space-y-12">
-            <div className="flex items-baseline justify-between">
-                <h1 className="title-glow text-xl font-semibold tracking-tight">
-                    Discover
+        <div className="space-y-14 pb-10">
+            <section className="hero-glow pb-2">
+                <p className="pt-10 text-xs uppercase tracking-[0.14em] text-ink-secondary">
+                    Market
+                </p>
+                <h1 className="mt-4 font-display text-5xl tracking-tight sm:text-6xl">
+                    Around the market
                 </h1>
-                {movers.data?.movers_as_of && (
-                    <span className="text-xs text-ink-muted">
-                        Market close · {movers.data.movers_as_of}
-                    </span>
-                )}
-            </div>
+                <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-secondary">
+                    Context for the rankings: the day's movers, the economy, news and what's coming up.
+                    {movers.data?.movers_as_of && (
+                        <span className="text-ink-muted"> Movers as of the {movers.data.movers_as_of} close.</span>
+                    )}
+                </p>
+            </section>
 
             {movers.data || movers.isError ? (
-                <section className="anim-rise space-y-4 pt-4">
-                    <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
-                        Daily Movement
+                <section className="space-y-5">
+                    <h2 className="font-display text-3xl tracking-tight">
+                        Daily movers
                     </h2>
                     {!movers.data ? (
                         <p className="text-sm text-ink-muted">
@@ -97,8 +101,8 @@ export function DiscoverPage() {
                 </section>
             ) : null}
 
-            <section className="anim-rise space-y-4 pt-4">
-                <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
+            <section className="space-y-5">
+                <h2 className="font-display text-3xl tracking-tight">
                     Economy &amp; commodities
                 </h2>
                 {macro.data && macro.data.length > 0 && (
@@ -109,15 +113,15 @@ export function DiscoverPage() {
                 )}
             </section>
 
-            <section className="anim-rise space-y-4 pt-4">
-                <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
-                    News &amp; sentiment
+            <section className="space-y-5">
+                <h2 className="font-display text-3xl tracking-tight">
+                    News
                 </h2>
                 <NewsTable />
             </section>
 
-            <section className="anim-rise space-y-4 pt-4">
-                <h2 className="title-glow w-fit text-lg font-semibold tracking-tight">
+            <section className="space-y-5">
+                <h2 className="font-display text-3xl tracking-tight">
                     Calendars
                 </h2>
                 <div className="grid gap-4 lg:grid-cols-2">
