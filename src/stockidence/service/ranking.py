@@ -20,7 +20,7 @@ _DEMO_RANKINGS: list[dict] = [
     {"rank": 10, "ticker": "ZTS", "sector": "Healthcare", "score": 0.585},
 ]
 
-_DEMO_AS_OF = "2026-04-01"
+_DEMO_AS_OF = "2026-06-30"
 
 
 def _demo_rankings() -> dict:

@@ -33,6 +33,17 @@ SCORE_PARQUET = DATASETS_DIR / "score_dataset_quarterly.parquet"
 KERNEL_NAME = "stockidence"
 
 
+def snapshot_date(label) -> str:
+    """Dataset row label (quarter start) -> its snapshot date (quarter end).
+
+    Rows hold end-of-quarter data, so the 2026-07-01 row is the 2026-09-30
+    snapshot, which ranks stocks for the following quarter (Q4 2026).
+    """
+    import pandas as pd
+
+    return str((pd.Timestamp(label) + pd.offsets.QuarterEnd(1)).date())
+
+
 def quarterly_universe(warehouse: Warehouse | None = None) -> list[str]:
     """Full refresh universe: every ticker in the warehouse.
 
@@ -124,7 +135,7 @@ def rebuild_quarterly_dataset() -> dict:
     if n_score < 0.5 * last_cohort:
         stale = sorted(set(last_trade) - fresh)
         raise RuntimeError(
-            f"only {n_score} tickers have fresh prices for the {latest} cohort "
+            f"only {n_score} tickers have fresh prices for the {snapshot_date(latest)} snapshot "
             f"(recent cohorts: ~{last_cohort}); {len(stale)} tickers' prices are "
             f"more than 7 days behind {newest}, e.g. {', '.join(stale[:20])}. "
             "Check the refresh step's failed fetches, then re-run."
@@ -132,18 +143,22 @@ def rebuild_quarterly_dataset() -> dict:
     QUARTERLY_PARQUET.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_parquet(QUARTERLY_PARQUET, index=False)
     score.to_parquet(SCORE_PARQUET, index=False)
+    # Published dates are snapshot (quarter-end) dates, not the dataset's
+    # quarter-start row labels: the last training snapshot's outcome runs to
+    # the end of the following quarter, which the scored snapshot then ranks.
     return {
         "parquet": str(QUARTERLY_PARQUET),
         "rows": int(len(dataset)),
         "tickers": int(dataset["ticker"].nunique()),
-        "date_min": str(dataset["date"].min()),
-        "date_max": str(dataset["date"].max()),
-        "score_cohort": str(latest),
+        "first_training_snapshot": snapshot_date(dataset["date"].min()),
+        "last_training_snapshot": snapshot_date(dataset["date"].max()),
+        "outcomes_through": snapshot_date(dataset["date"].max() + pd.DateOffset(months=3)),
+        "score_snapshot": snapshot_date(latest),
         "score_tickers": int(score["ticker"].nunique()),
         "newest_price": str(newest),
         "stale_price_tickers": sorted(set(last_trade) - fresh),
         "recent_cohort_sizes": {
-            str(d.date()): int(n)
+            snapshot_date(d): int(n)
             for d, n in dataset.groupby("date")["ticker"].nunique().tail(4).items()
         },
     }

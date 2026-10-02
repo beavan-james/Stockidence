@@ -467,6 +467,22 @@ class Warehouse:
                         " VALUES (?, ?, ?, ?, ?)",
                         rows,
                     )
+            # Published model dates moved from the dataset's quarter-start
+            # labels to snapshot (quarter-end) dates: 2026-07-01 -> 2026-09-30.
+            # Idempotent: only quarter-start dates are rewritten.
+            for table, col in (
+                ("model_rankings", "as_of"),
+                ("model_contributions", "as_of"),
+                ("model_feature_importance", "as_of"),
+                ("model_track_record", "quarter"),
+            ):
+                con.execute(
+                    f"""
+                    UPDATE mart.{table}
+                    SET {col} = CAST({col} + INTERVAL 3 MONTH - INTERVAL 1 DAY AS DATE)
+                    WHERE day({col}) = 1 AND month({col}) IN (1, 4, 7, 10)
+                    """
+                )
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).

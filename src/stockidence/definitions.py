@@ -354,10 +354,11 @@ def _rebuild_dataset(context: OpExecutionContext) -> dict:
 
     info = rebuild_quarterly_dataset()
     context.log.info(
-        f"[dataset] {info['rows']} rows, {info['tickers']} tickers "
-        f"({info['date_min']} -> {info['date_max']}); "
-        f"scoring cohort {info['score_cohort']} ({info['score_tickers']} tickers); "
-        f"recent cohort sizes {info['recent_cohort_sizes']}"
+        f"[dataset] {info['rows']} rows, {info['tickers']} tickers; training snapshots "
+        f"{info['first_training_snapshot']} -> {info['last_training_snapshot']} "
+        f"(outcomes through {info['outcomes_through']}); ranking the "
+        f"{info['score_snapshot']} snapshot ({info['score_tickers']} tickers); "
+        f"recent snapshot sizes {info['recent_cohort_sizes']}"
     )
     stale = info["stale_price_tickers"]
     if stale:

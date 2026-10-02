@@ -28,7 +28,7 @@ outperform while pooled return accuracy stays noisy.
   optional `--tickers` / `--tickers-file Model/training_universe.txt`;
   no flag = every ticker in the warehouse)
 - Production fit: **15,874 rows × 377 tickers, 2012-07 → 2026-04**
-- Latest scored cohort: **2026-04-01, 305 tickers** (top: MRNA 1.0055)
+- Latest scored snapshot: **2026-06-30, 305 tickers** (top: MRNA 1.0055)
 - No news/sentiment features — history only goes back ~1 year, which would
   sparsify the dataset. Technicals + fundamentals only.
 
@@ -67,12 +67,13 @@ per-input SHAP contributions (`mart.model_contributions`; they sum exactly to
 the score), cohort-wide input weights (`mart.model_feature_importance`) and the
 walk-forward track record (`mart.model_track_record`).
 
-**Dates.** Rows are labelled by quarter start but use that quarter's
-end-of-quarter data, and the target is the *next* quarter's return. So the
-`as_of` 2026-07-01 ranking is built from data to Sep 30 and ranks stocks for
-Q4 2026 (the site labels it by the quarter it ranks for). Only finished
-quarters are scored; a quarter a few days old would turn `return_3m` into a
-few days' return.
+**Dates.** Every published date is a snapshot date: the quarter end whose
+data was used. A ranking `as_of` 2026-09-30 is built from data to Sep 30 and
+ranks stocks for Q4 2026; the model behind it learned from every earlier
+snapshot whose following quarter has finished (the last is 2026-06-30, whose
+outcome is the Jul–Sep return, so outcomes run through Sep 30). Only finished
+quarters are scored. Internally the dataset still labels rows by quarter
+start (2026-07-01 = the 2026-09-30 snapshot); exports convert.
 
 ## Serving
 

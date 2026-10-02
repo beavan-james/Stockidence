@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 
 import { useRankings } from "@/hooks/queries";
-import { quarterLabel } from "@/lib/tiers";
+import { quarterLabel, snapshotLabel } from "@/lib/tiers";
 
 const NAV = [
   { to: "/", label: "Rankings", end: true },
@@ -33,7 +33,7 @@ export function AppShell() {
           </nav>
           <span className="hidden text-[13px] text-ink-muted lg:block">
             {rankings.data
-              ? `${quarterLabel(rankings.data.as_of)} ranking · ${rankings.data.universe_size} stocks`
+              ? `${quarterLabel(rankings.data.as_of)} ranking · data to ${snapshotLabel(rankings.data.as_of)}`
               : ""}
           </span>
         </div>

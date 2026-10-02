@@ -29,15 +29,25 @@ export function topPercent(rank: number, universeSize: number): number {
 }
 
 /**
- * The quarter a ranking or track-record row is *for*. Model dates label the
- * quarter whose end-of-quarter data was used ("2026-07-01" = data to Sep 30),
- * and that data ranks stocks for the following quarter, so 2026-07-01 is the
- * Q4 2026 ranking and its track-record return is Q4's.
+ * The quarter a ranking or track-record row is *for*. Model dates are
+ * snapshot dates (quarter ends): the 2026-09-30 snapshot ranks stocks for
+ * Q4 2026, and its track-record return is Q4's.
  */
-export function quarterLabel(isoDate: string): string {
-  const [year, month] = isoDate.split("-").map(Number);
-  const next = Math.floor((month - 1) / 3) + 1; // 0-based index of the next quarter
-  return next === 4 ? `Q1 ${year + 1}` : `Q${next + 1} ${year}`;
+export function quarterLabel(snapshotIso: string): string {
+  const [year, month] = snapshotIso.split("-").map(Number);
+  const current = Math.ceil(month / 3);
+  return current === 4 ? `Q1 ${year + 1}` : `Q${current + 1} ${year}`;
+}
+
+/** "Sep 30, 2026" for a snapshot date. */
+export function snapshotLabel(snapshotIso: string): string {
+  const [year, month, day] = snapshotIso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 /** Headline sector: the one holding the largest share of the top fifth. */
