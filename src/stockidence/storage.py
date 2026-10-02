@@ -30,6 +30,9 @@ import duckdb
 from .config import repo_root
 
 _REPO_ROOT = repo_root()
+# Calendar days between consecutive daily bars that count as a history hole.
+PRICE_GAP_DAYS = 10
+
 DEFAULT_DB_PATH = os.environ.get(
     "STOCKIDENCE_DB", str(_REPO_ROOT / "data" / "stockidence.duckdb")
 )
@@ -528,36 +531,91 @@ class Warehouse:
                 )
                 written += 1
 
-        self._touch_watermarks_for(artifact, keys, high_watermark, fetched_at)
+        self._touch_watermarks_for(artifact, keys, rows, high_watermark, fetched_at)
         return written
 
     def _touch_watermarks_for(
         self,
         artifact: str,
         keys: list[str],
+        rows: list[dict[str, Any]],
         high_watermark: str | None,
         fetched_at: datetime,
     ) -> None:
         """Maintain dimension-level watermarks from grain-level lands.
 
-        One watermark per distinct leading key value (typically the ticker),
-        so the staleness gate can look up (endpoint, "AAPL") instead of
-        walking every grain row — e.g. landing prices.daily bars for AAPL
-        bumps the ("raw.raw_prices_daily", "AAPL") watermark. A single
-        fetch of 500 bars must not create 500 watermark rows.
+        One watermark per distinct leading key value (typically the ticker)
+        among the rows just landed, so the staleness gate can look up
+        (endpoint, "AAPL") instead of walking every grain row — e.g. landing
+        prices.daily bars for AAPL bumps the ("raw.raw_prices_daily", "AAPL")
+        watermark. A single fetch of 500 bars must not create 500 watermark
+        rows, and must not touch other tickers' watermarks either.
         """
+        for dim in sorted({str(row[keys[0]]) for row in rows}):
+            self.upsert_watermark(
+                f"raw.{artifact}",
+                dim,
+                fetched_at=fetched_at,
+                high_watermark=high_watermark,
+            )
+
+    def resync_ticker_watermarks(self) -> dict[str, Any]:
+        """Rebuild per-ticker watermarks from the raw rows actually stored.
+
+        Repairs watermarks written by the old land() behaviour, which bumped
+        every ticker in a table whenever any one ticker landed (marking all
+        of them fresh and giving them another ticker's price high watermark).
+        fetched_at becomes the newest landed row per ticker; for daily prices
+        the high watermark becomes that ticker's latest bar. Cheap enough to
+        run before every bulk refresh. Returns the number of watermarks
+        written and the tickers whose price history has holes.
+        """
+        total = 0
         with self.connect() as con:
-            dimension_col = f'"{keys[0]}"'
-            distinct = con.execute(
-                f"SELECT DISTINCT {dimension_col} FROM raw.\"{artifact}\""
-            ).fetchall()
-            for (dim,) in distinct:
-                self.upsert_watermark(
-                    f"raw.{artifact}",
-                    str(dim),
-                    fetched_at=fetched_at,
-                    high_watermark=high_watermark,
+            for artifact, cols in RAW_SCHEMA.items():
+                if cols[0][0] != "ticker":
+                    continue
+                if artifact == "raw_prices_daily":
+                    select = (
+                        "SELECT ?, ticker, MAX(fetched_at), CAST(MAX(date) AS VARCHAR)"
+                        " FROM raw.raw_prices_daily GROUP BY ticker"
+                    )
+                    update = "fetched_at = excluded.fetched_at, high_watermark = excluded.high_watermark"
+                else:
+                    select = (
+                        f'SELECT ?, ticker, MAX(fetched_at), NULL FROM raw."{artifact}" GROUP BY ticker'
+                    )
+                    update = "fetched_at = excluded.fetched_at"
+                total += con.execute(
+                    f"""
+                    INSERT INTO control.watermarks (endpoint, dimension_key, fetched_at, high_watermark)
+                    {select}
+                    ON CONFLICT (endpoint, dimension_key) DO UPDATE SET {update}
+                    """,
+                    [f"raw.{artifact}"],
+                ).fetchone()[0]
+            # The old high watermarks were other tickers' latest bars, and an
+            # incremental fetch starts at the high watermark, so earlier
+            # refreshes could skip weeks of a ticker's history. Drop the price
+            # watermark of any ticker with a hole (> PRICE_GAP_DAYS between
+            # bars; weekends + holidays never exceed ~5): the next refresh
+            # then re-pulls its full history and the upsert fills the hole.
+            gapped: list[str] = [t for (t,) in con.execute(
+                """
+                SELECT DISTINCT ticker FROM (
+                    SELECT ticker, date - LAG(date) OVER (PARTITION BY ticker ORDER BY date) AS gap
+                    FROM raw.raw_prices_daily
+                ) WHERE gap > ?
+                """,
+                [PRICE_GAP_DAYS],
+            ).fetchall()]
+            if gapped:
+                con.execute(
+                    "DELETE FROM control.watermarks WHERE endpoint = 'raw.raw_prices_daily'"
+                    " AND dimension_key IN (SELECT UNNEST(?::VARCHAR[]))",
+                    [gapped],
                 )
+        return {"watermarks": total, "gapped_tickers": gapped}
 
     def get_watermark(self, endpoint: str, dimension_key: str) -> Watermark | None:
         with self.connect(read_only=True) as con:

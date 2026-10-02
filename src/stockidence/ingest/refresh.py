@@ -68,6 +68,15 @@ def refresh_tickers(
     now = _now()
     emit = log or (lambda msg: print(msg, flush=True))
 
+    # Heal watermarks before trusting the staleness gate (see
+    # Warehouse.resync_ticker_watermarks for the bug this repairs).
+    resync = warehouse.resync_ticker_watermarks()
+    emit(f"resynced {resync['watermarks']} ticker watermarks from landed rows")
+    gapped = resync["gapped_tickers"]
+    if gapped:
+        emit(f"{len(gapped)} tickers have holes in their price history and will re-pull "
+             f"full history: {', '.join(gapped[:30])}{' ...' if len(gapped) > 30 else ''}")
+
     total_calls = total_rows = 0
     errors: list[dict[str, str]] = []
     processed = 0
