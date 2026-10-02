@@ -412,6 +412,45 @@ class Warehouse:
                 )
                 """
             )
+            # Written by the retrain notebook alongside model_rankings: each
+            # ranked stock's model inputs and per-input SHAP contributions
+            # (score = base_score + sum of contributions), the cohort-wide
+            # input weights, and the walk-forward / live track record.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.model_contributions (
+                    as_of DATE NOT NULL,
+                    ticker VARCHAR NOT NULL,
+                    feature VARCHAR NOT NULL,
+                    value DOUBLE,
+                    contribution DOUBLE NOT NULL,
+                    PRIMARY KEY (as_of, ticker, feature)
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.model_feature_importance (
+                    as_of DATE NOT NULL,
+                    feature VARCHAR NOT NULL,
+                    mean_abs_contribution DOUBLE NOT NULL,
+                    base_score DOUBLE,
+                    PRIMARY KEY (as_of, feature)
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.model_track_record (
+                    quarter DATE NOT NULL PRIMARY KEY,
+                    top20_return DOUBLE,
+                    universe_return DOUBLE,
+                    spx_return DOUBLE,
+                    n_stocks INTEGER,
+                    source VARCHAR NOT NULL
+                )
+                """
+            )
             if con.execute("SELECT COUNT(*) FROM mart.model_rankings").fetchone()[0] == 0:
                 snapshot = _REPO_ROOT / "Model" / "artifacts" / "latest_rankings.json"
                 if snapshot.exists():
