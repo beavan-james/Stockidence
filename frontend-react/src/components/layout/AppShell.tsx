@@ -16,7 +16,8 @@ export function AppShell() {
     <div className="min-h-screen overflow-x-clip bg-bg text-ink">
       <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-6">
-          <Link to="/" className="font-display text-[28px] leading-none tracking-tight">
+          <Link to="/" className="flex items-center gap-2 font-display text-[28px] leading-none tracking-tight">
+            <img src="/logo.svg" alt="" className="h-8 w-8" />
             Stockidence
           </Link>
           <nav className="flex items-center gap-7 text-[15px] text-ink-secondary sm:gap-9">
