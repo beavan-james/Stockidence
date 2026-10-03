@@ -30,8 +30,8 @@ outperform while pooled return accuracy stays noisy.
 - Latest scored snapshot: **2026-09-30, 328 tickers** (the Q4 2026
   ranking; top: DKNG, FISV, ORCL, RDDT, PSKY). First run on the full
   warehouse universe.
-- Previous fit (Q2 2026 ranking): 15,874 rows × 377 tickers, snapshots
-  2012-09-30 → 2026-06-30; 305 tickers scored
+- Current fit (2026-10-03 retrain): **15,916 rows × 380 tickers**,
+  snapshots 2012-09-30 → 2026-06-30 (outcomes through 2026-09-30)
 - No news/sentiment features — history only goes back ~1 year, which would
   sparsify the dataset. Technicals + fundamentals only.
 
@@ -44,16 +44,18 @@ Latest retrain (7,691 test rows), from `mart.model_track_record`:
 - Input weights (share of a typical score): average daily range 25%, worst
   drawdown 21%, price swing 12%, cash / assets 7%, rest ≤6%
 
-Previous run (7,661 test rows; ranking-quality metrics aren't persisted yet,
-so these are the last measured values):
+Ranking quality, same run (measured by the 2026-10-03 `model_retrain`):
 
-- Rank IC (pooled): +0.163
-- Top-10 excess: +3.90 pp/qtr (t=+1.44, positive 73% of quarters)
-- Top-25 excess: +5.08 pp/qtr (t=+2.39, positive 77% of quarters)
-- Top-quintile excess: +2.99 pp/qtr (t=+2.22, positive 73% of quarters)
-- Precision@10: 14.6% (random 3.4%) · Precision@25: 22.8% (random 8.5%)
-- Top-20 vs S&P 500: +5.53 pp/qtr (+9.27%/qtr vs +3.74%/qtr), beating the
-  index 73% of quarters
+- Rank IC (pooled): +0.142
+- Top-10 excess: +4.25 pp/qtr (t=+1.51, positive 62% of quarters)
+- Top-25 excess: +4.13 pp/qtr (t=+1.91, positive 62% of quarters)
+- Top-quintile excess: +2.62 pp/qtr (t=+1.82, positive 62% of quarters)
+- Precision@10: 14.6% (random 3.4%) · Precision@25: 21.8% (random 8.5%)
+
+Previous run (15,874 rows × 377 tickers, 7,661 test rows) for comparison: rank IC
++0.163, top-20 vs S&P +5.53 pp/qtr. Note the notebook's "beats S&P N%" line
+reports quarters with a positive top-20 return (69%), not the S&P hit rate
+(62%); `mart.model_track_record` has the correct figure.
 
 ## Refresh pipeline (quarterly DAG)
 

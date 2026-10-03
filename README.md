@@ -135,24 +135,27 @@ Year by year, top-20 vs S&P 500 (pp/qtr, quarters ahead): 2019 +1.54 (2/4),
 2020 +12.84 (3/4), 2021 −4.35 (1/4), 2022 +1.74 (2/4), 2023 +10.74 (3/4),
 2024 +2.14 (3/4), 2025 +10.20 (2/2).
 
-**Ranking-quality metrics** come from the previous full validation run
-(Q2 2026 ranking, 377-ticker universe); the retrain only persists the
-S&P comparison above, so these will be refreshed on the next run that
-records them:
+**Ranking quality** (same walk-forward run, measured by the 2026-10-03
+`model_retrain`):
 
-| Metric | Previous run |
+| Metric | Result |
 | ------ | ------ |
-| Rank IC, pooled (predicted vs realized rank) | +0.163 (random = 0) |
-| Top-10 excess over universe mean | +3.90 pp/qtr (t=+1.44, positive 73% of quarters) |
-| Top-25 excess over universe mean | +5.08 pp/qtr (t=+2.39, positive 77% of quarters) |
-| Top-quintile excess | +2.99 pp/qtr (t=+2.22, positive 73% of quarters) |
+| Rank IC, pooled (predicted vs realized rank) | +0.142 (random = 0) |
+| Top-10 excess over universe mean | +4.25 pp/qtr (t=+1.51, positive 62% of quarters) |
+| Top-25 excess over universe mean | +4.13 pp/qtr (t=+1.91, positive 62% of quarters) |
+| Top-quintile excess | +2.62 pp/qtr (t=+1.82, positive 62% of quarters) |
 | Precision@10 (predicted top-10 ∩ realized top-10) | 14.6% (random 3.4%) |
-| Top-20 vs S&P 500 | +5.53 pp/qtr, beat the index 73% of quarters |
+| Precision@25 | 21.8% (random 8.5%) |
 
-The headline came down in the latest retrain (+5.53 → +4.57 pp/qtr vs the
-S&P, 73% → 62% of quarters). It is the first run on the full warehouse
-universe (more, and noisier, names per cohort) and on corrected
-forward-return targets, so the two runs aren't strictly comparable.
+The numbers came down from the previous run (15,874 rows × 377 tickers;
+rank IC +0.163 → +0.142, top-20 vs S&P +5.53 → +4.57 pp/qtr). The current
+fit trains on 15,916 rows × 380 tickers (snapshots 2012-09-30 → 2026-06-30)
+with corrected forward-return targets, so the two runs aren't strictly
+comparable. None of the excess-return t-stats clear 2.
+
+> The notebook's "beats S&P N% of quarters" line actually reports the share
+> of quarters where the top 20's return was positive (69% this run); the
+> hit rate against the S&P is 62%, matching `mart.model_track_record`.
 
 **What it weighs now** (share of a typical stock's score, Q4 2026 ranking):
 average daily range 25%, worst 1-year drawdown 21%, 1-year price swing 12%,
@@ -163,8 +166,8 @@ cash / assets 7%, distance from 52-week high 6%, return on assets 6%,
 
 - **Quarterly grain, slow feedback.** Only ~4 fresh observations per year —
   regime shifts (e.g. 2021–2022, when the model trailed or roughly tracked
-  the index) take quarters to detect, and 26 quarters is a small sample for
-  t-stats near ±2.
+  the index) take quarters to detect, and with 26 quarters none of the
+  excess-return t-stats clear 2.
 - **Why validation starts in 2019 when data goes back to 2012.** 2019-01-01
   is the first walk-forward *test* cutoff (`CUTOFFS` in the notebook), not a
   data filter — `build_dataset.py` loads everything from 2012 on. The
