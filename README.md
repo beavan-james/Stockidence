@@ -107,11 +107,11 @@ snapshots, targets are forward returns.
 | Top-25 excess over universe mean | **+5.08 pp/qtr** (t=+2.39, positive 77% of quarters) |
 | Top-quintile excess | **+2.99 pp/qtr** (t=+2.22, positive 73% of quarters) |
 | Precision@10 (predicted top-10 ∩ realized top-10) | **14.6%** (random 3.4%) |
-| Top-20 vs S&P 500 | **+5.53 pp/qtr**, beats the index 73% of quarters |
+| Top-20 vs S&P 500 | **+4.57 pp/qtr**, beats the index 62% of quarters |
 
-Year-by-year top-20 vs S&P (pp/qtr, hit rate): 2019 +4.01 (75%), 2020
-+15.56 (100%), 2021 −3.46 (50%), 2022 +0.81 (50%), 2023 +12.09 (100%),
-2024 +2.54 (75%), 2025 +8.80 (100%).
+Year-by-year top-20 vs S&P (pp/qtr, hit rate): 2019 +1.54 (50%), 2020
++12.84 (75%), 2021 −4.35 (25%), 2022 +1.74 (50%), 2023 +10.74 (75%),
+2024 +2.14 (75%), 2025 +10.20 (100%, 2 quarters).
 
 ### Honest limits
 

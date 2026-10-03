@@ -39,8 +39,8 @@ outperform while pooled return accuracy stays noisy.
 - Top-25 excess: **+5.08 pp/qtr** (t=+2.39, positive 77% of quarters)
 - Top-quintile excess: **+2.99 pp/qtr** (t=+2.22, positive 73% of quarters)
 - Precision@10: **14.6%** (random 3.4%) · Precision@25: **22.8%** (random 8.5%)
-- Top-20 vs S&P 500: **+5.53 pp/qtr** (+9.27%/qtr vs +3.74%/qtr),
-  beating the index 73% of quarters
+- Top-20 vs S&P 500: **+4.57 pp/qtr** (+8.31%/qtr vs +3.74%/qtr),
+  beating the index 62% of quarters
 
 ## Refresh pipeline (quarterly DAG)
 
