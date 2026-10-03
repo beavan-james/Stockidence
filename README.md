@@ -6,8 +6,10 @@
 ## What this is
 
 **A quarterly stock-ranking model, and a site built around it.** Every quarter
-an XGBoost `rank:ndcg` model orders a universe of ~500 US stocks by how likely
-each is to beat the rest of the list over the next three months. It ranks; it
+an XGBoost `rank:ndcg` model orders US stocks by how likely each is to beat
+the rest of the list over the next three months — every stock in a ~500-name
+universe with enough price and fundamentals history (328 in the Q4 2026
+ranking). It ranks; it
 does not predict prices.
 
 **The question it answers:** *"I'm interested in this stock — where does the
@@ -114,31 +116,55 @@ Cadence is heterogeneous primarily to avoid hitting API rate limits specifically
 
 ## Model Validation
 
-The production model is validated with **walk-forward backtesting**: every
-quarter from 2019→2025, the ranker trains on all history before the quarter
-cutoff and is graded on that quarter's realized returns — 26 out-of-sample
-quarters, 7,661 test rows. No lookahead: features are point-in-time
-snapshots, targets are forward returns.
+The production model is validated with **walk-forward backtesting**: for
+every quarter from 2019 to mid-2025 the ranker trains only on snapshots
+before that quarter, then its picks are graded on the returns that
+followed — 26 out-of-sample quarters. No lookahead: features are
+point-in-time snapshots, targets are forward returns.
+
+**Latest retrain** (Q4 2026 ranking, 2026-09-30 snapshot, 328 ranked stocks;
+universe expanded to every ticker in the warehouse):
 
 | Metric | Result |
 | ------ | ------ |
-| Rank IC, pooled (predicted vs realized rank) | **+0.163** (random = 0) |
-| Top-10 excess over universe mean | **+3.90 pp/qtr** (t=+1.44, positive 73% of quarters) |
-| Top-25 excess over universe mean | **+5.08 pp/qtr** (t=+2.39, positive 77% of quarters) |
-| Top-quintile excess | **+2.99 pp/qtr** (t=+2.22, positive 73% of quarters) |
-| Precision@10 (predicted top-10 ∩ realized top-10) | **14.6%** (random 3.4%) |
-| Top-20 vs S&P 500 | **+5.53 pp/qtr**, beats the index 73% of quarters |
+| Top-20 vs S&P 500 | **+4.57 pp/qtr**, beats the index **62%** of quarters |
+| Top-20 vs the whole ranked list | **+4.33 pp/qtr** |
+| Out-of-sample quarters / test rows | 26 / 7,691 |
 
-Year-by-year top-20 vs S&P (pp/qtr, hit rate): 2019 +4.01 (75%), 2020
-+15.56 (100%), 2021 −3.46 (50%), 2022 +0.81 (50%), 2023 +12.09 (100%),
-2024 +2.54 (75%), 2025 +8.80 (100%).
+Year by year, top-20 vs S&P 500 (pp/qtr, quarters ahead): 2019 +1.54 (2/4),
+2020 +12.84 (3/4), 2021 −4.35 (1/4), 2022 +1.74 (2/4), 2023 +10.74 (3/4),
+2024 +2.14 (3/4), 2025 +10.20 (2/2).
+
+**Ranking-quality metrics** come from the previous full validation run
+(Q2 2026 ranking, 377-ticker universe); the retrain only persists the
+S&P comparison above, so these will be refreshed on the next run that
+records them:
+
+| Metric | Previous run |
+| ------ | ------ |
+| Rank IC, pooled (predicted vs realized rank) | +0.163 (random = 0) |
+| Top-10 excess over universe mean | +3.90 pp/qtr (t=+1.44, positive 73% of quarters) |
+| Top-25 excess over universe mean | +5.08 pp/qtr (t=+2.39, positive 77% of quarters) |
+| Top-quintile excess | +2.99 pp/qtr (t=+2.22, positive 73% of quarters) |
+| Precision@10 (predicted top-10 ∩ realized top-10) | 14.6% (random 3.4%) |
+| Top-20 vs S&P 500 | +5.53 pp/qtr, beat the index 73% of quarters |
+
+The headline came down in the latest retrain (+5.53 → +4.57 pp/qtr vs the
+S&P, 73% → 62% of quarters). It is the first run on the full warehouse
+universe (more, and noisier, names per cohort) and on corrected
+forward-return targets, so the two runs aren't strictly comparable.
+
+**What it weighs now** (share of a typical stock's score, Q4 2026 ranking):
+average daily range 25%, worst 1-year drawdown 21%, 1-year price swing 12%,
+cash / assets 7%, distance from 52-week high 6%, return on assets 6%,
+12-month return 5%, everything else ≤5%.
 
 ### Honest limits
 
 - **Quarterly grain, slow feedback.** Only ~4 fresh observations per year —
-  regime shifts (e.g. 2021–2022, when the model roughly tracked the index)
-  take quarters to detect, and 26 quarters is a small sample for t-stats
-  near ±2.
+  regime shifts (e.g. 2021–2022, when the model trailed or roughly tracked
+  the index) take quarters to detect, and 26 quarters is a small sample for
+  t-stats near ±2.
 - **Why validation starts in 2019 when data goes back to 2012.** 2019-01-01
   is the first walk-forward *test* cutoff (`CUTOFFS` in the notebook), not a
   data filter — `build_dataset.py` loads everything from 2012 on. The
@@ -146,13 +172,16 @@ Year-by-year top-20 vs S&P (pp/qtr, hit rate): 2019 +4.01 (75%), 2020
   warm up the trailing features (SMA200, 252-day vol/drawdown, 12-month
   returns all need a year-plus of history before the first test quarter).
   Starting tests earlier would grade the model on barely-trained fits.
-- **Momentum/risk concentration.** The ranker leans into names with strong
-  trailing momentum and drawdown profiles; top cohorts can concentrate in
-  high-beta growth — it ranks, it does not manage risk.
-- **Bull-market sample only** (2019→2025 window); no sustained bear market
-  in the validation period.
+- **Risk-profile concentration.** In the latest retrain the three risk
+  inputs (daily range, drawdown, price swing) explain ~59% of a typical
+  score, so top cohorts can concentrate in volatile, high-beta names — it
+  ranks, it does not manage risk.
+- **2021 was a losing year** (top 20 trailed the S&P by 4.35 pp/qtr, ahead
+  in 1 of 4 quarters): the model can lag for several quarters at a time.
+- **Mostly a bull-market sample** (2019→2025 window); the 2022 drawdown is
+  the only sustained bear market in the validation period.
 - **Overlapping cohorts:** the same names recur across adjacent quarters, so
-  effective independence is lower than 7,661 rows suggests.
+  effective independence is lower than 7,691 rows suggests.
 
 Harness lives in `Model/notebooks/production_ranking_model.ipynb`
 (walk-forward cells + S&P benchmark + artifact export); the model spec,

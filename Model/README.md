@@ -27,20 +27,33 @@ outperform while pooled return accuracy stays noisy.
 - Built by `Model/scripts/build_dataset.py` (`--freq quarterly`,
   optional `--tickers` / `--tickers-file Model/training_universe.txt`;
   no flag = every ticker in the warehouse)
-- Production fit: **15,874 rows × 377 tickers, 2012-07 → 2026-04**
-- Latest scored snapshot: **2026-06-30, 305 tickers** (top: MRNA 1.0055)
+- Latest scored snapshot: **2026-09-30, 328 tickers** (the Q4 2026
+  ranking; top: DKNG, FISV, ORCL, RDDT, PSKY). First run on the full
+  warehouse universe.
+- Previous fit (Q2 2026 ranking): 15,874 rows × 377 tickers, snapshots
+  2012-09-30 → 2026-06-30; 305 tickers scored
 - No news/sentiment features — history only goes back ~1 year, which would
   sparsify the dataset. Technicals + fundamentals only.
 
-## Validation (walk-forward, 26 quarters 2019→2025, 7,661 test rows)
+## Validation (walk-forward, 26 quarters 2019→2025)
 
-- Rank IC (pooled): **+0.163**
-- Top-10 excess: **+3.90 pp/qtr** (t=+1.44, positive 73% of quarters)
-- Top-25 excess: **+5.08 pp/qtr** (t=+2.39, positive 77% of quarters)
-- Top-quintile excess: **+2.99 pp/qtr** (t=+2.22, positive 73% of quarters)
-- Precision@10: **14.6%** (random 3.4%) · Precision@25: **22.8%** (random 8.5%)
-- Top-20 vs S&P 500: **+5.53 pp/qtr** (+9.27%/qtr vs +3.74%/qtr),
-  beating the index 73% of quarters
+Latest retrain (7,691 test rows), from `mart.model_track_record`:
+
+- Top-20 vs S&P 500: **+4.57 pp/qtr**, beating the index 62% of quarters
+- Top-20 vs the whole ranked list: **+4.33 pp/qtr**
+- Input weights (share of a typical score): average daily range 25%, worst
+  drawdown 21%, price swing 12%, cash / assets 7%, rest ≤6%
+
+Previous run (7,661 test rows; ranking-quality metrics aren't persisted yet,
+so these are the last measured values):
+
+- Rank IC (pooled): +0.163
+- Top-10 excess: +3.90 pp/qtr (t=+1.44, positive 73% of quarters)
+- Top-25 excess: +5.08 pp/qtr (t=+2.39, positive 77% of quarters)
+- Top-quintile excess: +2.99 pp/qtr (t=+2.22, positive 73% of quarters)
+- Precision@10: 14.6% (random 3.4%) · Precision@25: 22.8% (random 8.5%)
+- Top-20 vs S&P 500: +5.53 pp/qtr (+9.27%/qtr vs +3.74%/qtr), beating the
+  index 73% of quarters
 
 ## Refresh pipeline (quarterly DAG)
 
