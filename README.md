@@ -2,44 +2,67 @@
 
 **Live:** [stockidence.com](https://stockidence.com) · [GitHub](https://github.com/beavan-james/Stockidence)
 
---- 
+---
 ## What this is
 
-A **stock confidence rating pipeline**. The scoring logic is
-relatively deterministic, the focus is on the data ingestion and the app
-itself rather than the algorithm. The scoring layer has since been
-**backtested point-in-time and recalibrated once** on that evidence (see
-[Model Validation](#model-validation)).
+**A quarterly stock-ranking model, and a site built around it.** Every quarter
+an XGBoost `rank:ndcg` model orders a universe of ~500 US stocks by how likely
+each is to beat the rest of the list over the next three months. It ranks; it
+does not predict prices.
 
-**The problem it answers:** *"I want to buy this stock but don't know if it's a
-good time, and I don't have time to research it."* The app outputs, for any
-ticker:
+**The question it answers:** *"I'm interested in this stock — where does the
+model put it, and why?"* For any ranked stock the site shows its rank, tier
+(which fifth of the list it falls in), rank within its sector, how it moved
+since last quarter, and **how the model got there**: each of the model's 13
+inputs, the stock's value next to the list median, and how much that input
+pushed the score up or down (exact SHAP contributions that add up to the
+score).
 
-- a **valuation reference** which contains a fair value anchor based on a 50/50 blend of discounted cash flow and own-history comparables
-- Technical statistics (RSI, ATR, BBANDS, SMA, EMA, ...)
+### The site
 
-Additionally the app contains other resources such as the model page, which shows the models ranking for tickers in the S&P 500 universe, and a discover page which contains useful information such as top gainers/losers, IPOs, earnings calendar, economy & commodities, and market news.
+| Page | What it shows |
+| ---- | ------------- |
+| **Rankings** (home) | The quarter's full ranked list, a lookup that searches only ranked stocks, every stock as a tier-coloured distribution strip, the top of the list, sector tilt of the top fifth |
+| **Stock page** | Rank context plus the input-by-input score breakdown and a plain-English verdict ("strong on momentum, held back by risk") |
+| **Model** | Walk-forward track record vs the S&P 500 by quarter, what the model weighs most, how it works and its limits |
+| **Market** | Context, not the product: daily movers, macro and commodities, news, IPO and earnings calendars |
+
+**Dates.** A ranking is labelled by its *snapshot date* — the quarter end
+whose data it uses — and is for the quarter after it: the 2026-09-30 snapshot
+is the Q4 2026 ranking. Only finished quarters are ranked.
+
+**Design.** Dark blue-black canvas, Instrument Serif headings with Inter Tight
+text, and one brand gradient (light blue → cobalt) that doubles as the tier
+scale: brighter means more favoured. No decorative motion; colour is reserved
+for meaning (tiers, gains/losses).
 
 ---
 ## How it's built
 
-- **On-demand, not a fixed watchlist.** Users enter any ticker at request time.
-  The pipeline can't rely on pre-scheduled batch loads for a static universe,
-  so it needs a staleness-aware cache layer in front of the API calls: an
-  on-demand request reuses recently-fetched data instead of re-hitting
-  free-tier rate limits.
-- **Orchestration:** Dagster (assets/jobs), with incrementals load design
-  driven by watermark-based staleness gates per (source, ticker, endpoint).
-  No sensors: the frontend launches the `refresh_tickers` job directly
-  (`POST /api/pipeline/refresh`), and a quarterly `quarterly_model_refresh`
-  job refreshes the universe, rebuilds the training dataset, and retrains
-  the ranking model.
-- **Warehouse:** DuckDB, three-layer schema `raw → staging → mart`.
-- **Caching:** staleness-aware cache in front of API calls; policy differs by
-  data type (a quote is stale in minutes, an income statement in months).
-- **Serving & UI:** FastAPI (`src/stockidence/api/`) exposes the mart layer as
-  a typed REST API; a React + TypeScript SPA (`frontend-react/`) renders it.
-  The UI reads the warehouse through that API — never the providers directly.
+- **Orchestration:** Dagster. Scheduled jobs land market-wide data on its own
+  cadence (below); the quarterly `quarterly_model_refresh` job (03:00 UTC on
+  the first day of each quarter) refreshes **every ticker in the warehouse**,
+  rebuilds the training dataset, retrains the model and publishes the new
+  ranking. `model_retrain` runs just the dataset rebuild + retrain, for
+  re-running once the data is already fresh.
+- **Incremental loads:** per-(endpoint, ticker) watermarks drive a
+  staleness gate, so a refresh only calls a provider when that data has gone
+  stale (a quote in a minute, prices in a day, fundamentals in months). Bulk
+  refreshes resync watermarks from the stored rows first and re-pull any
+  ticker whose price history has holes.
+- **Guard rails:** the dataset step refuses to publish when most tickers'
+  prices are stale (the current ranking stays up), skips quarters too thin
+  to train on, and logs failed fetches by endpoint.
+- **Warehouse:** DuckDB, three-layer schema `raw → staging → mart`. The
+  ranking, per-stock contributions, input weights and track record live in
+  `mart.model_*` tables written by the retrain.
+- **Serving & UI:** FastAPI (`src/stockidence/api/`) exposes the mart as a
+  typed REST API (`/api/rankings`, `/api/rankings/{ticker}`,
+  `/api/model/overview`, market endpoints); a React + TypeScript SPA
+  (`frontend-react/`) renders it and never calls providers directly.
+
+The older per-ticker rating pipeline (`refresh_tickers` job, `/api/rating`)
+is still in the backend but no longer used by the site.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full data flow.
 
@@ -65,18 +88,15 @@ The full endpoint list — grouped by the scoring category each feeds — is in
 > computed in-Dagster from raw price bars as pure derivations, not API calls.
 
 ---
-## Models
+## The model
 
-Ticker pages show no confidence score, advice, or buy/sell recommendation —
-just a **fair value** anchor (blended DCF + own-history comparables) and raw
-**technical statistics** (RSI, CCI, MACD, moving averages, …). See
-[`TICKER_STATS.md`](TICKER_STATS.md) for the fair-value methodology and the
-full stat list.
-
-Alongside it, a quarterly **XGBoost `rank:ndcg` model**
-orders the stocks in the S&P 500 by expected next-quarter return (ranking only, no
-price prediction). The website's Model page serves it from
-`mart.model_rankings`. See [`Model/README.md`](Model/README.md).
+An XGBoost `rank:ndcg` model on the quarterly grain, trained on every
+finished quarter since 2012 with 13 raw point-in-time inputs: momentum
+(3- and 12-month return, price vs 200-day average, distance from the 52-week
+high), risk (1-year price swing, worst drawdown, average daily range) and
+fundamentals from the latest filing as of the snapshot (returns on equity and
+assets, free cash flow, leverage, liquidity, cash). Spec, feature set, dates
+and refresh pipeline: [`Model/README.md`](Model/README.md).
 
 ---
 ## Cadence is heterogeneous by design
@@ -143,8 +163,8 @@ feature set, and refresh pipeline are documented in
 ## Deploy
 
 One always-free Oracle Ampere box (2 OCPU / 12 GB) runs the whole stack via
-Docker Compose — FastAPI, Dagster (webserver + daemon; the push model needs
-both up for ticker refreshes), and the SPA behind nginx on port 80:
+Docker Compose — FastAPI, Dagster (webserver + daemon) and the SPA behind
+nginx (HTTPS on 443, port 80 redirects):
 
 ```bash
 cp .env.example .env   # fill in provider keys
@@ -184,11 +204,14 @@ so runners get a private route to the box — not opening SSH to the world.)
 | ---------------- | ----------------------------------------------------- |
 | `ARCHITECTURE.md` | Warehouse layers, watermark/staleness design, data flow diagram |
 | `API.md`          | Every endpoint used, grouped by scoring category, with JSON samples |
-| `TICKER_STATS.md` | Fair-value methodology and the technical statistics on ticker pages |
+| `TICKER_STATS.md` | Fair-value methodology of the older per-ticker rating pipeline (no longer shown on the site) |
 | `Model/README.md` | Ranking model spec, validation, quarterly refresh pipeline |
 
 ---
-## Startup Commands
-uv run uvicorn stockidence.api.app:app --reload 
-dagster dev
-npm run dev
+## Local development
+
+```bash
+uv run uvicorn stockidence.api.app:app --reload   # API on :8000
+uv run dagster dev                                # Dagster UI on :3000
+cd frontend-react && npm install && npm run dev   # site on :5173 (proxies /api)
+```
