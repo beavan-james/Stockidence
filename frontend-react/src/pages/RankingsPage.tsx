@@ -32,7 +32,7 @@ export function RankingsPage() {
         {rankings.isPending ? (
           <Skeleton className="mt-5 h-40 max-w-3xl" />
         ) : (
-          <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-7xl lg:text-[84px]">
+          <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-6xl">
             {lead && lead.share >= 0.3 ? (
               <>
                 This quarter the model leans into <em className="not-italic text-accent">{lead.sector}.</em>

@@ -129,7 +129,7 @@ export function ModelPage() {
     <div>
       <section className="hero-glow pb-14">
         <p className="pt-10 text-xs uppercase tracking-[0.14em] text-ink-secondary">The model</p>
-        <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-7xl">
+        <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-6xl">
           Ranked, not predicted. <em className="not-italic text-accent">Tested before it's trusted.</em>
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-secondary">
