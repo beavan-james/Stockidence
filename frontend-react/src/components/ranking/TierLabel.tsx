@@ -3,7 +3,7 @@ import { TIER_COLORS, TIER_NAMES } from "@/lib/tiers";
 /** Tier as plain text: the top fifth in the accent, the rest muted. */
 export function TierLabel({ tier }: { tier: number }) {
   return (
-    <span className={`whitespace-nowrap text-xs ${tier === 0 ? "text-accent" : "text-ink-muted"}`}>
+    <span className={`whitespace-nowrap text-[11px] ${tier === 0 ? "text-accent" : "text-ink-muted"}`}>
       {TIER_NAMES[tier]}
     </span>
   );
