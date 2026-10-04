@@ -1,16 +1,9 @@
 import { TIER_COLORS, TIER_NAMES } from "@/lib/tiers";
 
-export function TierPill({ tier }: { tier: number }) {
-  const color = TIER_COLORS[tier];
+/** Tier as plain text: the top fifth in the accent, the rest muted. */
+export function TierLabel({ tier }: { tier: number }) {
   return (
-    <span
-      className="inline-block whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs"
-      style={{
-        color,
-        borderColor: `color-mix(in srgb, ${color} 35%, transparent)`,
-        background: `color-mix(in srgb, ${color} 12%, transparent)`,
-      }}
-    >
+    <span className={`whitespace-nowrap text-xs ${tier === 0 ? "text-accent" : "text-ink-muted"}`}>
       {TIER_NAMES[tier]}
     </span>
   );

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { TierPill } from "@/components/ranking/TierPill";
+import { TierLabel } from "@/components/ranking/TierLabel";
 import { tierOf, topPercent } from "@/lib/tiers";
 import type { RankedTicker } from "@/types/api";
 
@@ -60,7 +60,7 @@ export function RankingsTable({ items, limit }: { items: RankedTicker[]; limit?:
                   Top {topPercent(r.rank, n)}%
                 </td>
                 <td className="py-3.5 text-right">
-                  <TierPill tier={tierOf(r.rank, n)} />
+                  <TierLabel tier={tierOf(r.rank, n)} />
                 </td>
               </tr>
             ))}

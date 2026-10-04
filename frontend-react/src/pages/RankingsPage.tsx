@@ -5,7 +5,7 @@ import { DistributionStrip } from "@/components/ranking/DistributionStrip";
 import { ExcessBars, SectorTilt } from "@/components/ranking/ModelCharts";
 import { RankingsTable } from "@/components/ranking/RankingsTable";
 import { StockLookup } from "@/components/ranking/StockLookup";
-import { TierLegend } from "@/components/ranking/TierPill";
+import { TierLegend } from "@/components/ranking/TierLabel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useModelOverview, useRankings } from "@/hooks/queries";
 import { leadingSector } from "@/lib/tiers";

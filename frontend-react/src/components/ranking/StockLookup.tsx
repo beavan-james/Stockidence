@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { TierPill } from "@/components/ranking/TierPill";
+import { TierLabel } from "@/components/ranking/TierLabel";
 import { tierOf } from "@/lib/tiers";
 import type { RankedTicker } from "@/types/api";
 
@@ -68,7 +68,7 @@ export function StockLookup({ items }: { items: RankedTicker[] }) {
                 <span className="w-16 font-semibold">{r.ticker}</span>
                 <span className="flex-1 truncate text-ink-secondary">{r.sector ?? "—"}</span>
                 <span className="num text-ink-secondary">#{r.rank}</span>
-                <TierPill tier={tierOf(r.rank, n)} />
+                <TierLabel tier={tierOf(r.rank, n)} />
               </button>
             ))
           )}
