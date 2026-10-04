@@ -130,7 +130,7 @@ export function ModelPage() {
       <section className="hero-glow pb-14">
         <p className="pt-10 text-xs uppercase tracking-[0.14em] text-ink-secondary">The model</p>
         <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-7xl">
-          Ranked, not predicted. <em className="text-gradient not-italic">Tested before it's trusted.</em>
+          Ranked, not predicted. <em className="not-italic text-accent">Tested before it's trusted.</em>
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-secondary">
           Stockidence orders stocks by how likely they are to beat the rest of the list next
@@ -231,9 +231,9 @@ export function ModelPage() {
                     <span className="text-[15px]">{meta.label}</span>
                     <span className="num text-ink-secondary">{Math.round(w.share * 100)}%</span>
                   </div>
-                  <div className="mt-2 h-[6px] overflow-hidden rounded-full bg-white/[0.06]">
+                  <div className="mt-2 h-[6px] overflow-hidden bg-white/[0.06]">
                     <div
-                      className="h-full rounded-full"
+                      className="h-full"
                       style={{
                         width: `${(w.share / o.weights[0].share) * 100}%`,
                         background: "linear-gradient(90deg, var(--color-cobalt), var(--color-accent))",

@@ -28,7 +28,7 @@ export function DistributionStrip({
               key={r.ticker}
               to={`/stocks/${r.ticker}`}
               title={`#${r.rank} ${r.ticker}`}
-              className="flex-1 rounded-[1px] transition-opacity hover:opacity-70"
+              className="flex-1 transition-opacity hover:opacity-70"
               style={{
                 height: on ? 44 : 24,
                 minWidth: on ? 3 : undefined,

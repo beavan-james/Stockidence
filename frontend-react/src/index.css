@@ -52,14 +52,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Text filled with the brand gradient (used once per page, on the lede) */
-.text-gradient {
-  background: linear-gradient(90deg, var(--color-accent), var(--color-cobalt));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 /* Soft brand glow behind a page header; the only decorative gradient */
 .hero-glow {
   position: relative;

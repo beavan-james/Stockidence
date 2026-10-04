@@ -35,11 +35,11 @@ export function RankingsPage() {
           <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-7xl lg:text-[84px]">
             {lead && lead.share >= 0.3 ? (
               <>
-                This quarter the model leans into <em className="text-gradient not-italic">{lead.sector}.</em>
+                This quarter the model leans into <em className="not-italic text-accent">{lead.sector}.</em>
               </>
             ) : (
               <>
-                This quarter's favourites are <em className="text-gradient not-italic">spread across sectors.</em>
+                This quarter's favourites are <em className="not-italic text-accent">spread across sectors.</em>
               </>
             )}
           </h1>

@@ -20,14 +20,14 @@ export function ExcessBars({ quarters, height = 72 }: { quarters: ModelOverview[
             <div className="flex items-end border-b border-white/20" style={{ height }}>
               {r.excess > 0 && (
                 <div
-                  className="w-full rounded-t-[3px]"
+                  className="w-full"
                   style={{ height: h, background: "linear-gradient(180deg, var(--color-accent), var(--color-cobalt))" }}
                 />
               )}
             </div>
             <div style={{ height: down }}>
               {r.excess < 0 && (
-                <div className="w-full rounded-b-[3px] bg-[#3a4256]" style={{ height: Math.min(h, down) }} />
+                <div className="w-full bg-[#3a4256]" style={{ height: Math.min(h, down) }} />
               )}
             </div>
           </div>
@@ -45,9 +45,9 @@ export function WeightBars({ weights }: { weights: ModelOverview["weights"] }) {
       {weights.map((w) => (
         <div key={w.feature} className="grid grid-cols-[minmax(0,11rem)_1fr_2.5rem] items-center gap-3 text-sm">
           <span className="truncate text-ink-secondary">{featureMeta(w.feature).label}</span>
-          <div className="h-[7px] overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="h-[7px] overflow-hidden bg-white/[0.06]">
             <div
-              className="h-full rounded-full"
+              className="h-full"
               style={{
                 width: `${(w.share / top) * 100}%`,
                 background: "linear-gradient(90deg, var(--color-cobalt), var(--color-accent))",
@@ -73,9 +73,9 @@ export function SectorTilt({ items }: { items: RankedTicker[] }) {
       {rows.map(([sector, count]) => (
         <div key={sector} className="grid grid-cols-[minmax(0,11rem)_1fr_1.75rem] items-center gap-3 text-sm">
           <span className="truncate text-ink-secondary">{sector}</span>
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="h-2 overflow-hidden bg-white/[0.06]">
             <div
-              className="h-full rounded-full"
+              className="h-full"
               style={{
                 width: `${(count / max) * 100}%`,
                 background: "linear-gradient(90deg, var(--color-cobalt), var(--color-accent))",

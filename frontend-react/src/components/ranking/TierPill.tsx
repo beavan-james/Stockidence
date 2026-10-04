@@ -21,7 +21,7 @@ export function TierLegend() {
     <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
       {TIER_NAMES.map((name, i) => (
         <span key={name} className="inline-flex items-center gap-1.5">
-          <i className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: TIER_COLORS[i] }} />
+          <i className="inline-block h-2.5 w-2.5" style={{ background: TIER_COLORS[i] }} />
           {name}
         </span>
       ))}

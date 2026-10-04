@@ -85,7 +85,7 @@ function Contributions({ features }: { features: FeatureContribution[] }) {
             <div className="relative col-span-2 h-3.5 md:col-span-1">
               <div className="absolute inset-y-[-6px] left-1/2 w-px bg-white/20" />
               <div
-                className={`absolute inset-y-0 ${up ? "rounded-r" : "rounded-l bg-[#3a4256]"}`}
+                className={`absolute inset-y-0 ${up ? "" : "bg-[#3a4256]"}`}
                 style={{
                   left: up ? "50%" : `${50 - w}%`,
                   width: `${w}%`,
