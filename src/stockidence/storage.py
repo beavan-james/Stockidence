@@ -98,6 +98,9 @@ def _migrate_gainers_losers_bucket(con) -> None:
     ).fetchone()[0]
     if has_bucket:
         return
+    # One transaction: a crash mid-rebuild leaves the old table untouched
+    # rather than a half-built _v2 that would block the next attempt.
+    con.execute("BEGIN TRANSACTION")
     con.execute(
         """
         CREATE TABLE raw.raw_gainers_losers_v2 (
@@ -121,6 +124,7 @@ def _migrate_gainers_losers_bucket(con) -> None:
     )
     con.execute("DROP TABLE raw.raw_gainers_losers")
     con.execute("ALTER TABLE raw.raw_gainers_losers_v2 RENAME TO raw_gainers_losers")
+    con.execute("COMMIT")
 
 
 @dataclass(frozen=True)
