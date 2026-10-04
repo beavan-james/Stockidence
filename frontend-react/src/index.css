@@ -1,11 +1,11 @@
 @import "@fontsource-variable/inter-tight";
 @import "@fontsource/instrument-serif/400.css";
-@import "@fontsource/instrument-serif/400-italic.css";
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter Tight Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  /* One typeface site-wide; the serif is reserved for the header wordmark. */
+  --font-logo: "Instrument Serif", ui-serif, Georgia, serif;
 
   /* Surfaces: blue-black canvas, layered panels, hairline borders */
   --color-bg: #090c14;

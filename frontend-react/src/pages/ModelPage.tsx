@@ -8,8 +8,8 @@ import { featureMeta } from "@/lib/features";
 import { quarterLabel, snapshotLabel } from "@/lib/tiers";
 import type { ModelValidation } from "@/types/api";
 
-const PANEL =
-  "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.035] to-white/[0.01] p-7";
+// Sections are separated by a hairline rule, not boxed panels.
+const PANEL = "border-t border-line pt-6";
 
 const pct = (v: number | null, sign = false) =>
   v == null ? "—" : `${sign && v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(1)}%`;
@@ -44,7 +44,7 @@ function RankingQuality({ v }: { v: ModelValidation }) {
   ];
   return (
     <section className="pb-16">
-      <h2 className="font-display text-4xl tracking-tight">Ranking quality</h2>
+      <h2 className="font-medium text-4xl tracking-tight">Ranking quality</h2>
       <p className="mt-3 max-w-2xl leading-relaxed text-ink-secondary">
         The same walk-forward test, graded on the whole list rather than one index: how well the
         order matched what actually happened, and how far the head of the list pulled ahead of
@@ -52,7 +52,7 @@ function RankingQuality({ v }: { v: ModelValidation }) {
       </p>
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_1.4fr]">
         <div className={PANEL}>
-          <p className="num font-display text-7xl leading-none tracking-tight">
+          <p className="num font-medium text-7xl leading-none tracking-tight">
             {v.rank_ic >= 0 ? "+" : "−"}
             {Math.abs(v.rank_ic).toFixed(3)}
           </p>
@@ -129,8 +129,8 @@ export function ModelPage() {
     <div>
       <section className="hero-glow pb-14">
         <p className="pt-10 text-xs uppercase tracking-[0.14em] text-ink-secondary">The model</p>
-        <h1 className="mt-4 max-w-4xl font-display text-5xl leading-[1.02] tracking-tight sm:text-7xl">
-          Ranked, not predicted. <em className="text-gradient">Tested before it's trusted.</em>
+        <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-7xl">
+          Ranked, not predicted. <em className="text-gradient not-italic">Tested before it's trusted.</em>
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-secondary">
           Stockidence orders stocks by how likely they are to beat the rest of the list next
@@ -139,7 +139,7 @@ export function ModelPage() {
       </section>
 
       <section className="pb-16">
-        <h2 className="font-display text-4xl tracking-tight">Track record</h2>
+        <h2 className="font-medium text-4xl tracking-tight">Track record</h2>
         {overview.isPending ? (
           <Skeleton className="mt-6 h-64" />
         ) : !o || o.summary.quarters === 0 ? (
@@ -149,7 +149,7 @@ export function ModelPage() {
         ) : (
           <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_1.4fr]">
             <div className={PANEL}>
-              <p className="num font-display text-7xl leading-none tracking-tight">
+              <p className="num font-medium text-7xl leading-none tracking-tight">
                 {pct(o.summary.avg_excess_vs_spx, true).replace("%", "")}
                 <span className="text-3xl"> pp</span>
               </p>
@@ -216,7 +216,7 @@ export function ModelPage() {
 
       {o && o.weights.length > 0 && (
         <section className="pb-16">
-          <h2 className="font-display text-4xl tracking-tight">What it pays attention to</h2>
+          <h2 className="font-medium text-4xl tracking-tight">What it pays attention to</h2>
           <p className="mt-3 max-w-2xl leading-relaxed text-ink-secondary">
             A tree model has no fixed weights, so this is the share of a typical stock's score
             explained by each input in the {quarterLabel(o.as_of!)} ranking. Each stock's page shows
@@ -251,12 +251,12 @@ export function ModelPage() {
       )}
 
       <section className="pb-10">
-        <h2 className="font-display text-4xl tracking-tight">How it works</h2>
+        <h2 className="font-medium text-4xl tracking-tight">How it works</h2>
         <ol className="mt-6 grid gap-6 md:grid-cols-2">
           {STEPS.map((s, i) => (
             <li key={s.title} className={PANEL}>
               <span className="num text-sm text-accent">0{i + 1}</span>
-              <h3 className="mt-2 font-display text-2xl">{s.title}</h3>
+              <h3 className="mt-2 font-medium text-2xl">{s.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{s.body}</p>
             </li>
           ))}

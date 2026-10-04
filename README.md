@@ -33,8 +33,9 @@ score).
 whose data it uses — and is for the quarter after it: the 2026-09-30 snapshot
 is the Q4 2026 ranking. Only finished quarters are ranked.
 
-**Design.** Dark blue-black canvas, Instrument Serif headings with Inter Tight
-text, and one brand gradient (light blue → cobalt) that doubles as the tier
+**Design.** Dark blue-black canvas, one typeface (Inter Tight) throughout, with
+Instrument Serif kept for the header wordmark only. Sections are separated by
+hairline rules rather than boxed cards. One brand gradient (light blue → cobalt) that doubles as the tier
 scale: brighter means more favoured. No decorative motion; colour is reserved
 for meaning (tiers, gains/losses).
 

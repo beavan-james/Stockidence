@@ -36,7 +36,7 @@ export function MarketPage() {
                 <p className="pt-10 text-xs uppercase tracking-[0.14em] text-ink-secondary">
                     Market
                 </p>
-                <h1 className="mt-4 font-display text-5xl tracking-tight sm:text-6xl">
+                <h1 className="mt-4 font-medium text-5xl tracking-tight sm:text-6xl">
                     Around the market
                 </h1>
                 <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-secondary">
@@ -49,7 +49,7 @@ export function MarketPage() {
 
             {movers.data || movers.isError ? (
                 <section className="space-y-5">
-                    <h2 className="font-display text-3xl tracking-tight">
+                    <h2 className="font-medium text-3xl tracking-tight">
                         Daily movers
                     </h2>
                     {!movers.data ? (
@@ -70,7 +70,7 @@ export function MarketPage() {
             ) : null}
 
             <section className="space-y-5">
-                <h2 className="font-display text-3xl tracking-tight">
+                <h2 className="font-medium text-3xl tracking-tight">
                     Economy &amp; commodities
                 </h2>
                 {macro.data && macro.data.length > 0 && (
@@ -82,14 +82,14 @@ export function MarketPage() {
             </section>
 
             <section className="space-y-5">
-                <h2 className="font-display text-3xl tracking-tight">
+                <h2 className="font-medium text-3xl tracking-tight">
                     News
                 </h2>
                 <NewsTable />
             </section>
 
             <section className="space-y-5">
-                <h2 className="font-display text-3xl tracking-tight">
+                <h2 className="font-medium text-3xl tracking-tight">
                     Calendars
                 </h2>
                 <div className="grid gap-4 lg:grid-cols-2">

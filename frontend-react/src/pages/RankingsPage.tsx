@@ -32,14 +32,14 @@ export function RankingsPage() {
         {rankings.isPending ? (
           <Skeleton className="mt-5 h-40 max-w-3xl" />
         ) : (
-          <h1 className="mt-4 max-w-4xl font-display text-5xl leading-[1.02] tracking-tight sm:text-7xl lg:text-[84px]">
+          <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-7xl lg:text-[84px]">
             {lead && lead.share >= 0.3 ? (
               <>
-                This quarter the model leans into <em className="text-gradient">{lead.sector}.</em>
+                This quarter the model leans into <em className="text-gradient not-italic">{lead.sector}.</em>
               </>
             ) : (
               <>
-                This quarter's favourites are <em className="text-gradient">spread across sectors.</em>
+                This quarter's favourites are <em className="text-gradient not-italic">spread across sectors.</em>
               </>
             )}
           </h1>
@@ -64,7 +64,7 @@ export function RankingsPage() {
       <section className="grid gap-12 pb-16 lg:grid-cols-[1.55fr_1fr]">
         <div>
           <div className="mb-4 flex items-baseline justify-between">
-            <h2 className="font-display text-4xl tracking-tight">Top of the list</h2>
+            <h2 className="font-medium text-4xl tracking-tight">Top of the list</h2>
             <a href="#all" className="text-sm text-ink-secondary hover:text-ink">
               View all {n} ↓
             </a>
@@ -76,16 +76,16 @@ export function RankingsPage() {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-10">
           {summary?.avg_excess_vs_spx != null && (
-            <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.035] to-white/[0.01] p-7">
+            <div className="border-t border-line pt-6">
               <div className="flex items-baseline justify-between">
-                <h3 className="font-display text-2xl">Track record</h3>
+                <h3 className="font-medium text-2xl">Track record</h3>
                 <Link to="/model" className="text-sm text-ink-secondary hover:text-ink">
                   Details →
                 </Link>
               </div>
-              <p className="num mt-4 font-display text-6xl leading-none tracking-tight">
+              <p className="num mt-4 font-medium text-6xl leading-none tracking-tight">
                 {summary.avg_excess_vs_spx >= 0 ? "+" : "−"}
                 {Math.abs(summary.avg_excess_vs_spx * 100).toFixed(1)}
                 <span className="text-3xl"> pp</span>
@@ -110,8 +110,8 @@ export function RankingsPage() {
             </div>
           )}
           {n > 0 && (
-            <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.035] to-white/[0.01] p-7">
-              <h3 className="mb-4 font-display text-2xl">Where the top fifth sits</h3>
+            <div className="border-t border-line pt-6">
+              <h3 className="mb-4 font-medium text-2xl">Where the top fifth sits</h3>
               <SectorTilt items={items} />
             </div>
           )}
@@ -119,7 +119,7 @@ export function RankingsPage() {
       </section>
 
       <section id="all" className="scroll-mt-24 pb-10">
-        <h2 className="mb-4 font-display text-4xl tracking-tight">All {n} rankings</h2>
+        <h2 className="mb-4 font-medium text-4xl tracking-tight">All {n} rankings</h2>
         {n > 0 && <RankingsTable items={items} />}
       </section>
     </div>

@@ -11,8 +11,8 @@ import { featureMeta, formatFeature, formatPoints } from "@/lib/features";
 import { TIER_COLORS, TIER_NAMES, quarterLabel } from "@/lib/tiers";
 import type { FeatureContribution } from "@/types/api";
 
-const PANEL =
-  "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.035] to-white/[0.01] p-7";
+// Sections are separated by a hairline rule, not boxed panels.
+const PANEL = "border-t border-line pt-6";
 
 /** "Strong on momentum, held back by risk" from per-group net contributions. */
 function verdict(features: FeatureContribution[]): { title: string; body: string } | null {
@@ -130,7 +130,7 @@ export function StockPage() {
     const missing = detail.error instanceof ApiError && detail.error.status === 404;
     return (
       <div className="hero-glow py-24">
-        <h1 className="font-display text-6xl tracking-tight">{symbol}</h1>
+        <h1 className="font-medium text-6xl tracking-tight">{symbol}</h1>
         <p className="mt-4 max-w-xl text-lg text-ink-secondary">
           {missing
             ? `${symbol} isn't in this quarter's ranking. The model only ranks stocks with enough price and fundamentals history.`
@@ -159,7 +159,7 @@ export function StockPage() {
         </p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-8">
           <div>
-            <h1 className="font-display text-7xl leading-[0.9] tracking-tight sm:text-[112px]">{d.ticker}</h1>
+            <h1 className="font-medium text-7xl leading-[0.9] tracking-tight sm:text-[112px]">{d.ticker}</h1>
             <div className="mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-2 text-lg text-ink-secondary">
               <span>
                 {d.company_name ?? d.ticker}
@@ -216,7 +216,7 @@ export function StockPage() {
 
       <section className="grid gap-12 pb-10 lg:grid-cols-[1.7fr_1fr]">
         <div>
-          <h2 className="font-display text-4xl tracking-tight">How the model got here</h2>
+          <h2 className="font-medium text-4xl tracking-tight">How the model got here</h2>
           {d.features.length === 0 ? (
             <p className="mt-4 max-w-xl leading-relaxed text-ink-secondary">
               The input-by-input breakdown is produced when the model retrains. It will appear here
@@ -229,7 +229,7 @@ export function StockPage() {
                 pushes it up or down. These are the end-of-quarter values the model saw, next to the
                 median across all {d.universe_size} ranked stocks.
               </p>
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white/[0.03] px-5 py-3.5 text-sm text-ink-secondary">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3.5 text-sm text-ink-secondary">
                 <span>
                   Model baseline <b className="num font-medium text-ink">0.0</b>
                 </span>
@@ -252,16 +252,16 @@ export function StockPage() {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-10">
           {v && (
             <div className={PANEL}>
-              <h3 className="font-display text-[28px] leading-tight">{v.title}</h3>
+              <h3 className="font-medium text-[28px] leading-tight">{v.title}</h3>
               {v.body && <p className="mt-3 text-sm leading-relaxed text-ink-secondary">{v.body}</p>}
             </div>
           )}
           {overview.data && overview.data.weights.length > 0 && (
             <div className={PANEL}>
-              <h3 className="font-display text-[28px]">What the model weighs most</h3>
+              <h3 className="font-medium text-[28px]">What the model weighs most</h3>
               <p className="mb-5 mt-2 text-sm leading-relaxed text-ink-secondary">
                 Share of a typical stock's score explained by each input, across this quarter's list.
               </p>
