@@ -45,7 +45,10 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_quotes": [("ticker", "VARCHAR")],
     "raw_prices_daily": [("ticker", "VARCHAR"), ("date", "DATE")],
     "raw_stock_symbols": [("mic", "VARCHAR"), ("symbol", "VARCHAR")],
-    "raw_gainers_losers": [("ticker", "VARCHAR"), ("date", "DATE")],
+    # bucket (top_gainers / top_losers / most_actively_traded) is part of the
+    # grain: a ticker can sit in two lists the same day, and keying on
+    # (ticker, date) alone kept only whichever list was written last.
+    "raw_gainers_losers": [("ticker", "VARCHAR"), ("date", "DATE"), ("bucket", "VARCHAR")],
     "raw_ipo_calendar": [("symbol", "VARCHAR"), ("date", "DATE")],
     "raw_earnings_calendar": [("symbol", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER")],
     "raw_news_articles": [("article_id", "VARCHAR")],
@@ -78,6 +81,46 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     # market-wide index series from FRED — keyed (series, date), not per ticker
     "raw_fred_market": [("series", "VARCHAR"), ("date", "DATE")],
 }
+
+
+def _migrate_gainers_losers_bucket(con) -> None:
+    """One-off: rebuild raw_gainers_losers keyed on (ticker, date, bucket).
+
+    Tables created before bucket joined the key have no bucket column, and
+    CREATE TABLE IF NOT EXISTS leaves them as they are. The bucket was always
+    in the payload, so existing rows keep it. Idempotent: a no-op once the
+    column exists.
+    """
+    has_bucket = con.execute(
+        "SELECT COUNT(*) FROM information_schema.columns"
+        " WHERE table_schema = 'raw' AND table_name = 'raw_gainers_losers'"
+        " AND column_name = 'bucket'"
+    ).fetchone()[0]
+    if has_bucket:
+        return
+    con.execute(
+        """
+        CREATE TABLE raw.raw_gainers_losers_v2 (
+            ticker     VARCHAR,
+            date       DATE,
+            bucket     VARCHAR,
+            payload    JSON NOT NULL,
+            fetched_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY (ticker, date, bucket)
+        )
+        """
+    )
+    con.execute(
+        """
+        INSERT INTO raw.raw_gainers_losers_v2
+        SELECT ticker, date,
+               COALESCE(json_extract_string(payload, '$.bucket'), 'unknown'),
+               payload, fetched_at
+        FROM raw.raw_gainers_losers
+        """
+    )
+    con.execute("DROP TABLE raw.raw_gainers_losers")
+    con.execute("ALTER TABLE raw.raw_gainers_losers_v2 RENAME TO raw_gainers_losers")
 
 
 @dataclass(frozen=True)
@@ -286,6 +329,7 @@ class Warehouse:
                     )
                     """
                 )
+            _migrate_gainers_losers_bucket(con)
             for table, keys in STAGING_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 # staging PK = the first two declared columns: (ticker, date)

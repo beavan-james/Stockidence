@@ -322,25 +322,57 @@ def get_commodities() -> list[dict]:
     return out
 
 
-def get_market_movers() -> dict:
-    """Top gainers, losers, and most actively traded, bucket-aggregated.
+MOVERS_LIMIT = 10
 
-    movers_as_of is the trading day the snapshot represents (max land date
-    in raw_gainers_losers) so the UI can show how fresh the table is; ''
-    for the demo fallback.
+
+def _mover_score(bucket: str, row: dict) -> float | None:
+    """Sort key for a mover list.
+
+    Gainers and losers rank by dollar change x volume (roughly % move x
+    dollars traded), so a big move on real money beats a penny stock's
+    percentage spike on a few thousand shares. Most active ranks by dollar
+    volume (price x volume) rather than Alpha Vantage's raw share count,
+    which sub-$1 stocks dominate.
+    """
+    volume = _num(row["volume"])
+    factor = _num(row["price"] if bucket == "most_actively_traded" else row["change_amount"])
+    if volume is None or factor is None:
+        return None
+    return factor * volume
+
+
+def _rank_movers(bucket: str, rows: list[dict]) -> list[dict]:
+    """Order one bucket by its score (losers most negative first), unscored
+    rows last, capped at MOVERS_LIMIT."""
+    scored, unscored = [], []
+    for row in rows:
+        score = _mover_score(bucket, row)
+        if score is None:
+            unscored.append(row)
+        else:
+            scored.append((score, row))
+    scored.sort(key=lambda pair: pair[0], reverse=bucket != "top_losers")
+    return ([row for _, row in scored] + unscored)[:MOVERS_LIMIT]
+
+
+def get_market_movers() -> dict:
+    """Top gainers, losers, and most actively traded from the latest snapshot.
+
+    Only the newest land date is read, so earlier days' movers never leak in
+    (and a weekend or holiday shows the last trading day's snapshot). Each
+    list is ranked by _mover_score and capped at MOVERS_LIMIT. movers_as_of
+    is that snapshot's date so the UI can show how fresh it is; '' for the
+    demo fallback.
     """
     rows = _read(
         """
-        SELECT ticker,
-               json_extract_string(payload, '$.bucket'),
+        SELECT ticker, bucket, date,
                json_extract_string(payload, '$.price'),
                json_extract_string(payload, '$.change_amount'),
                json_extract_string(payload, '$.change_percentage'),
                json_extract_string(payload, '$.volume')
-        FROM (
-            SELECT *, ROW_NUMBER() OVER (PARTITION BY ticker, json_extract_string(payload, '$.bucket') ORDER BY date DESC) rn
-            FROM raw.raw_gainers_losers)
-        WHERE rn = 1
+        FROM raw.raw_gainers_losers
+        WHERE date = (SELECT max(date) FROM raw.raw_gainers_losers)
         """
     )
     if not rows:
@@ -348,16 +380,10 @@ def get_market_movers() -> dict:
             "metadata": "Top gainers, losers, and most actively traded US tickers (demo)",
             "last_updated": _now() + " US/Eastern",
             "movers_as_of": "",
-            "top_gainers": _decorate(_DEMO_MOVERS["top_gainers"]),
-            "top_losers": _decorate(_DEMO_MOVERS["top_losers"]),
-            "most_actively_traded": _decorate(_DEMO_MOVERS["most_actively_traded"]),
+            **{bucket: _decorate(_rank_movers(bucket, items)) for bucket, items in _DEMO_MOVERS.items()},
         }
-    as_of_rows = _read("SELECT max(date) FROM raw.raw_gainers_losers")
-    movers_as_of = (
-        _fmt_fetched(as_of_rows[0][0]) if as_of_rows and as_of_rows[0][0] else ""
-    )
     movers: dict[str, list[dict]] = {"top_gainers": [], "top_losers": [], "most_actively_traded": []}
-    for ticker, bucket, price, change_amount, change_percentage, volume in rows:
+    for ticker, bucket, _day, price, change_amount, change_percentage, volume in rows:
         if bucket in movers and price is not None:
             movers[bucket].append({
                 "ticker": ticker, "price": price, "change_amount": change_amount,
@@ -366,10 +392,8 @@ def get_market_movers() -> dict:
     return {
         "metadata": "Top gainers, losers, and most actively traded US tickers",
         "last_updated": _now() + " US/Eastern",
-        "movers_as_of": movers_as_of,
-        "top_gainers": _decorate(movers["top_gainers"]),
-        "top_losers": _decorate(movers["top_losers"]),
-        "most_actively_traded": _decorate(movers["most_actively_traded"]),
+        "movers_as_of": _fmt_fetched(rows[0][2]),
+        **{bucket: _decorate(_rank_movers(bucket, items)) for bucket, items in movers.items()},
     }
 
 

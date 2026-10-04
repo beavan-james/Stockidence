@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 
 import { CommoditiesRow, MacroGrid } from "@/components/discover/MacroCards";
 import { EarningsCalendar, IpoCalendar } from "@/components/discover/Calendars";
@@ -11,33 +11,6 @@ import {
     useMacro,
     useMovers,
 } from "@/hooks/queries";
-import type { Mover } from "@/types/api";
-
-function parseVolume(m: Mover): number {
-    return parseInt(m.volume, 10) || 0;
-}
-
-function parseChangePct(m: Mover): number {
-    return parseFloat(m.change_percentage) || 0;
-}
-
-function processMovers(gainers: Mover[], losers: Mover[], active: Mover[]) {
-    const volumeThreshold = 1_000_000;
-
-    const sortedGainers = [...gainers]
-        .filter((m) => parseVolume(m) > volumeThreshold)
-        .sort((a, b) => parseChangePct(b) - parseChangePct(a));
-
-    const sortedLosers = [...losers]
-        .filter((m) => parseVolume(m) > volumeThreshold)
-        .sort((a, b) => parseChangePct(a) - parseChangePct(b));
-
-    const sortedActive = [...active].sort(
-        (a, b) => parseVolume(b) - parseVolume(a)
-    );
-
-    return { sortedGainers, sortedLosers, sortedActive };
-}
 
 export function MarketPage() {
     const movers = useMovers();
@@ -50,17 +23,12 @@ export function MarketPage() {
         document.title = "Market | Stockidence";
     }, []);
 
-    const { sortedGainers, sortedLosers, sortedActive } = useMemo(
-        () =>
-            movers.data
-                ? processMovers(
-                      movers.data.top_gainers,
-                      movers.data.top_losers,
-                      movers.data.most_actively_traded
-                  )
-                : { sortedGainers: [], sortedLosers: [], sortedActive: [] },
-        [movers.data]
-    );
+    // The API returns each list already ranked and capped (latest snapshot
+    // only): gainers/losers by dollar change x volume, most active by dollar
+    // volume. Render them as-is.
+    const gainers = movers.data?.top_gainers ?? [];
+    const losers = movers.data?.top_losers ?? [];
+    const active = movers.data?.most_actively_traded ?? [];
 
     return (
         <div className="space-y-14 pb-10">
@@ -90,11 +58,11 @@ export function MarketPage() {
                         </p>
                     ) : (
                     <div className="grid gap-4 lg:grid-cols-3">
-                        <MoverTable title="Top gainers" rows={sortedGainers} />
-                        <MoverTable title="Top losers" rows={sortedLosers} />
+                        <MoverTable title="Top gainers" rows={gainers} />
+                        <MoverTable title="Top losers" rows={losers} />
                         <MoverTable
                             title="Most actively traded"
-                            rows={sortedActive}
+                            rows={active}
                         />
                     </div>
                     )}

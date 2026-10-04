@@ -250,13 +250,13 @@ def normalize_stock_symbols(payload: list[dict[str, Any]], symbol: str, now: dat
 def normalize_gainers_losers(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
     """Alpha Vantage TOP_GAINERS_LOSERS: one row per mover entry.
 
-    A ticker can appear in more than one bucket the same day; rows upsert on
-    (ticker, date) so the last bucket written wins — acceptable for a
-    post-close snapshot table.
+    A ticker can appear in more than one bucket the same day, so the bucket
+    is part of the key (ticker, date, bucket).
     """
     day = now.date()
     rows = [
-        {"ticker": entry["ticker"], "date": day, "payload": {**entry, "bucket": bucket}}
+        {"ticker": entry["ticker"], "date": day, "bucket": bucket,
+         "payload": {**entry, "bucket": bucket}}
         for bucket in ("top_gainers", "top_losers", "most_actively_traded")
         for entry in payload.get(bucket, [])
         if entry.get("ticker")
