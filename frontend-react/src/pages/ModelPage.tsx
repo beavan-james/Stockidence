@@ -5,7 +5,8 @@ import { ExcessBars } from "@/components/ranking/ModelCharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useModelOverview } from "@/hooks/queries";
 import { featureMeta } from "@/lib/features";
-import { quarterLabel } from "@/lib/tiers";
+import { quarterLabel, snapshotLabel } from "@/lib/tiers";
+import type { ModelValidation } from "@/types/api";
 
 const PANEL =
   "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.035] to-white/[0.01] p-7";
@@ -31,6 +32,88 @@ const STEPS = [
     body: "On the first day of each quarter the data is refreshed, the model is retrained on all history, and the newest quarter's stocks are ranked. Each ranking is kept, so a stock's movement can be followed over time.",
   },
 ];
+
+const pp = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)} pp`;
+
+/** Walk-forward ranking quality from the latest retrain (mart.model_validation). */
+function RankingQuality({ v }: { v: ModelValidation }) {
+  const heads = [
+    { label: "Top 10", excess: v.top10_excess, t: v.top10_t, hit: v.top10_hit },
+    { label: "Top 25", excess: v.top25_excess, t: v.top25_t, hit: v.top25_hit },
+    { label: "Top fifth", excess: v.topq_excess, t: v.topq_t, hit: v.topq_hit },
+  ];
+  return (
+    <section className="pb-16">
+      <h2 className="font-display text-4xl tracking-tight">Ranking quality</h2>
+      <p className="mt-3 max-w-2xl leading-relaxed text-ink-secondary">
+        The same walk-forward test, graded on the whole list rather than one index: how well the
+        order matched what actually happened, and how far the head of the list pulled ahead of
+        the rest.
+      </p>
+      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_1.4fr]">
+        <div className={PANEL}>
+          <p className="num font-display text-7xl leading-none tracking-tight">
+            {v.rank_ic >= 0 ? "+" : "−"}
+            {Math.abs(v.rank_ic).toFixed(3)}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-ink-secondary">
+            Rank IC: the correlation between the model's order and the order stocks actually
+            finished in, pooled over {v.quarters} quarters. 0 is a random order.
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-5 border-t border-line pt-5">
+            <div>
+              <p className="num text-3xl">{Math.round(v.precision10 * 100)}%</p>
+              <p className="text-xs text-ink-muted">
+                of the top 10 finished in the real top 10 (random {Math.round(v.precision10_random * 100)}%)
+              </p>
+            </div>
+            <div>
+              <p className="num text-3xl">{Math.round(v.precision25 * 100)}%</p>
+              <p className="text-xs text-ink-muted">
+                of the top 25 finished in the real top 25 (random {Math.round(v.precision25_random * 100)}%)
+              </p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wider text-ink-muted">
+              <tr>
+                <th className="pb-2 font-normal">Picks</th>
+                <th className="pb-2 text-right font-normal">Lead over list</th>
+                <th className="pb-2 text-right font-normal">Quarters ahead</th>
+                <th className="pb-2 text-right font-normal">t-stat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {heads.map((h) => (
+                <tr key={h.label} className="border-t border-line">
+                  <td className="py-3">{h.label}</td>
+                  <td
+                    className="num py-3 text-right font-medium"
+                    style={{ color: h.excess >= 0 ? "var(--color-accent-strong)" : "#8e97ad" }}
+                  >
+                    {pp(h.excess)}
+                  </td>
+                  <td className="num py-3 text-right text-ink-secondary">{Math.round(h.hit * 100)}%</td>
+                  <td className="num py-3 text-right text-ink-secondary">{h.t.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-4 text-xs leading-relaxed text-ink-muted">
+            Lead is the picks' average quarterly return minus the whole list's. A t-stat near 2 or
+            above is the usual bar for an edge unlikely to be luck. Tested on{" "}
+            {v.test_rows.toLocaleString("en-US")} stock-quarters; the model is trained on{" "}
+            {v.train_rows.toLocaleString("en-US")} rows across {v.train_tickers} stocks (
+            {snapshotLabel(v.train_first)} to {snapshotLabel(v.train_last)}). Measured{" "}
+            {snapshotLabel(v.run_at.slice(0, 10))}.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export function ModelPage() {
   const overview = useModelOverview();
@@ -128,6 +211,8 @@ export function ModelPage() {
           </div>
         )}
       </section>
+
+      {o?.validation && <RankingQuality v={o.validation} />}
 
       {o && o.weights.length > 0 && (
         <section className="pb-16">

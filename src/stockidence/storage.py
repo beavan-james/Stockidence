@@ -454,6 +454,39 @@ class Warehouse:
                 )
                 """
             )
+            # Walk-forward ranking quality, one row per retrain. The notebook
+            # used to only print these, and its output lives in a container
+            # every deploy recreates, so they were lost between retrains.
+            # Excess returns are vs the cohort's equal-weight mean; hit rates
+            # are the share of quarters with positive excess.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.model_validation (
+                    run_at TIMESTAMP NOT NULL PRIMARY KEY,
+                    as_of DATE,
+                    quarters INTEGER,
+                    test_rows INTEGER,
+                    rank_ic DOUBLE,
+                    top10_excess DOUBLE,
+                    top10_t DOUBLE,
+                    top10_hit DOUBLE,
+                    top25_excess DOUBLE,
+                    top25_t DOUBLE,
+                    top25_hit DOUBLE,
+                    topq_excess DOUBLE,
+                    topq_t DOUBLE,
+                    topq_hit DOUBLE,
+                    precision10 DOUBLE,
+                    precision10_random DOUBLE,
+                    precision25 DOUBLE,
+                    precision25_random DOUBLE,
+                    train_rows INTEGER,
+                    train_tickers INTEGER,
+                    train_first DATE,
+                    train_last DATE
+                )
+                """
+            )
             if con.execute("SELECT COUNT(*) FROM mart.model_rankings").fetchone()[0] == 0:
                 snapshot = _REPO_ROOT / "Model" / "artifacts" / "latest_rankings.json"
                 if snapshot.exists():

@@ -101,6 +101,34 @@ export interface TrackRecordQuarter {
   source: "backtest" | "live";
 }
 
+/** Walk-forward ranking quality from the latest retrain (mart.model_validation).
+ *  Excess returns are vs the whole ranked list; hit rates are the share of
+ *  quarters with positive excess. */
+export interface ModelValidation {
+  run_at: string;
+  as_of: string | null;
+  quarters: number;
+  test_rows: number;
+  rank_ic: number;
+  top10_excess: number;
+  top10_t: number;
+  top10_hit: number;
+  top25_excess: number;
+  top25_t: number;
+  top25_hit: number;
+  topq_excess: number;
+  topq_t: number;
+  topq_hit: number;
+  precision10: number;
+  precision10_random: number;
+  precision25: number;
+  precision25_random: number;
+  train_rows: number;
+  train_tickers: number;
+  train_first: string;
+  train_last: string;
+}
+
 export interface ModelOverview {
   as_of: string | null;
   weights: { feature: string; share: number }[];
@@ -110,6 +138,8 @@ export interface ModelOverview {
     avg_excess_vs_spx: number | null;
     hit_rate_vs_spx: number | null;
   };
+  /** Null until a retrain records it. */
+  validation: ModelValidation | null;
 }
 
 export interface SeriesPoint {

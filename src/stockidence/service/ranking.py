@@ -196,7 +196,8 @@ def _detail_payload(
 
 @_resilient
 def get_model_overview() -> dict:
-    """Cohort-wide input weights and the per-quarter track record."""
+    """Cohort-wide input weights, the per-quarter track record and the
+    latest retrain's walk-forward ranking-quality metrics."""
     from .warehouse import read_connect
 
     with read_connect() as con:
@@ -217,6 +218,7 @@ def get_model_overview() -> dict:
             if not _missing_table(exc):
                 raise
             latest, weights, track = None, [], []
+        validation = _latest_validation(con)
 
     total = sum(w for _, w in weights) or 1.0
     quarters = [
@@ -241,4 +243,26 @@ def get_model_overview() -> dict:
             "avg_excess_vs_spx": sum(vs_spx) / len(vs_spx) if vs_spx else None,
             "hit_rate_vs_spx": (sum(1 for x in vs_spx if x > 0) / len(vs_spx)) if vs_spx else None,
         },
+        "validation": validation,
+    }
+
+
+def _latest_validation(con) -> dict | None:
+    """Most recent retrain's mart.model_validation row; None before the first
+    retrain that records it (or before the table exists)."""
+    try:
+        cur = con.execute(
+            "SELECT * FROM mart.model_validation ORDER BY run_at DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+    except Exception as exc:
+        if not _missing_table(exc):
+            raise
+        return None
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return {
+        c: (v.isoformat() if hasattr(v, "isoformat") else v)
+        for c, v in zip(cols, row)
     }
