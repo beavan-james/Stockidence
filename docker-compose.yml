@@ -21,10 +21,29 @@ services:
       - dagster-webserver
     restart: unless-stopped
 
+  # Long-lived code server: loads stockidence.definitions once and serves
+  # it to the webserver and daemon over gRPC. Runs launched by the daemon
+  # execute in this container, so it carries the same data/home volumes.
+  dagster-code:
+    build: .
+    image: stockidence-backend:latest
+    command: dagster code-server start -m stockidence.definitions -h 0.0.0.0 -p 4000 --location-name stockidence
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /app/dagster_home
+      STOCKIDENCE_DB: /app/data/stockidence.duckdb
+    volumes:
+      - ./data:/app/data
+      - ./dagster_home:/app/dagster_home
+    restart: unless-stopped
+
   dagster-webserver:
     build: .
     image: stockidence-backend:latest
-    command: dagster-webserver -w /app/workspace.yaml -h 0.0.0.0 -p 3000
+    command: dagster-webserver -w /app/workspace.docker.yaml -h 0.0.0.0 -p 3000
+    depends_on:
+      - dagster-code
     env_file:
       - .env
     environment:
@@ -41,7 +60,9 @@ services:
   dagster-daemon:
     build: .
     image: stockidence-backend:latest
-    command: dagster-daemon run -w /app/workspace.yaml
+    command: dagster-daemon run -w /app/workspace.docker.yaml
+    depends_on:
+      - dagster-code
     env_file:
       - .env
     environment:

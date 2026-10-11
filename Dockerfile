@@ -26,7 +26,7 @@ RUN uv pip install --system .
 # Repo files the pipeline reads at runtime: Dagster workspace + notebook,
 # scripts and artifacts for the quarterly job. Model/datasets/ is excluded
 # (rebuilt by the job); data/ arrives as a volume; .env is NEVER baked in.
-COPY workspace.yaml dagster.yaml ./
+COPY workspace.yaml workspace.docker.yaml dagster.yaml ./
 COPY Model/ Model/
 
 # ipykernel spec for the retrain op's dedicated "stockidence" kernel is

@@ -53,6 +53,12 @@ if "$DOCKER" compose up --build -d >>"$LOG" 2>&1; then
         "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/api/health', timeout=10).read().decode())" \
         >>"$LOG" 2>&1; then
         log "deploy ok"
+        # Every rebuild leaves the previous images dangling plus build
+        # cache; on a 50 GB boot volume that fills the disk over many
+        # deploys. Only after a healthy deploy, so a rollback target isn't
+        # pruned mid-incident; tagged images and recent cache are kept.
+        "$DOCKER" image prune -f >>"$LOG" 2>&1 || true
+        "$DOCKER" builder prune -f --filter until=168h >>"$LOG" 2>&1 || true
     else
         log "HEALTH CHECK FAILED after deploy to $REMOTE"
     fi

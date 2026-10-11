@@ -1,0 +1,10 @@
+# Docker Compose only. The webserver and daemon connect to the long-lived
+# dagster-code container instead of each spawning their own code server
+# subprocess, which on this box was shut down and respawned about every
+# 65s ("No heartbeat received in 20 seconds"), re-importing the whole
+# package each time. Local `dagster dev` keeps using workspace.yaml.
+load_from:
+  - grpc_server:
+      host: dagster-code
+      port: 4000
+      location_name: stockidence

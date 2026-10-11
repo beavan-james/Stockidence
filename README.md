@@ -196,8 +196,9 @@ feature set, and refresh pipeline are documented in
 ## Deploy
 
 One always-free Oracle Ampere box (2 OCPU / 12 GB) runs the whole stack via
-Docker Compose — FastAPI, Dagster (webserver + daemon) and the SPA behind
-nginx (HTTPS on 443, port 80 redirects):
+Docker Compose — FastAPI, Dagster (a long-lived code server, webserver and
+daemon; see `workspace.docker.yaml`) and the SPA behind nginx (HTTPS on 443,
+port 80 redirects):
 
 ```bash
 cp .env.example .env   # fill in provider keys
