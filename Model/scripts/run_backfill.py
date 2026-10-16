@@ -52,9 +52,7 @@ ALL_TICKERS = [
 ]
 
 # Skip the hot-path quote endpoint — not needed for backfill.
-# ticker_news skipped too: it is the only Alpha Vantage endpoint and the
-# ML feature set no longer uses news/sentiment (also avoids the 25/day
-# free-tier limit entirely).
+# ticker_news skipped too: the ML feature set doesn't use news.
 SKIP_ENDPOINTS = {"quote", "ticker_news"}
 
 # Endpoints that need special dimension_key handling

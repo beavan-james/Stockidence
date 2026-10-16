@@ -42,7 +42,7 @@ export interface NewsItem {
   summary: string;
   source: string;
   overall_sentiment_score: number | null;
-  overall_sentiment_label: string;
+  overall_sentiment_label: string | null;
   sentiment_tickers: string;
 }
 

@@ -14,7 +14,7 @@ Design rules:
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Callable
 
 from ..storage import RAW_SCHEMA
@@ -282,33 +282,53 @@ def normalize_earnings_calendar(payload: dict[str, Any], symbol: str, now: datet
     return _single("raw_earnings_calendar", rows)
 
 
-def normalize_market_news(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
-    """Alpha Vantage NEWS_SENTIMENT: fan out to articles + ticker sentiment."""
+def _news_rows(items: list[dict[str, Any]], symbol: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    """Finnhub news items: fan out to articles + ticker links.
+
+    The stored payload keeps Finnhub's fields and adds the three keys the
+    news reader shares with the Alpha Vantage history already landed:
+    `title`, `time_published` (UTC 'YYYYMMDDTHHMMSS') and `ticker_sentiment`
+    (ticker links only; Finnhub has no sentiment on the free tier). Tickers
+    come from `related`, plus `symbol` for a per-ticker pull.
+    """
     articles: list[dict[str, Any]] = []
     ticker_rows: list[dict[str, Any]] = []
-    for item in payload.get("feed", []):
+    for item in items:
         url = item.get("url")
-        if not url:
+        published = item.get("datetime")
+        if not url or not isinstance(published, (int, float)):
             continue
         article_id = _article_id(url)
-        articles.append({"article_id": article_id, "payload": item})
-        for ts in item.get("ticker_sentiment", []):
-            if ts.get("ticker"):
-                ticker_rows.append(
-                    {"article_id": article_id, "ticker": ts["ticker"], "payload": ts}
-                )
+        tickers = [t.strip() for t in (item.get("related") or "").split(",") if t.strip()]
+        if symbol and symbol not in tickers:
+            tickers.append(symbol)
+        articles.append({
+            "article_id": article_id,
+            "payload": {
+                **item,
+                "title": item.get("headline"),
+                "time_published": datetime.fromtimestamp(published, timezone.utc).strftime("%Y%m%dT%H%M%S"),
+                "ticker_sentiment": [{"ticker": t} for t in tickers],
+            },
+        })
+        ticker_rows.extend(
+            {"article_id": article_id, "ticker": t, "payload": {"ticker": t}} for t in tickers
+        )
     return {"raw_news_articles": articles, "news_ticker_sentiment": ticker_rows}
+
+
+def normalize_market_news(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+    """Finnhub /news?category=general (dimension key is the endpoint name, not a ticker)."""
+    return _news_rows(payload)
 
 
 def normalize_ticker_news(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
     """Per-ticker deep-history pull: same fan-out as market_news, plus the
     one-row fetch marker that serves as the ticker_news watermark. The marker
-    leads the dict so it lands before the fan-out tables: Alpha Vantage calls
-    are the scarce resource, so once the response is in hand we must record
-    progress even if a later land step crashes — a slightly incomplete
-    history beats re-spending quota on every retry."""
-    rows = normalize_market_news(payload, symbol, now)
-    return {"ticker_news_fetches": [{"ticker": symbol}], **rows}
+    leads the dict so it lands before the fan-out tables: once the response
+    is in hand we record progress even if a later land step crashes — a
+    slightly incomplete history beats re-spending quota on every retry."""
+    return {"ticker_news_fetches": [{"ticker": symbol}], **_news_rows(payload, symbol)}
 
 
 NORMALIZERS: dict[str, Normalizer] = {

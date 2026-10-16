@@ -497,7 +497,10 @@ JSON samples are shown as they come back from the provider.
 - `AnalystRatingSell`
 - `AnalystRatingStrongSell`
 
-### News & Sentiments (Alpha Vantage)
+### News & Sentiments (Alpha Vantage) (No longer ingested)
+
+Moved off the free tier; `market_news` and `ticker_news` now pull Finnhub
+(below). Rows already landed in this shape stay in `raw_news_articles`.
 
 ```json
 {
@@ -527,11 +530,14 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
-### Company News (Finnhub) (Not in use)
+### Market News / Company News (Finnhub)
 
-Samples below are the provider shape. No ingestion path exists for company
-news — ticker-level sentiment is built from `News & Sentiments` ticker links
-plus earnings-call transcript tone.
+`market_news` calls `/news?category=general`; `ticker_news` calls
+`/company-news` for the trailing year. No sentiment (premium-only on
+Finnhub). The stored payload keeps the fields below and adds `title`
+(= `headline`), `time_published` (UTC `YYYYMMDDTHHMMSS`, from `datetime`) and
+`ticker_sentiment` (`[{"ticker": …}]` from `related`, ticker links only) so
+the news reader handles these and the older Alpha Vantage rows alike.
 
 - `category` — News category.
 - `datetime` — Published time in UNIX timestamp.

@@ -27,9 +27,9 @@ from ..mart.mart import rebuild_all_for_ticker
 from ..mart.scoring import score_ticker
 from ..storage import Warehouse
 
-# ticker_news is the only Alpha Vantage endpoint and the ML feature set no
-# longer uses news/sentiment (also avoids the 25/day free-tier limit
-# entirely). The hot-path quote stays IN: the profile badge and portfolio
+# ticker_news is skipped: the ML feature set doesn't use news, and the
+# scheduled market_news pulls keep the news page fresh. The hot-path quote
+# stays IN: the profile badge and portfolio
 # rows read raw_quotes, and its 1-minute TTL gate keeps the extra Finnhub
 # call to one per ticker per refresh.
 SKIP_ENDPOINTS = frozenset({"ticker_news"})
