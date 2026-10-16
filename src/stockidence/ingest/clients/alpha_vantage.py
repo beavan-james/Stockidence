@@ -1,7 +1,8 @@
 """Alpha Vantage API client.
 
 Used for persistent market-wide data (monthly: gold/silver + macro indices),
-weekday movers, daily market news, and the on-demand earnings call transcript.
+weekday movers, and the on-demand earnings call transcript. Market news
+moved to Finnhub when NEWS_SENTIMENT left the free tier.
 Does NOT cover prices/technicals — those moved to Twelve Data and derivation.
 """
 
@@ -81,20 +82,6 @@ class AlphaVantageClient(BaseClient):
 
     def top_gainers_losers(self) -> dict[str, Any]:
         return self._query("TOP_GAINERS_LOSERS")
-
-    # -- daily persistent --
-
-    def market_news(self, *, tickers: str | None = None, time_from: str | None = None,
-                    time_to: str | None = None, limit: int | None = 1000,
-                    sort: str = "LATEST") -> dict[str, Any]:
-        return self._query(
-            "NEWS_SENTIMENT",
-            tickers=tickers,
-            time_from=time_from,
-            time_to=time_to,
-            limit=limit,
-            sort=sort,
-        )
 
     # -- on-demand --
 

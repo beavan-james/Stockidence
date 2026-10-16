@@ -47,6 +47,9 @@ _SCHEDULED_DEFAULT_WINDOW_DAYS = 45
 # two years covers MIN_BARS replay plus slack while staying one API call.
 _PRICE_BACKFILL_DAYS = 5500
 
+# Finnhub's free tier serves one year of /company-news history.
+_COMPANY_NEWS_LOOKBACK_DAYS = 365
+
 
 @dataclass(frozen=True)
 class IngestResult:
@@ -111,9 +114,11 @@ class IngestEngine:
                 "from_date": f"{now.year}-01-01",
                 "to_date": now.date().isoformat(),
             },
-            "market_news": {"limit": 1000, "sort": "LATEST"},
-            "ticker_news": {"tickers": sym, "limit": 1000, "sort": "LATEST"},
-            "ticker_news": {"tickers": sym, "limit": 1000, "sort": "LATEST"},
+            "ticker_news": {
+                "symbol": sym,
+                "from_date": (now.date() - timedelta(days=_COMPANY_NEWS_LOOKBACK_DAYS)).isoformat(),
+                "to_date": now.date().isoformat(),
+            },
         }
         if spec.name == "earnings_call_transcript":
             parts = dimension_key.split("|")

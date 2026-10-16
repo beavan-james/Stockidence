@@ -9,8 +9,8 @@
 - **Top Gainers/Losers** — own table, key `(ticker, date)` (weekdays)
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
 - **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
-- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, overall_sentiment_score (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with ticker/date filters so paging never loads the full table)
-- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — relevance_score, ticker_sentiment_score. This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
+- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published (Finnhub general news; older Alpha Vantage rows also carry overall_sentiment_score) (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with ticker/date filters so paging never loads the full table)
+- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — from Finnhub's `related` field (older Alpha Vantage rows also carry relevance_score, ticker_sentiment_score). This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
 ---
 ## Real-Time / Ticker-Partitioned Data
 *Fetched on-demand per ticker via dynamic partitions, gated by a staleness check against `last_updated`.*
@@ -34,7 +34,7 @@
 Monthly: Commodities (AV), Macro indicators (AV), Stock Symbol (FH)
 Weekly: n/a
 Weekdays: IPO Calendar (FH), Earnings Calendar (FH), Top Gainers/Losers (AV)
-Daily: Market News (AV), Market Indexes (FRED)
+Daily: Market News (FH), Market Indexes (FRED)
 
 On Stock Lookup (Everytime): Quote (FH), Time Series (TD)
 On Stock Lookup (If stale): Company Profile 2 (FH), Basic Financials (FH), Financials As Reported (FH), Insider Sentiment (FH), Recommendation Trends (FH), EPS Surprises (FH), Peers (FH), Earnings Call Transcript (AV)

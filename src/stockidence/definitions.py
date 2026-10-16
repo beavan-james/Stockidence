@@ -138,7 +138,7 @@ def weekdays_schedule() -> dict:  # noqa: ANN401
 @schedule(job=daily_job, cron_schedule="0 1 * * *",
           default_status=DefaultScheduleStatus.RUNNING)
 def daily_schedule() -> dict:  # noqa: ANN401
-    """Daily market-persistent news sentiment."""
+    """Daily market news (Finnhub) plus the FRED market indexes."""
     return {}
 
 
@@ -152,8 +152,8 @@ def ingest_news_op(context) -> None:
 
 @job(name="news_ingest")
 def news_job():
-    """News-only pull (Alpha Vantage market_news, limit=1000, upsert on
-    article_id so repeats are idempotent). The 01:00 daily job also pulls
+    """News-only pull (Finnhub general news, latest ~100 articles, upsert
+    on article_id so repeats are idempotent). The 01:00 daily job also pulls
     news; these two add the morning/evening refreshes."""
     ingest_news_op()
 
@@ -161,14 +161,14 @@ def news_job():
 @schedule(job=news_job, cron_schedule="0 11 * * *",
           default_status=DefaultScheduleStatus.RUNNING)
 def news_morning_schedule() -> dict:  # noqa: ANN401
-    """11:00 UTC (~7am ET): morning news + sentiment pull."""
+    """11:00 UTC (~7am ET): morning news pull."""
     return {}
 
 
 @schedule(job=news_job, cron_schedule="0 23 * * *",
           default_status=DefaultScheduleStatus.RUNNING)
 def news_evening_schedule() -> dict:  # noqa: ANN401
-    """23:00 UTC (~7pm ET): evening news + sentiment pull."""
+    """23:00 UTC (~7pm ET): evening news pull."""
     return {}
 
 

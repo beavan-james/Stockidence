@@ -1,7 +1,8 @@
 """Finnhub API client.
 
 Covers the hot-path quote, on-demand per-ticker endpoints (profile, financials,
-earnings, insider/analyst sentiment, peers), and weekday calendars / symbol list.
+earnings, insider/analyst sentiment, peers, company news), daily market news,
+and weekday calendars / symbol list.
 """
 
 from __future__ import annotations
@@ -92,6 +93,15 @@ class FinnhubClient(BaseClient):
         self._raise_for_api_error(payload, path="/company-news")
         if not isinstance(payload, list):
             raise InvalidResponseError("/company-news: expected array")
+        return payload
+
+    # -- daily persistent --
+
+    def general_news(self, *, category: str = "general") -> list[dict[str, Any]]:
+        payload = self.request("GET", "/news", params=build_query({"category": category}))
+        self._raise_for_api_error(payload, path="/news")
+        if not isinstance(payload, list):
+            raise InvalidResponseError("/news: expected array")
         return payload
 
     # -- weekday persistent --

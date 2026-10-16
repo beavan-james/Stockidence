@@ -133,14 +133,16 @@ export function NewsTable() {
                   <p className="text-sm font-medium leading-snug group-hover:text-accent-strong">
                     {n.title}
                   </p>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
-                      sentimentStyle(n.overall_sentiment_label),
-                    )}
-                  >
-                    {n.overall_sentiment_label.replace("Somewhat-", "S·")}
-                  </span>
+                  {n.overall_sentiment_label && (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
+                        sentimentStyle(n.overall_sentiment_label),
+                      )}
+                    >
+                      {n.overall_sentiment_label.replace("Somewhat-", "S·")}
+                    </span>
+                  )}
                 </div>
                 <p className="num text-[11px] text-ink-muted">
                   {n.time_published} · {n.source}

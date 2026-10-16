@@ -205,14 +205,15 @@ _REGISTRY: list[EndpointSpec] = [
     # --- persistent: daily ---
     EndpointSpec(
         name="market_news",
-        provider=Provider.ALPHA_VANTAGE,
-        method="market_news",
+        provider=Provider.FINNHUB,
+        method="general_news",
         trigger=Trigger.SCHEDULED,
         cadence=Cadence.DAILY,
         watermark=("article_id",),
         artifacts=("raw_news_articles", "news_ticker_sentiment"),
         ttl=timedelta(days=1),
-        notes="One response fans out to the article table and the ticker junction table",
+        notes="Finnhub /news?category=general (latest ~100 articles, no sentiment); "
+        "fans out to the article table and the ticker junction table",
     ),
     # --- persistent: daily, market-wide indexes via FRED ---
     EndpointSpec(
@@ -320,14 +321,14 @@ _REGISTRY: list[EndpointSpec] = [
     ),
     EndpointSpec(
         name="ticker_news",
-        provider=Provider.ALPHA_VANTAGE,
-        method="market_news",
+        provider=Provider.FINNHUB,
+        method="company_news",
         trigger=Trigger.ON_DEMAND_STALE,
         cadence=Cadence.MONTHLY,
         watermark=("ticker",),
         artifacts=("ticker_news_fetches", "raw_news_articles", "news_ticker_sentiment"),
         ttl=timedelta(days=30),
-        notes="per-ticker news sentiment (tickers=<sym>, limit=1000); "
+        notes="Finnhub /company-news for the trailing year (free-tier limit); "
         "refreshes monthly on ticker lookup; ongoing freshness also "
         "comes from the daily market_news job landing into the same tables",
     ),
