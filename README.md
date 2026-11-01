@@ -128,40 +128,47 @@ before that quarter, then its picks are graded on the returns that
 followed — 26 out-of-sample quarters. No lookahead: features are
 point-in-time snapshots, targets are forward returns.
 
-**Latest retrain** (Q4 2026 ranking, 2026-09-30 snapshot, 328 ranked stocks;
-universe expanded to every ticker in the warehouse):
+**Latest walk-forward** (2026-11-01, with the query-group fix below; local
+warehouse copy, 15,569 rows × 377 tickers, snapshots 2012-09-30 →
+2026-03-31):
 
 | Metric | Result |
 | ------ | ------ |
-| Top-20 vs S&P 500 | **+4.57 pp/qtr**, beats the index **62%** of quarters |
-| Top-20 vs the whole ranked list | **+4.33 pp/qtr** |
-| Out-of-sample quarters / test rows | 26 / 7,691 |
+| Top-20 vs S&P 500 | **+4.77 pp/qtr** (t=+2.19), beats the index **73%** of quarters |
+| Top-20 vs the whole ranked list | **+4.47 pp/qtr** |
+| Out-of-sample quarters / test rows | 26 / 7,661 |
 
-Year by year, top-20 vs S&P 500 (pp/qtr, quarters ahead): 2019 +1.54 (2/4),
-2020 +12.84 (3/4), 2021 −4.35 (1/4), 2022 +1.74 (2/4), 2023 +10.74 (3/4),
-2024 +2.14 (3/4), 2025 +10.20 (2/2).
+Year by year, top-20 vs S&P 500 (pp/qtr, quarters ahead): 2019 +3.63 (3/4),
+2020 +10.48 (4/4), 2021 −0.48 (3/4), 2022 −0.29 (2/4), 2023 +11.69 (4/4),
+2024 −0.41 (1/4), 2025 +12.82 (2/2).
 
-**Ranking quality** (same walk-forward run, measured by the 2026-10-03
-`model_retrain`):
+**Ranking quality** (same walk-forward run):
 
 | Metric | Result |
 | ------ | ------ |
-| Rank IC, pooled (predicted vs realized rank) | +0.142 (random = 0) |
-| Top-10 excess over universe mean | +4.25 pp/qtr (t=+1.51, positive 62% of quarters) |
-| Top-25 excess over universe mean | +4.13 pp/qtr (t=+1.91, positive 62% of quarters) |
-| Top-quintile excess | +2.62 pp/qtr (t=+1.82, positive 62% of quarters) |
-| Precision@10 (predicted top-10 ∩ realized top-10) | 14.6% (random 3.4%) |
-| Precision@25 | 21.8% (random 8.5%) |
+| Rank IC, pooled (predicted vs realized rank) | +0.130 (random = 0) |
+| Top-10 excess over universe mean | +5.09 pp/qtr (t=+1.63, positive 69% of quarters) |
+| Top-25 excess over universe mean | +4.55 pp/qtr (t=+2.34, positive 77% of quarters) |
+| Top-quintile excess | +3.12 pp/qtr (t=+2.30, positive 69% of quarters) |
+| Precision@10 (predicted top-10 ∩ realized top-10) | 18.5% (random 3.4%) |
+| Precision@25 | 22.3% (random 8.5%) |
 
-The numbers came down from the previous run (15,874 rows × 377 tickers;
-rank IC +0.163 → +0.142, top-20 vs S&P +5.53 → +4.57 pp/qtr). The current
-fit trains on 15,916 rows × 380 tickers (snapshots 2012-09-30 → 2026-06-30)
-with corrected forward-return targets, so the two runs aren't strictly
-comparable. None of the excess-return t-stats clear 2.
+**Query-group fix (2026-11-01).** XGBoost's `set_group` reads consecutive
+row counts, but the dataset arrives in (ticker, date) order, so each
+"query group" used to be a block of mostly one ticker's history instead of
+one quarter's cohort. The notebook now sorts by date first. On the same
+data the fix moved rank IC +0.144 → +0.130, top-10 excess +6.49 → +5.09 and
+top-20 vs S&P +5.65 → +4.77 pp/qtr. Averaged over 8 seeds the fix costs
+about 1.2 pp/qtr of top-10 excess (paired t=−1.4, not significant) and
+0.3 pp/qtr against the S&P; top-quintile excess is unchanged. The pooled-IC
+drop is the old groups rewarding cross-quarter ordering; per-date IC barely
+moved (+0.071 → +0.065).
 
-> The notebook's "beats S&P N% of quarters" line actually reports the share
-> of quarters where the top 20's return was positive (69% this run); the
-> hit rate against the S&P is 62%, matching `mart.model_track_record`.
+The live Q4 2026 ranking and the website's track record still come from the
+2026-10-03 retrain, which predates the fix (rank IC +0.142, top-20 vs S&P
++4.57 pp/qtr, 26 quarters / 7,691 test rows, fit on 15,916 rows × 380
+tickers). They pick up the fix at the next quarterly retrain (2027-01-01)
+or a manual `model_retrain`.
 
 **What it weighs now** (share of a typical stock's score, Q4 2026 ranking):
 average daily range 25%, worst 1-year drawdown 21%, 1-year price swing 12%,
@@ -171,9 +178,9 @@ cash / assets 7%, distance from 52-week high 6%, return on assets 6%,
 ### Honest limits
 
 - **Quarterly grain, slow feedback.** Only ~4 fresh observations per year —
-  regime shifts (e.g. 2021–2022, when the model trailed or roughly tracked
-  the index) take quarters to detect, and with 26 quarters none of the
-  excess-return t-stats clear 2.
+  regime shifts (e.g. 2021–2022 and 2024, when the model roughly tracked
+  the index) take quarters to detect, and with 26 quarters the
+  excess-return t-stats only reach +1.6 to +2.3.
 - **Why validation starts in 2019 when data goes back to 2012.** 2019-01-01
   is the first walk-forward *test* cutoff (`CUTOFFS` in the notebook), not a
   data filter — `build_dataset.py` loads everything from 2012 on. The
@@ -185,12 +192,13 @@ cash / assets 7%, distance from 52-week high 6%, return on assets 6%,
   inputs (daily range, drawdown, price swing) explain ~59% of a typical
   score, so top cohorts can concentrate in volatile, high-beta names — it
   ranks, it does not manage risk.
-- **2021 was a losing year** (top 20 trailed the S&P by 4.35 pp/qtr, ahead
-  in 1 of 4 quarters): the model can lag for several quarters at a time.
+- **Flat years:** in 2021, 2022 and 2024 the top 20 trailed the S&P by
+  0.3–0.5 pp/qtr (2024 ahead in only 1 of 4 quarters): the model can lag
+  for several quarters at a time.
 - **Mostly a bull-market sample** (2019→2025 window); the 2022 drawdown is
   the only sustained bear market in the validation period.
 - **Overlapping cohorts:** the same names recur across adjacent quarters, so
-  effective independence is lower than 7,691 rows suggests.
+  effective independence is lower than 7,661 rows suggests.
 
 Harness lives in `Model/notebooks/production_ranking_model.ipynb`
 (walk-forward cells + S&P benchmark + artifact export); the model spec,

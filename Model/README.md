@@ -15,6 +15,9 @@ outperform while pooled return accuracy stays noisy.
   stddev_252, max_drawdown_252, atr_pct, return_3m, return_12m,
   distance_from_52wk_high, roe, roa, debt_equity, current_ratio,
   cash_to_assets, fcf_to_assets (+ sector as display label, not a booster input)
+- **Query groups**: one per quarter's cohort, graded into return quintiles;
+  rows are sorted by date before `set_group`, which reads consecutive row
+  counts
 - **Hyperparameters**: 150 rounds, max_depth 3, eta 0.05, subsample 0.8,
   colsample_bytree 0.8, reg_alpha 0.1, reg_lambda 1.0, seed 42
 - **Excluded tickers**: AMBP, BE, BRK.B, CRM, FI, NBIS (sparse/unusable history)
@@ -37,25 +40,31 @@ outperform while pooled return accuracy stays noisy.
 
 ## Validation (walk-forward, 26 quarters 2019→2025)
 
-Latest retrain (7,691 test rows), from `mart.model_track_record`:
+Latest walk-forward (2026-11-01, with the query-group fix; local warehouse
+copy, 15,569 rows × 377 tickers, 7,661 test rows):
 
-- Top-20 vs S&P 500: **+4.57 pp/qtr**, beating the index 62% of quarters
-- Top-20 vs the whole ranked list: **+4.33 pp/qtr**
-- Input weights (share of a typical score): average daily range 25%, worst
-  drawdown 21%, price swing 12%, cash / assets 7%, rest ≤6%
+- Top-20 vs S&P 500: **+4.77 pp/qtr** (t=+2.19), beating the index 73% of quarters
+- Top-20 vs the whole ranked list: **+4.47 pp/qtr**
+- Rank IC (pooled): +0.130
+- Top-10 excess: +5.09 pp/qtr (t=+1.63, positive 69% of quarters)
+- Top-25 excess: +4.55 pp/qtr (t=+2.34, positive 77% of quarters)
+- Top-quintile excess: +3.12 pp/qtr (t=+2.30, positive 69% of quarters)
+- Precision@10: 18.5% (random 3.4%) · Precision@25: 22.3% (random 8.5%)
 
-Ranking quality, same run (measured by the 2026-10-03 `model_retrain`):
+Before the fix, `set_group` got ticker-ordered rows, so each query group was
+a block of mostly one ticker's history instead of a quarter's cohort. Same
+data, before → after: rank IC +0.144 → +0.130, top-10 excess +6.49 → +5.09,
+top-20 vs S&P +5.65 → +4.77 pp/qtr. Over 8 seeds the fix averages about
+−1.2 pp/qtr on top-10 excess (paired t=−1.4, not significant), −0.3 pp/qtr
+against the S&P and no change on the top quintile. Per-date IC barely moved
+(+0.071 → +0.065); the pooled-IC drop is the old groups rewarding
+cross-quarter ordering.
 
-- Rank IC (pooled): +0.142
-- Top-10 excess: +4.25 pp/qtr (t=+1.51, positive 62% of quarters)
-- Top-25 excess: +4.13 pp/qtr (t=+1.91, positive 62% of quarters)
-- Top-quintile excess: +2.62 pp/qtr (t=+1.82, positive 62% of quarters)
-- Precision@10: 14.6% (random 3.4%) · Precision@25: 21.8% (random 8.5%)
-
-Previous run (15,874 rows × 377 tickers, 7,661 test rows) for comparison: rank IC
-+0.163, top-20 vs S&P +5.53 pp/qtr. Note the notebook's "beats S&P N%" line
-reports quarters with a positive top-20 return (69%), not the S&P hit rate
-(62%); `mart.model_track_record` has the correct figure.
+Live model (2026-10-03 retrain, before the fix), from `mart.model_track_record`:
+top-20 vs S&P +4.57 pp/qtr (ahead 62% of quarters), rank IC +0.142, 7,691 test
+rows; input weights (share of a typical score): average daily range 25%,
+worst drawdown 21%, price swing 12%, cash / assets 7%, rest ≤6%. The next
+quarterly retrain replaces it.
 
 ## Refresh pipeline (quarterly DAG)
 
