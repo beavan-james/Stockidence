@@ -7,8 +7,32 @@ import type { RankedTicker } from "@/types/api";
 
 const PAGE_SIZE = 25;
 
-/** The full ranked list: filter by ticker or sector, 25 per page. */
-export function RankingsTable({ items, limit }: { items: RankedTicker[]; limit?: number }) {
+type Row = RankedTicker & { previous_rank?: number | null };
+
+/** Move since the previous list: ▲ up, ▼ down; "new" if it wasn't ranked. */
+function RankChange({ rank, previous }: { rank: number; previous: number | null | undefined }) {
+  if (previous == null) return <span className="text-[11px] text-ink-muted">new</span>;
+  const delta = previous - rank;
+  if (delta === 0) return <span className="text-[11px] text-ink-muted">–</span>;
+  return (
+    <span className={`num whitespace-nowrap text-[11px] ${delta > 0 ? "text-accent/70" : "text-ink-muted"}`}>
+      {delta > 0 ? "▲" : "▼"}
+      {Math.abs(delta)}
+    </span>
+  );
+}
+
+/** The full ranked list: filter by ticker or sector, 25 per page. `showChange`
+ *  adds each row's move since the previous list (weekly ranking). */
+export function RankingsTable({
+  items,
+  limit,
+  showChange = false,
+}: {
+  items: Row[];
+  limit?: number;
+  showChange?: boolean;
+}) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -56,6 +80,11 @@ export function RankingsTable({ items, limit }: { items: RankedTicker[]; limit?:
                 <td className="num w-14 py-3.5 pl-1 text-ink-muted">{String(r.rank).padStart(2, "0")}</td>
                 <td className="w-24 py-3.5 font-semibold tracking-wide">{r.ticker}</td>
                 <td className="py-3.5 text-ink-secondary">{r.sector ?? "—"}</td>
+                {showChange && (
+                  <td className="w-14 py-3.5 pr-3 text-right">
+                    <RankChange rank={r.rank} previous={r.previous_rank} />
+                  </td>
+                )}
                 <td className="num hidden py-3.5 pr-5 text-right sm:table-cell">
                   Top {topPercent(r.rank, n)}%
                 </td>

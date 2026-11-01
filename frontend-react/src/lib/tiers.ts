@@ -50,6 +50,16 @@ export function snapshotLabel(snapshotIso: string): string {
   });
 }
 
+/** "Nov 2" for a weekly date (the year is implied by the page). */
+export function dayLabel(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /** Headline sector: the one holding the largest share of the top fifth. */
 export function leadingSector(items: RankedTicker[]): { sector: string; share: number } | null {
   const fifth = items.slice(0, Math.max(1, Math.round(items.length / 5)));

@@ -6,7 +6,8 @@ For each (ticker, period label), assembles:
   - Rolling analytics from m_advanced_analytics (same snapshot semantics)
   - PIT fundamentals from raw_financials_reported (latest available quarterly report)
   - Static sector label from raw_company_profile
-  - Target: next-period return (anchor close-to-close)
+  - Target: next-period return (anchor close-to-close); weekly instead labels
+    next-week and next-13-week returns entered at the next week's open
 
 Mart bars are labeled at period START (date_trunc) but hold the period-END
 close (last(close)), so features are snapshotted on the period's last trading
@@ -14,7 +15,9 @@ day, never on the label itself — that keeps features and close on the same day
 without lookahead.
 
 Feature sets are frequency-specific:
-  - weekly/monthly: 14-day technical indicators + the 6 static fundamentals
+  - monthly: 14-day technical indicators + the 6 static fundamentals
+  - weekly: the monthly set plus quarterly-scale momentum at weekly
+    resolution and short-horizon signals (Stocks of the Week)
   - quarterly: macro momentum (price_to_sma200, return_3m/12m, 52wk-high
     distance, atr_pct, 252-day vol & drawdown) + fundamental velocity
     (static ratios plus their quarter-over-quarter change)
@@ -117,6 +120,30 @@ QUARTERLY_PRICE_FEATURES = [
 ]
 QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + \
     QUARTERLY_FUND_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
+
+# ── Weekly-specific feature set ────────────────────────────────────────────────
+# Friday-close snapshots for the Stocks of the Week list. The quarterly price
+# features carry over at weekly resolution (return_3m = 13 weeks, return_12m =
+# 52 weeks) so a quarterly-horizon target can be ranked every week; the
+# short-horizon signals are candidates for the next-week target. The legacy
+# weekly columns (TI_FEATURES, AA_FEATURES) stay in the frame too.
+WEEKLY_TI_FEATURES = TI_FEATURES + ["bb_upper_20", "bb_lower_20"]
+WEEKLY_AA_FEATURES = AA_FEATURES + ["max_252", "mean_252"]
+WEEKLY_SHORT_FEATURES = [
+    "return_1w", "return_4w", "rsi_14", "price_to_sma20", "price_to_sma50",
+    "stoch_k_14", "cci_20", "adx_14", "macd_hist_pct", "bb_pctb",
+    "volume_ratio_13w", "range_1w", "vol_ratio",
+]
+WEEKLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + FUNDAMENTAL_FEATURES + \
+    WEEKLY_SHORT_FEATURES
+
+# Forward horizons (in weeks) labelled on every weekly row. Both are measured
+# from the NEXT week's open: a list published after Friday's close can first
+# be bought at Monday's open, so the Friday close is not a tradeable entry.
+WEEKLY_HORIZONS = {"target_return": 1, "target_return_13w": 13}
+
+# US session close; a week counts as finished once its Friday close passes.
+MARKET_TZ = "America/New_York"
 
 # Categorical features are merged per ticker (not snapshot per period).
 CATEGORICAL_FEATURES = ["sector"]
@@ -643,6 +670,32 @@ def _add_quarterly_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _add_weekly_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Derived features for the weekly dataset, on top of _add_derived_features.
+
+    Quarterly-scale momentum at weekly resolution plus short-horizon signals
+    (last week's move, oscillators, volume surge). Everything is known at the
+    row's Friday close; volume_ratio_13w compares this week's volume with the
+    13 weeks BEFORE it, so the current week never enters its own baseline.
+    """
+    df["distance_from_52wk_high"] = df["close"] / df["max_252"] - 1
+    df["macd_hist_pct"] = df["macd_hist"] / df["close"]
+    band = df["bb_upper_20"] - df["bb_lower_20"]
+    df["bb_pctb"] = np.where(band > 0, (df["close"] - df["bb_lower_20"]) / band, np.nan)
+    df["range_1w"] = (df["high"] - df["low"]) / df["close"]
+
+    df = df.sort_values(["ticker", "date"])
+    g = df.groupby("ticker")
+    df["return_1w"] = g["close"].pct_change()
+    df["return_4w"] = g["close"].pct_change(4)
+    df["return_3m"] = g["close"].pct_change(13)
+    df["return_12m"] = g["close"].pct_change(52)
+    baseline = g["volume"].transform(
+        lambda s: s.shift(1).rolling(13, min_periods=8).mean())
+    df["volume_ratio_13w"] = df["volume"] / baseline.replace(0, np.nan)
+    return df
+
+
 # ── Rolling return-distribution statistics ─────────────────────────────────────
 
 def _rolling_sharpe(ret: pd.Series, win: int, periods_per_year: float,
@@ -810,18 +863,56 @@ def _add_target(df: pd.DataFrame, freq: str = "monthly",
     return df
 
 
+def last_closed_week(newest_trade, now=None) -> pd.Timestamp:
+    """Monday label of the newest week whose Friday session has closed.
+
+    Decided by the clock, not by spotting a Friday bar: a holiday Friday
+    (Good Friday, July 4th) still closes its week at 16:00 ET, while a run
+    on Wednesday must not treat the half-finished week as done. `newest_trade`
+    is the latest bar date in the warehouse.
+    """
+    now = pd.Timestamp.now(tz=MARKET_TZ) if now is None else pd.Timestamp(now)
+    if now.tzinfo is None:
+        now = now.tz_localize("UTC")
+    now = now.tz_convert(MARKET_TZ)
+    newest = pd.Timestamp(newest_trade).normalize()
+    week = newest - pd.Timedelta(days=newest.weekday())
+    friday_close = (week + pd.Timedelta(days=4, hours=16)).tz_localize(MARKET_TZ)
+    return week if now >= friday_close else week - pd.Timedelta(weeks=1)
+
+
+def _add_weekly_targets(df: pd.DataFrame, closed_through: pd.Timestamp) -> pd.DataFrame:
+    """Forward returns for each WEEKLY_HORIZONS column, entered at next week's open.
+
+    A row's h-week target is close(week + h) / open(week + 1) - 1. It is only
+    set when weeks +1 and +h are the adjacent rows (no data gap) and week +h
+    has closed (`closed_through`); otherwise NaN, i.e. not yet known.
+    """
+    df = df.sort_values(["ticker", "date"]).reset_index(drop=True)
+    g = df.groupby("ticker")
+    entry = g["open"].shift(-1)
+    entry_ok = g["date"].shift(-1) == df["date"] + pd.Timedelta(weeks=1)
+    for col, h in WEEKLY_HORIZONS.items():
+        exit_week = df["date"] + pd.Timedelta(weeks=h)
+        ok = entry_ok & (g["date"].shift(-h) == exit_week) & (exit_week <= closed_through)
+        df[col] = np.where(ok, g["close"].shift(-h) / entry - 1, np.nan)
+    return df
+
+
 # ── Main ────────────────────────────────────────────────────────────────────────
 
 def build_dataset(freq: str = "monthly",
                   tickers: list[str] | None = None,
-                  keep_unlabeled: bool = False) -> pd.DataFrame:
+                  keep_unlabeled: bool = False,
+                  now=None) -> pd.DataFrame:
     """Build the full training dataset for one bar frequency.
 
     `tickers` restricts every load to the curated training universe; None
     falls back to TRAIN_TICKERS, then to every ticker in the warehouse.
     `keep_unlabeled` keeps rows whose target isn't known yet (the latest
     period) so the caller can score the live cohort; training must still
-    drop them.
+    drop them. `now` (weekly only) is the clock that decides which weeks have
+    closed; None = the current time.
     """
     wh = Warehouse()
 
@@ -831,10 +922,14 @@ def build_dataset(freq: str = "monthly",
     print(f"Training universe: {n_ticker} ticker(s)\n")
 
     # Quarterly uses its own feature set (macro momentum + fundamental
-    # velocity); weekly/monthly keep the 14-day indicator set.
+    # velocity); weekly adds quarterly-scale momentum and short-horizon
+    # signals to the 14-day indicator set; monthly/daily keep the latter.
     if freq == "quarterly":
         ti_cols, aa_cols, fund_cols = (
             QUARTERLY_TI_FEATURES, QUARTERLY_AA_FEATURES, QUARTERLY_FUND_FEATURES)
+    elif freq == "weekly":
+        ti_cols, aa_cols, fund_cols = (
+            WEEKLY_TI_FEATURES, WEEKLY_AA_FEATURES, FUNDAMENTAL_FEATURES)
     else:
         ti_cols, aa_cols, fund_cols = TI_FEATURES, AA_FEATURES, FUNDAMENTAL_FEATURES
 
@@ -903,6 +998,9 @@ def build_dataset(freq: str = "monthly",
     if freq == "quarterly":
         dataset = _add_quarterly_features(dataset)
         feat_names = QUARTERLY_ALL_FEATURES
+    elif freq == "weekly":
+        dataset = _add_weekly_features(_add_derived_features(dataset))
+        feat_names = WEEKLY_ALL_FEATURES
     else:
         dataset = _add_derived_features(dataset)
         feat_names = ALL_FEATURES
@@ -913,14 +1011,19 @@ def build_dataset(freq: str = "monthly",
 
     # Target
     print("Adding target variable...")
-    if freq == "quarterly":
+    if freq in ("quarterly", "weekly"):
         with wh.connect(read_only=True) as con:
             last_trade = pd.read_sql(
                 "SELECT ticker, MAX(date) AS last_date "
                 "FROM staging.stg_prices_daily GROUP BY ticker", con)
     else:
         last_trade = None
-    dataset = _add_target(dataset, freq, last_trade)
+    if freq == "weekly":
+        closed = last_closed_week(pd.to_datetime(last_trade["last_date"]).max(), now)
+        print(f"  weeks closed through {closed.date()}")
+        dataset = _add_weekly_targets(dataset, closed)
+    else:
+        dataset = _add_target(dataset, freq, last_trade)
 
     # Drop rows with no target (last period per ticker)
     if not keep_unlabeled:

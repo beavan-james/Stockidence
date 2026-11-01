@@ -13,7 +13,7 @@ Contracts carried over from the Reflex read path:
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ..service import dagster_client, market, ranking, rating_service, sub_scores, warehouse
+from ..service import dagster_client, market, ranking, rating_service, sub_scores, warehouse, weekly
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
@@ -120,6 +120,13 @@ def get_ranking_detail(ticker: str) -> dict:
     if detail is None:
         raise HTTPException(status_code=404, detail=f"{ticker.upper()} is not in the latest ranking")
     return detail
+
+
+@market_router.get("/weekly")
+def get_weekly() -> dict:
+    """Stocks of the Week: this week's ranked list with rank changes, last
+    week's top 10 and how they did, and the walk-forward backtest."""
+    return weekly.get_weekly()
 
 
 @market_router.get("/model/overview")

@@ -47,6 +47,8 @@ export const client = {
   rankingDetail: (ticker: string) =>
     api<import("@/types/api").RankingDetail>(`/api/rankings/${encodeURIComponent(ticker)}`),
 
+  weekly: () => api<import("@/types/api").WeeklyEnvelope>("/api/weekly"),
+
   modelOverview: () => api<import("@/types/api").ModelOverview>("/api/model/overview"),
 
   macro: () => api<import("@/types/api").MacroMetric[]>("/api/macro"),

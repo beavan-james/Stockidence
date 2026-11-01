@@ -4,6 +4,8 @@ This is the single implementation behind bulk refreshes. Callers:
 
 * the quarterly Dagster job — whole universe, incremental (watermarks intact,
   so the staleness gate only fetches what's new since last quarter)
+* the weekly Dagster job — whole universe every Friday after the close, with
+  daily prices forced past the gate so every ticker lands Friday's close
 * the frontend-triggered ``refresh_tickers`` job — a few tickers, incremental
   as well: with no watermark on record the gate pulls full history
   automatically, so no special-casing is needed for new tickers
@@ -51,6 +53,7 @@ def refresh_tickers(
     tickers: Sequence[str],
     *,
     full_backfill: bool = False,
+    force_endpoints: frozenset[str] = frozenset(),
     max_attempts: int = 3,
     score: bool = False,
     log: Callable[[str], None] | None = None,
@@ -60,6 +63,9 @@ def refresh_tickers(
     ``full_backfill`` wipes each ticker's price watermark first to force a
     complete history re-pull; otherwise the staleness gate fetches only what
     is new (the quarterly-refresh mode — only the recent quarter is missing).
+    ``force_endpoints`` skips the staleness gate for those endpoints: a
+    1-day price TTL would otherwise keep a ticker someone viewed during
+    Friday's session from fetching Friday's close.
     ``score`` also persists a fresh confidence rating per ticker (the
     frontend-triggered mode, so the rating appears without a second pass).
     """
@@ -100,7 +106,8 @@ def refresh_tickers(
             last_error: str | None = None
             for attempt in range(1, max_attempts + 1):
                 try:
-                    result = engine.ingest_on_demand(ep.name, ticker, now=now)
+                    result = engine.ingest_on_demand(
+                        ep.name, ticker, now=now, force=ep.name in force_endpoints)
                     last_error = None
                     break
                 except Exception as exc:  # noqa: BLE001 — record and retry

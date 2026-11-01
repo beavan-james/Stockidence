@@ -100,6 +100,122 @@ start (2026-07-01 = the 2026-09-30 snapshot); exports convert.
 - Scores are ordinal within-quarter ranks, not expected returns; the site
   shows rank, percentile and quintile tier instead of raw scores
 
+## Stocks of the Week (weekly model)
+
+The website's **Weekly** page is a second ranker from the same family,
+re-run every Friday after the US close. It orders the cohort by how likely
+each stock is to beat the rest of the list **next week**: bought at
+Monday's open, sold at Friday's close. Code lives in
+`src/stockidence/weekly.py` (a module, not a notebook).
+
+### Spec
+
+- **Objective, hyperparameters, inputs**: same as the quarterly model
+  (`rank:ndcg`, core-13, 150 rounds, depth 3, eta 0.05, seed 42); each
+  week's cohort is one query group graded into return quintiles
+- **Grain**: weekly. A row is a Friday-close snapshot (Thursday's close on a
+  holiday Friday); the weekly bars are resampled from Twelve Data daily bars
+- **Target**: next-week return, Monday open → Friday close
+  (`target_return`). Picked over next-quarter return by the comparison
+  below
+- **Excluded tickers**: the quarterly list plus VOO, which is the S&P 500
+  benchmark (bought at the same Monday open, never ranked)
+
+### Target comparison
+
+The same 398 weekly cohorts (snapshots 2019-01-04 → 2026-08-21), ranked
+four ways and graded on both horizons by
+`Model/scripts/compare_weekly_targets.py`, which calls the job's own
+functions:
+
+| Target | Inputs | Top 10 vs list, next week | t | vs S&P, next week | Top 10 vs list, next 13 weeks | t |
+|---|---|---|---|---|---|---|
+| **Next week** | core-13 | **+67 bp** | 2.79 | +71 bp | **+9.3 pp** | 3.01 |
+| Next quarter | core-13 | +50 bp | 2.44 | +53 bp | +6.8 pp | 2.28 |
+| Next week | core-13 + short-term | +67 bp | 3.05 | +71 bp | +8.2 pp | 2.57 |
+| Next quarter | core-13 + short-term | +61 bp | 2.85 | +64 bp | +8.7 pp | 2.77 |
+
+Short-term inputs (13): 1- and 4-week return, RSI 14, price vs SMA 20/50,
+stochastic %K, CCI 20, ADX 14, MACD histogram / price, Bollinger %b, volume
+vs its 13-week average, weekly range, short/long volatility ratio. 13-week
+outcomes overlap week to week, so their t-stats use every 13th week.
+
+Shipped: **next week, core-13**. It leads on both horizons (the model
+trained on next-week returns even beats the quarter-trained one on 13-week
+returns), and the short-term inputs add 13 columns without raising the
+average lead.
+
+### Validation
+
+Walk-forward: a refit every quarter on the weeks whose outcome had closed
+by that quarter's first Monday, scoring the next 13 weekly cohorts, so no
+week is scored by a model that saw it. The live job refits every week.
+
+Development run on a copy of the local warehouse (prices to 2026-08-28;
+398 test weeks, 125,791 test rows). Each production run writes its own
+numbers to `mart.weekly_validation`, and the Weekly page shows those:
+
+- Top 10 vs the whole list: **+67 bp/week** (t=+2.79, ahead in 58% of weeks)
+- Top 10 vs S&P 500 (VOO): **+71 bp/week**, ahead in 57% of weeks
+- Rank IC: +0.026 (the edge sits at the head of the list, not across it)
+- Precision@10: 15.4% (random 3.2%)
+- By snapshot year, top 10 vs list (bp/week): 2019 +109, 2020 +43,
+  2021 +18, 2022 −62, 2023 +206, 2024 +48, 2025 +115, 2026 to Aug 21 +60
+- Fit: 223,623 rows × 405 tickers, snapshots 2012-08-10 → 2026-08-21
+
+### Refresh pipeline (Friday DAG)
+
+`weekly_model_refresh` in `src/stockidence/definitions.py`, scheduled
+`30 17 * * 5` America/New_York (Friday 5:30 pm ET):
+
+1. **Refresh universe**: every ticker in the warehouse plus VOO, the same
+   incremental runner as the quarterly job, except daily prices skip the
+   staleness gate (a 1-day TTL would keep a ticker viewed during Friday's
+   session from landing Friday's close). About 500 Twelve Data calls of the
+   800/day free tier
+2. **Rebuild dataset**: `build_dataset(freq="weekly")` →
+   `Model/datasets/train_dataset_weekly.parquet` (weeks whose next week has
+   closed) + `score_dataset_weekly.parquet` (this week's snapshot). The
+   clock decides which week has closed (Friday 4 pm ET), so a mid-week
+   manual run scores the previous week. Only tickers that landed the
+   week's last close are scored; if that's under half the usual cohort the
+   step fails and the current list stays up
+3. **Train and rank**: walk-forward backtest, refit on every closed week,
+   rank this week's snapshot, export, then grade last week's list on the
+   week that just closed
+
+`weekly_rank` runs steps 2–3 only (data already fresh).
+
+Tables (all `mart`): `weekly_rankings` (one ranked list per `as_of`, with
+each stock's `realized_return` once its week closes), `weekly_track_record`
+(per week: top-10, whole-list and VOO returns; `source` = `backtest` or
+`live`) and `weekly_validation` (one row of walk-forward metrics per run).
+
+**Dates.** `as_of` is the Friday whose close the snapshot uses; the list
+is for the following Monday–Friday and is graded by the next Friday's run.
+Internally weekly rows are labelled by their Monday.
+
+### Serving
+
+- `GET /api/weekly` → this week's list with each stock's previous rank,
+  last week's top 10 with realized returns, the backtest track and the
+  latest validation row
+
+### Caveats
+
+- **No trading costs.** The backtest buys at Monday's open and sells at
+  Friday's close, so it never holds over a weekend. The top 10 replaces
+  27% of its names in an average week
+- **Survivorship.** The universe is the tickers in the warehouse today, so
+  stocks delisted since 2019 are missing. That flatters absolute returns,
+  likely most for the volatile names this model favours. Compounding the
+  weekly top 10 gives 55%/yr against 17% for VOO over the same weeks:
+  treat that as an upper bound, not an expectation
+- **Concentration.** Technology fills 38% of top-10 slots against 16% of
+  the cohort; one sector holds 5 or more of the 10 in a third of weeks
+- `stddev_252` (shared with the quarterly model) is the standard deviation
+  of the close in dollars, so it partly measures share-price level
+
 ## Parked
 
 - Ridge regression second model — undecided (implement or scrap); the

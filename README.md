@@ -25,6 +25,7 @@ score).
 | Page | What it shows |
 | ---- | ------------- |
 | **Rankings** (home) | The quarter's full ranked list, a lookup that searches only ranked stocks, every stock as a tier-coloured distribution strip, the top of the list, sector tilt of the top fifth |
+| **Weekly** | Stocks of the Week: a ranking rebuilt every Friday after the close for the coming week. Top 10 with each stock's move since last week, the full list, how last week's top 10 did, and the walk-forward backtest |
 | **Stock page** | Rank context plus the input-by-input score breakdown and a plain-English verdict ("strong on momentum, held back by risk") |
 | **Model** | Walk-forward track record vs the S&P 500 by quarter, what the model weighs most, how it works and its limits |
 | **Market** | Context, not the product: daily movers, macro and commodities, news, IPO and earnings calendars |
@@ -47,7 +48,11 @@ for meaning (tiers, gains/losses).
   the first day of each quarter) refreshes **every ticker in the warehouse**,
   rebuilds the training dataset, retrains the model and publishes the new
   ranking. `model_retrain` runs just the dataset rebuild + retrain, for
-  re-running once the data is already fresh.
+  re-running once the data is already fresh. The weekly
+  `weekly_model_refresh` job (17:30 ET every Friday) does the same on a
+  weekly grain: it refreshes every ticker with daily prices forced past the
+  gate so each one lands Friday's close, refits, publishes Stocks of the
+  Week and grades last week's list. `weekly_rank` skips the refresh.
 - **Incremental loads:** per-(endpoint, ticker) watermarks drive a
   staleness gate, so a refresh only calls a provider when that data has gone
   stale (a quote in a minute, prices in a day, fundamentals in months). Bulk

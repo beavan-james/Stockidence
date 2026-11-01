@@ -14,6 +14,9 @@ Exposes:
   - monthly_ingest / weekdays_ingest / daily_ingest jobs (schedule-bound)
   - quarterly_model_refresh job (schedule-bound): universe refresh ->
     quarterly dataset rebuild -> notebook retrain + ranking export
+  - weekly_model_refresh job (schedule-bound, Fridays after the close):
+    universe refresh -> weekly dataset rebuild -> refit + Stocks of the
+    Week export; weekly_rank re-runs the last two steps alone
   - refresh_tickers job (frontend-triggered): on-demand per-ticker
     ingest + derived rebuilds + scoring
   - refresh_quotes job (frontend-triggered): quote-only pull for explicit
@@ -419,15 +422,118 @@ def quarterly_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
+@op(required_resource_keys={"engine"})
+def weekly_refresh_op(context: OpExecutionContext) -> dict:
+    """Refresh every ticker in the warehouse plus the S&P 500 benchmark.
+
+    Same incremental runner as the quarterly refresh, except daily prices
+    skip the staleness gate: the list must be built from Friday's close, and
+    a ticker viewed during Friday's session would otherwise still be inside
+    its 1-day price TTL.
+    """
+    from .weekly import weekly_universe
+
+    engine = context.resources.engine
+    universe = weekly_universe(engine.warehouse)
+    context.log.info(f"weekly refresh: {len(universe)} tickers")
+    summary = refresh_tickers(
+        engine, universe, force_endpoints=frozenset({"prices.daily"}), log=context.log.info)
+    if summary["errors"]:
+        by_endpoint: dict[str, int] = {}
+        for err in summary["errors"]:
+            by_endpoint[err["endpoint"]] = by_endpoint.get(err["endpoint"], 0) + 1
+        context.log.warning(
+            f"weekly refresh: {len(summary['errors'])} failed fetches by endpoint "
+            f"{by_endpoint}; e.g. {summary['errors'][0]['error'][:200]}"
+        )
+    return summary
+
+
+def _rebuild_weekly_dataset(context: OpExecutionContext) -> dict:
+    """Rebuild the weekly training parquet + this week's scoring cohort."""
+    from .weekly import rebuild_weekly_dataset
+
+    info = rebuild_weekly_dataset()
+    context.log.info(
+        f"[weekly dataset] {info['rows']} rows, {info['tickers']} tickers; weeks "
+        f"{info['first_week']} -> {info['last_week']}; ranking the {info['score_snapshot']} "
+        f"snapshot ({info['score_tickers']} tickers, close {info['week_close']})"
+    )
+    for key, what in (("stale_tickers", "stopped before the week's last close"),
+                      ("missing_tickers", "have no bars this week")):
+        if info[key]:
+            context.log.warning(
+                f"[weekly dataset] {len(info[key])} tickers {what} and are left out: "
+                f"{', '.join(info[key][:50])}{' ...' if len(info[key]) > 50 else ''}"
+            )
+    return info
+
+
+@op
+def weekly_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Rebuild the weekly dataset from the freshly refreshed mart."""
+    return {**prev, "dataset": _rebuild_weekly_dataset(context)}
+
+
+@op
+def weekly_dataset_only_op(context: OpExecutionContext) -> dict:
+    """Rebuild the weekly dataset from the mart as it stands (no refresh)."""
+    return {"dataset": _rebuild_weekly_dataset(context)}
+
+
+@op
+def weekly_rank_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Walk-forward validate, refit, rank this week's snapshot and export
+    to mart.weekly_rankings (grading last week's list on the way)."""
+    from .weekly import train_and_rank
+
+    info = train_and_rank()
+    context.log.info(
+        f"[weekly rank] {info['as_of']}: top 10 {', '.join(info['top10'])}; walk-forward "
+        f"{info['weeks']} weeks, top-10 excess {info['top10_excess'] * 1e4:+.0f} bp/week "
+        f"(t={info['top10_t']:+.2f}); graded lists {info['graded_lists'] or 'none'}"
+    )
+    return {**prev, "rank": info}
+
+
+@job(name="weekly_model_refresh")
+def weekly_model_refresh_job() -> None:
+    """Friday chain: universe refresh -> weekly dataset rebuild -> rank."""
+    weekly_rank_op(weekly_dataset_op(weekly_refresh_op()))
+
+
+@job(name="weekly_rank")
+def weekly_rank_job() -> None:
+    """Second half of the Friday chain: dataset rebuild -> rank.
+
+    Skips the universe refresh — for re-running once the data is already
+    fresh (e.g. after a training failure).
+    """
+    weekly_rank_op(weekly_dataset_only_op())
+
+
+@schedule(
+    job=weekly_model_refresh_job,
+    cron_schedule="30 17 * * 5",
+    execution_timezone="America/New_York",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+def weekly_schedule() -> dict:  # noqa: ANN401
+    """17:30 ET every Friday, 90 minutes after the close (New York time, so
+    DST never shifts it): the list is ready well before Monday's open."""
+    return {}
+
+
 defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
             m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
-          refresh_quotes_job, quarterly_model_refresh_job, model_retrain_job],
+          refresh_quotes_job, quarterly_model_refresh_job, model_retrain_job,
+          weekly_model_refresh_job, weekly_rank_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
                news_morning_schedule, news_evening_schedule,
-               quarterly_schedule],
+               quarterly_schedule, weekly_schedule],
     # DuckDB is a single-writer file: with the default multiprocess executor
     # DuckDB is a single-writer file: with the default multiprocess executor
     # every step runs in its own subprocess and the four mart siblings (all

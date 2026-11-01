@@ -6,6 +6,7 @@ import { quarterLabel, snapshotLabel } from "@/lib/tiers";
 
 const NAV = [
   { to: "/", label: "Rankings", end: true },
+  { to: "/week", label: "Weekly", end: false },
   { to: "/model", label: "Model", end: false },
   { to: "/market", label: "Market", end: false },
 ] as const;
@@ -17,11 +18,16 @@ export function AppShell() {
     <div className="min-h-screen overflow-x-clip bg-bg text-ink">
       <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-6">
-          <Link to="/" className="flex items-center gap-2 font-logo text-[28px] leading-none tracking-tight">
+          <Link
+            to="/"
+            aria-label="Stockidence"
+            className="flex shrink-0 items-center gap-2 font-logo text-[28px] leading-none tracking-tight"
+          >
             <img src={logoUrl} alt="" className="h-8 w-8" />
-            Stockidence
+            {/* Icon only on phones, so four nav links fit beside it. */}
+            <span className="hidden sm:inline">Stockidence</span>
           </Link>
-          <nav className="flex items-center gap-7 text-[15px] text-ink-secondary sm:gap-9">
+          <nav className="flex items-center gap-5 whitespace-nowrap text-[15px] text-ink-secondary sm:gap-9">
             {NAV.map((n) => (
               <NavLink
                 key={n.to}

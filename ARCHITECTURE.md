@@ -52,6 +52,7 @@ flowchart TD
     subgraph ORCH["Dagster orchestration"]
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
+        WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
         PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
         RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
@@ -64,6 +65,7 @@ flowchart TD
         M_RESH["m_prices_weekly · m_prices_monthly"]
         M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
         M_RANK["model_rankings<br/>rank · ticker · sector · score<br/>quarterly snapshot"]
+        M_WEEK["weekly_rankings · weekly_track_record<br/>Stocks of the Week + realized returns"]
     end
 
     UI["FastAPI + React SPA<br/>reads mart/raw · launches jobs (no sensors)"]
@@ -71,6 +73,8 @@ flowchart TD
     SCHED -->|"ingest_scheduled<br/>market-wide"| RAW
     QUART -->|"incremental refresh<br/>retrain + export"| RAW
     QUART -->|"ranking snapshot"| M_RANK
+    WEEK -->|"incremental refresh<br/>prices forced"| RAW
+    WEEK -->|"weekly list · grade last week"| M_WEEK
     UI -->|"POST /api/pipeline/refresh<br/>when no/fresh snapshot"| PUSH
     PUSH -->|"ingest + derived + score"| RUN
     RUN <--> GATE
@@ -90,6 +94,7 @@ flowchart TD
 
     MART -->|"rating snapshot<br/>source=warehouse"| UI
     M_RANK -->|"GET /api/rankings"| UI
+    M_WEEK -->|"GET /api/weekly"| UI
     RAW -->|"quotes · news · commodities · macro"| UI
     M_RESH -->|"GET /api/prices"| UI
     M_TECH -->|"GET /api/technicals"| UI
@@ -119,13 +124,17 @@ flowchart TD
 >   persistent universe (news, calendars, movers, macro); on-demand runs
 >   compute per-ticker ratings. The quarterly `quarterly_model_refresh` job
 >   additionally refreshes every ticker in the warehouse, rebuilds the training dataset,
->   retrains the ranking model, and exports `mart.model_rankings`.
+>   retrains the ranking model, and exports `mart.model_rankings`. The
+>   Friday `weekly_model_refresh` job does the same weekly into
+>   `mart.weekly_rankings`, and fills in `realized_return` on the previous
+>   list once its week has closed (an incremental update, not a rewrite).
 >
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
 > over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a mostly-read
 > REST surface (one write path: rating lookups launch refresh jobs).
 > The React SPA (`frontend-react/`) consumes that API with TanStack Query.
 > Pages: Rankings (home: the latest `mart.model_rankings` cohort with an
-> in-ranking lookup), stock page (rank context + per-input SHAP breakdown),
+> in-ranking lookup), Weekly (`mart.weekly_rankings`: Stocks of the
+> Week, last week's results, backtest), stock page (rank context + per-input SHAP breakdown),
 > Model (track record, input weights, methodology), Market (movers, macro,
 > news, calendars), Docs.

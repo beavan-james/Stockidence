@@ -142,6 +142,47 @@ export interface ModelOverview {
   validation: ModelValidation | null;
 }
 
+/** One stock in this week's list; previous_rank is null when it wasn't in last week's. */
+export interface WeeklyItem extends RankedTicker {
+  previous_rank: number | null;
+}
+
+export interface WeeklySummary {
+  weeks: number;
+  avg_excess_vs_spx: number | null;
+  hit_rate_vs_spx: number | null;
+  avg_excess_vs_universe: number | null;
+}
+
+export interface WeeklyTrackWeek {
+  /** Friday snapshot; the return is for the week after it. */
+  week: string;
+  top10_return: number | null;
+  universe_return: number | null;
+  spx_return: number | null;
+}
+
+/** Stocks of the Week (GET /api/weekly). Dates are Friday snapshots;
+ *  week_of is the Monday the list is for. Empty before the first Friday run. */
+export interface WeeklyEnvelope {
+  as_of: string | null;
+  week_of: string | null;
+  universe_size: number;
+  items: WeeklyItem[];
+  /** Last week's list: its top 10 and how they did (null returns until that week closes). */
+  previous: {
+    as_of: string;
+    week_of: string;
+    top10_return: number | null;
+    universe_return: number | null;
+    spx_return: number | null;
+    items: { rank: number; ticker: string; sector: string | null; realized_return: number | null }[];
+  } | null;
+  backtest: (WeeklySummary & { track: WeeklyTrackWeek[] }) | null;
+  live: WeeklySummary | null;
+  validation: { weeks: number; rank_ic: number; top10_excess: number; top10_t: number; top10_hit: number } | null;
+}
+
 export interface SeriesPoint {
   date: string;
   value: number | null;

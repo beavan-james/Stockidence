@@ -15,6 +15,7 @@ import type {
   Quote,
   RankingDetail,
   RankingsEnvelope,
+  WeeklyEnvelope,
 } from "@/types/api";
 
 export function useMovers() {
@@ -48,6 +49,15 @@ export function useRankingDetail(ticker: string | undefined) {
     staleTime: 60 * 60_000,
     // 404 = not in this quarter's ranking: a real answer, not a blip.
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+export function useWeekly() {
+  return useQuery<WeeklyEnvelope>({
+    queryKey: ["weekly"],
+    queryFn: () => client.weekly(),
+    // Changes once a week (Friday evening): refetch at most hourly.
+    staleTime: 60 * 60_000,
   });
 }
 

@@ -18,6 +18,9 @@ ViewSchemas.ipynb
 .ruff_cache/
 Model/datasets/*.parquet 
 Model/artifacts/ranking_ndcg.json
+# Refit every Friday by weekly_model_refresh; mart.weekly_validation keeps the numbers.
+Model/artifacts/weekly_ranking.json
+Model/artifacts/weekly_ranking.meta.json
 # Dev/experiment notebooks (untracked, kept locally). The production
 # notebook stays tracked: the quarterly DAG retrains by executing it.
 Model/notebooks/dev_notebook.ipynb

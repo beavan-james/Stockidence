@@ -564,6 +564,67 @@ class Warehouse:
                     WHERE day({col}) = 1 AND month({col}) IN (1, 4, 7, 10)
                     """
                 )
+            # Stocks of the Week, written by the Friday weekly_model_refresh
+            # job (stockidence.weekly). as_of is the week's last trading day;
+            # the list is for the week after it. realized_return (Monday open
+            # to Friday close of that next week) stays NULL until the
+            # following Friday's run, when the outcome is known.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.weekly_rankings (
+                    as_of DATE NOT NULL,
+                    rank INTEGER NOT NULL,
+                    ticker VARCHAR NOT NULL,
+                    sector VARCHAR,
+                    score DOUBLE,
+                    realized_return DOUBLE,
+                    PRIMARY KEY (as_of, ticker)
+                )
+                """
+            )
+            # One row per week: the top 10's equal-weight return vs the whole
+            # list and the S&P 500 (VOO, same Monday-open entry). 'backtest'
+            # rows are the walk-forward, replaced every run; 'live' rows are
+            # published lists whose week has played out.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.weekly_track_record (
+                    week DATE NOT NULL,
+                    source VARCHAR NOT NULL,
+                    top10_return DOUBLE,
+                    universe_return DOUBLE,
+                    spx_return DOUBLE,
+                    n_stocks INTEGER,
+                    PRIMARY KEY (week, source)
+                )
+                """
+            )
+            # Walk-forward ranking quality, one row per weekly run. Excess is
+            # vs the list's equal-weight mean; hit rates are the share of
+            # weeks with positive excess.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.weekly_validation (
+                    run_at TIMESTAMP NOT NULL PRIMARY KEY,
+                    as_of DATE,
+                    target VARCHAR,
+                    weeks INTEGER,
+                    test_rows INTEGER,
+                    rank_ic DOUBLE,
+                    top10_excess DOUBLE,
+                    top10_t DOUBLE,
+                    top10_hit DOUBLE,
+                    top10_vs_spx DOUBLE,
+                    top10_vs_spx_hit DOUBLE,
+                    precision10 DOUBLE,
+                    precision10_random DOUBLE,
+                    train_rows INTEGER,
+                    train_tickers INTEGER,
+                    train_first DATE,
+                    train_last DATE
+                )
+                """
+            )
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).

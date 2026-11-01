@@ -1,22 +1,43 @@
 import { featureMeta } from "@/lib/features";
-import { quarterLabel } from "@/lib/tiers";
-import type { ModelOverview, RankedTicker } from "@/types/api";
+import { quarterLabel, snapshotLabel } from "@/lib/tiers";
+import type { ModelOverview, RankedTicker, WeeklyTrackWeek } from "@/types/api";
 
 /** Per-quarter lead of the model's top 20 over the S&P 500 (bars above/below zero). */
 export function ExcessBars({ quarters, height = 72 }: { quarters: ModelOverview["track_record"]; height?: number }) {
   const rows = quarters
     .filter((q) => q.top20_return != null && q.spx_return != null)
-    .map((q) => ({ quarter: q.quarter, excess: q.top20_return! - q.spx_return! }));
+    .map((q) => ({ key: q.quarter, label: quarterLabel(q.quarter), excess: q.top20_return! - q.spx_return! }));
+  return <LeadBars rows={rows} height={height} />;
+}
+
+/** Per-week lead of the weekly top 10 over the S&P 500; a week's bar is the
+ *  week after its Friday snapshot. */
+export function WeeklyExcessBars({ weeks, height = 72 }: { weeks: WeeklyTrackWeek[]; height?: number }) {
+  const rows = weeks
+    .filter((w) => w.top10_return != null && w.spx_return != null)
+    .map((w) => ({ key: w.week, label: `Week after ${snapshotLabel(w.week)}`, excess: w.top10_return! - w.spx_return! }));
+  return <LeadBars rows={rows} height={height} gap={1} />;
+}
+
+function LeadBars({
+  rows,
+  height,
+  gap = 3,
+}: {
+  rows: { key: string; label: string; excess: number }[];
+  height: number;
+  gap?: number;
+}) {
   if (rows.length === 0) return null;
   const max = Math.max(...rows.map((r) => Math.abs(r.excess)), 0.01);
   const down = Math.round(height * 0.35);
   return (
-    <div className="flex gap-[3px]">
+    <div className="flex" style={{ gap }}>
       {rows.map((r) => {
         const h = (Math.abs(r.excess) / max) * height;
-        const label = `${quarterLabel(r.quarter)}: ${r.excess >= 0 ? "+" : ""}${(r.excess * 100).toFixed(1)} pp`;
+        const label = `${r.label}: ${r.excess >= 0 ? "+" : ""}${(r.excess * 100).toFixed(1)} pp`;
         return (
-          <div key={r.quarter} className="flex flex-1 flex-col" title={label}>
+          <div key={r.key} className="flex flex-1 flex-col" title={label}>
             <div className="flex items-end border-b border-white/20" style={{ height }}>
               {r.excess > 0 && (
                 <div
