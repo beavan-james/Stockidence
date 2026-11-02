@@ -298,8 +298,8 @@ _REGISTRY: list[EndpointSpec] = [
         watermark=("ticker", "quarter", "year"),
         artifacts=("raw_financials_reported",),
         ttl=None,
-        notes="freq=annual; staleness gated by the filing itself — refetch only "
-        "if a newer accessNumber exists for that ticker, not on a day-count TTL",
+        notes="freq=quarterly (10-Qs only); staleness gated by the filing itself — "
+        "refetch only once the 10-Q after the newest one held is due, not on a day-count TTL",
     ),
     # Must stay after financials_reported: the gap check reads the filings
     # that endpoint just landed.

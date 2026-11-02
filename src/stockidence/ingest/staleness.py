@@ -20,7 +20,6 @@ endpoint metadata stays declarative and the policies stay unit-testable.
 
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
@@ -37,9 +36,15 @@ from .raw_mapping import SEC_LOOKBACK_DAYS
 from ..storage import RAW_SCHEMA, Warehouse, Watermark
 
 # Filing-report grace: how long after a fiscal period ends we expect the
-# report to exist before we consider our copy behind. 10-Ks are due ~60-75
-# days after fiscal year end; a 75-day window covers annual filers.
+# report to exist before we consider our copy behind. 10-Qs are due 40-45
+# days after quarter end; 75 days leaves room for late filers and for
+# Finnhub's ingestion lag.
 FILING_GRACE_DAYS = 75
+
+# Length of one fiscal quarter: the longest calendar quarter. 52/53-week
+# filers' 13- and 14-week quarters land within a week of it, well inside
+# the filing grace.
+QUARTER_DAYS = 92
 
 
 @dataclass(frozen=True)
@@ -92,25 +97,18 @@ def decide(
     return FetchDecision(False, f"{spec.name}: no fetch policy (scheduled/derived)")
 
 
-def _period_end(year: int, quarter: int) -> date:
-    """Calendar quarter-end date for (year, quarter)."""
-    month = {1: 3, 2: 6, 3: 9, 4: 12}[quarter]
-    return date(year, month, calendar.monthrange(year, month)[1])
+def next_filing_due(newest_period_end: date, newest_quarter: int, grace_days: int = FILING_GRACE_DAYS) -> date:
+    """Date by which the 10-Q after the newest filing held should exist.
 
-
-def latest_expected_period(now: datetime, grace_days: int = FILING_GRACE_DAYS) -> tuple[int, int]:
-    """Most recent (year, quarter) whose report we should already have.
-
-    A period's report is expected once its end date plus the grace window
-    has passed. Later periods are still inside their filing window, so
-    their absence is not (yet) staleness.
+    Counts from the company's own period end, so off-calendar fiscal years
+    need no special case. The quarterly feed carries 10-Qs only: fiscal Q4
+    is reported on the 10-K, so after a Q3 the next filing is the following
+    Q1, two quarters out. A 10-K held from an older annual fetch (Finnhub's
+    quarter 0) is followed by Q1 as usual. Until the due date, a missing
+    filing is still inside its filing window, not staleness.
     """
-    y, q, _ = (now.year, now.month, now.day)
-    candidates = [(y, 4), (y, 3), (y, 2), (y, 1), (y - 1, 4), (y - 1, 3)]
-    for cy, cq in candidates:
-        if _period_end(cy, cq) + timedelta(days=grace_days) <= now.date():
-            return cy, cq
-    return candidates[-1]
+    quarters_ahead = 2 if newest_quarter == 3 else 1
+    return newest_period_end + timedelta(days=quarters_ahead * QUARTER_DAYS + grace_days)
 
 
 def check_insider_sentiment(warehouse: Warehouse, dimension_key: str, now: datetime) -> bool:
@@ -133,28 +131,34 @@ def check_insider_sentiment(warehouse: Warehouse, dimension_key: str, now: datet
 
 
 def check_financials_reported(warehouse: Warehouse, dimension_key: str, now: datetime) -> bool:
-    """Refetch when the reports holding is behind the filings we should have.
+    """Refetch when the filing after the newest one held should exist by now.
 
-    Compares the latest (year, quarter) present in raw_financials_reported
-    against the most recent period whose filing deadline has passed — the
-    filing itself is the clock, not a day-count TTL.
+    The newest filing's own period end (payload endDate) is the clock, not
+    a day-count TTL and not Finnhub's fiscal (year, quarter) labels: those
+    run ahead of the calendar for off-calendar fiscal years (NVDA's FY2027
+    Q1 ends April 2026), and no filer has a quarter-4 row, so comparing
+    labels to calendar quarters skipped off-calendar filers for months and
+    refetched every Dec-FY ticker from mid-March until its Q1 10-Q landed.
     """
     ticker = dimension_key.split("|")[0]
     with warehouse.connect(read_only=True) as con:
         row = con.execute(
             """
-            SELECT year, quarter FROM raw.raw_financials_reported
-            WHERE ticker = ? ORDER BY year DESC, quarter DESC LIMIT 1
+            SELECT period_end, quarter FROM (
+                SELECT TRY_CAST(substr(json_extract_string(payload, '$.endDate'), 1, 10) AS DATE) AS period_end,
+                       quarter
+                FROM raw.raw_financials_reported
+                WHERE ticker = ?
+            )
+            WHERE period_end IS NOT NULL
+            ORDER BY period_end DESC, quarter LIMIT 1
             """,
             [ticker],
         ).fetchone()
     if row is None:
         return True
-    held_year, held_quarter = row
-    expected_year, expected_quarter = latest_expected_period(now)
-    if (held_year, held_quarter) < (expected_year, expected_quarter):
-        return True
-    return False
+    period_end, quarter = row
+    return next_filing_due(period_end, quarter) <= now.date()
 
 
 def check_sec_balance_sheets(warehouse: Warehouse, dimension_key: str, now: datetime) -> bool:
