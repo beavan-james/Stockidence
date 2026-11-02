@@ -25,7 +25,7 @@ Exposes:
     (manual materialization path)
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from dagster import (
@@ -56,7 +56,11 @@ from .mart.mart import (
 )
 from .mart.scoring import score_ticker
 from .staging.staging import rebuild_fred_market as rebuild_fred_staging
-from .staging.staging import rebuild_prices_daily
+from .staging.staging import (
+    balance_sheet_sources,
+    rebuild_financials_reported,
+    rebuild_prices_daily,
+)
 from .storage import Warehouse
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
@@ -250,13 +254,15 @@ m_advanced_analytics = _derived_asset(
 m_technical_indicators = _derived_asset(
     "m_technical_indicators", rebuild_technical_indicators, deps=[stg_prices_daily]
 )
+stg_financials_reported = _derived_asset(
+    "stg_financials_reported", rebuild_financials_reported, deps=[ticker_data])
 
 
 @asset(
     name="ticker_score",
     partitions_def=ticker_partitions,
     required_resource_keys={"engine"},
-    deps=[ticker_data, m_technical_indicators, m_advanced_analytics],
+    deps=[ticker_data, stg_financials_reported, m_technical_indicators, m_advanced_analytics],
 )
 def ticker_score(context: AssetExecutionContext) -> None:
     """Deterministic score pipeline for one ticker: reads raw/staging/mart,
@@ -351,10 +357,29 @@ def quarterly_refresh_op(context: OpExecutionContext) -> dict:
     return summary
 
 
+def _restage_filings(context: OpExecutionContext, tag: str) -> None:
+    """Re-merge every ticker's filings (Finnhub + SEC balance sheets) before a
+    dataset build, so tickers outside the latest refresh read the current
+    merge too, and log where the last year's balance sheets came from."""
+    warehouse = Warehouse()
+    warehouse.init_schema()
+    staged = rebuild_financials_reported(warehouse)
+    since = (_now().date() - timedelta(days=365)).isoformat()
+    sources = balance_sheet_sources(warehouse, since)
+    context.log.info(f"[{tag}] staged {staged} filings; balance sheets of filings since {since}: {sources}")
+    missing = sources.get("none", 0)
+    if missing > 0.1 * sum(sources.values()):
+        context.log.warning(
+            f"[{tag}] {missing} recent filings have no balance sheet from Finnhub or SEC; "
+            "their fundamentals are blank and those tickers drop out of the ranking"
+        )
+
+
 def _rebuild_dataset(context: OpExecutionContext) -> dict:
     """Rebuild train_dataset_quarterly.parquet (+ scoring cohort) from the mart."""
     from .quarterly import rebuild_quarterly_dataset
 
+    _restage_filings(context, "dataset")
     info = rebuild_quarterly_dataset()
     context.log.info(
         f"[dataset] {info['rows']} rows, {info['tickers']} tickers; training snapshots "
@@ -453,6 +478,7 @@ def _rebuild_weekly_dataset(context: OpExecutionContext) -> dict:
     """Rebuild the weekly training parquet + this week's scoring cohort."""
     from .weekly import rebuild_weekly_dataset
 
+    _restage_filings(context, "weekly dataset")
     info = rebuild_weekly_dataset()
     context.log.info(
         f"[weekly dataset] {info['rows']} rows, {info['tickers']} tickers; weeks "
@@ -526,8 +552,8 @@ def weekly_schedule() -> dict:  # noqa: ANN401
 
 defs = Definitions(
     resources={"engine": engine_resource},
-    assets=[ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
-            m_advanced_analytics, m_technical_indicators, ticker_score],
+    assets=[ticker_data, stg_prices_daily, stg_financials_reported, m_prices_weekly,
+            m_prices_monthly, m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
           refresh_quotes_job, quarterly_model_refresh_job, model_retrain_job,
           weekly_model_refresh_job, weekly_rank_job],

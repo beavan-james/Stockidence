@@ -11,6 +11,8 @@ Decision ordering (see `decide`):
   conditional  -> delegate to a per-endpoint policy check against the
                   warehouse (the filing/calendar itself is the clock,
                   not wall time since last fetch)
+  gap-fill     -> the policy check alone decides, even before the first
+                  fetch: no gap in the other source, no call
 
 Policy queries for conditional endpoints live in CONDITIONAL_CHECKS so
 endpoint metadata stays declarative and the policies stay unit-testable.
@@ -31,6 +33,7 @@ from .endpoints import (
     Trigger,
     get_endpoint,
 )
+from .raw_mapping import SEC_LOOKBACK_DAYS
 from ..storage import RAW_SCHEMA, Warehouse, Watermark
 
 # Filing-report grace: how long after a fiscal period ends we expect the
@@ -60,6 +63,11 @@ def decide(
     """
     if spec.trigger == Trigger.DERIVED:
         return FetchDecision(False, f"{spec.name}: derived table, no API call")
+
+    if spec.cadence == Cadence.GAP_FILL:
+        if conditional_fetch:
+            return FetchDecision(True, f"{spec.name}: gap check found filings to fill")
+        return FetchDecision(False, f"{spec.name}: no gaps to fill")
 
     if watermark is None:
         return FetchDecision(True, f"{spec.name}: never fetched for dimension")
@@ -149,9 +157,41 @@ def check_financials_reported(warehouse: Warehouse, dimension_key: str, now: dat
     return False
 
 
+def check_sec_balance_sheets(warehouse: Warehouse, dimension_key: str, now: datetime) -> bool:
+    """Fetch when Finnhub has landed a filing with an empty balance sheet
+    since the ticker's last SEC fetch, and SEC hasn't filled it yet.
+
+    The clock is Finnhub's deliveries, not wall time: a ticker whose filings
+    are complete never spends an SEC call, and a filing SEC didn't have gets
+    another try each time Finnhub refetches. Filings older than the SEC
+    lookback are never landed from SEC, so they don't count as gaps.
+    """
+    ticker = dimension_key.split("|")[0]
+    cutoff = now.date() - timedelta(days=SEC_LOOKBACK_DAYS)
+    with warehouse.connect(read_only=True) as con:
+        gaps = con.execute(
+            """
+            SELECT COUNT(*) FROM raw.raw_financials_reported f
+            WHERE f.ticker = ?
+              AND COALESCE(json_array_length(json_extract(f.payload, '$.report.bs')), 0) = 0
+              AND TRY_CAST(substr(json_extract_string(f.payload, '$.filedDate'), 1, 10) AS DATE) >= ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM raw.raw_sec_balance_sheets s
+                  WHERE s.ticker = f.ticker
+                    AND s.accession_number = json_extract_string(f.payload, '$.accessNumber'))
+              AND f.fetched_at > COALESCE(
+                  (SELECT MAX(fetched_at) FROM raw.raw_sec_balance_sheets WHERE ticker = f.ticker),
+                  TIMESTAMPTZ '1970-01-01 00:00:00+00')
+            """,
+            [ticker, cutoff],
+        ).fetchone()[0]
+    return gaps > 0
+
+
 CONDITIONAL_CHECKS: dict[str, Callable[[Warehouse, str, datetime], bool]] = {
     "insider_sentiment": check_insider_sentiment,
     "financials_reported": check_financials_reported,
+    "sec_balance_sheets": check_sec_balance_sheets,
 }
 
 
@@ -178,11 +218,15 @@ class StalenessGate:
         watermark = self.warehouse.get_watermark(f"raw.{spec.artifacts[0]}", dimension_key)
         if watermark is None:
             watermark = self._grain_watermark(spec, dimension_key)
-        if spec.cadence == Cadence.CONDITIONAL:
+        if spec.cadence in (Cadence.CONDITIONAL, Cadence.GAP_FILL):
             check = CONDITIONAL_CHECKS.get(spec.name)
             if check is None:
                 return FetchDecision(False, f"{spec.name}: no conditional check registered")
-            conditional_fetch = True if watermark is None else check(self.warehouse, dimension_key, now_dt)
+            # a gap-fill endpoint asks its check even before the first fetch
+            if watermark is None and spec.cadence == Cadence.CONDITIONAL:
+                conditional_fetch = True
+            else:
+                conditional_fetch = check(self.warehouse, dimension_key, now_dt)
             return decide(spec, watermark, now_dt, conditional_fetch=conditional_fetch)
         return decide(spec, watermark, now_dt)
 

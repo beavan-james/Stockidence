@@ -20,6 +20,7 @@
 - **Company Profile 2** — own table, key `(ticker)` with `last_updated`, snapshot-style (latest row only). TTL: 3 days.
 - **Basic Financials** — own table, key `(ticker, quarter, year)` with `last_updated`. TTL: 3 days.
 - **Financials As Reported** — own table, key `(ticker, quarter, year)` with `last_updated`. Staleness check compares the latest held `(year, quarter)` against the latest expected period from filing-deadline math — refetch only if a newer period should exist for that ticker, not on a fixed 7-day clock. XBRL tag normalization (Finnhub's raw XBRL tags → canonical metric names, e.g. `Assets` → `totalAssets`, via alias/prefix matching) happens in the mart scoring layer with fallback/coalesce logic per canonical metric, since tag names aren't standardized across companies.
+- **SEC Balance Sheets** — `raw_sec_balance_sheets`, key `(ticker, accession_number)`. SEC EDGAR `companyfacts`, free and keyless. Fills balance sheets Finnhub serves empty: no TTL (a filing never changes); fetched only when Finnhub has landed a filing with an empty balance sheet since the ticker's last SEC fetch, so a ticker with complete filings never makes the call. Only the last three years of filings are landed. `stg_financials_reported` merges the two sources on accession number (`bs_source` = `finnhub` / `sec`), and the dataset builder and fair value read that table, not raw. A refetch from Finnhub also never replaces a filled statement with an empty one for the same filing.
 - **EPS Surprises** — own table, key `(ticker, quarter, year)` with `last_updated`. TTL: 30 days.
 - **Earnings Call Transcript** — own table, key `(ticker, quarter, year, speaker_sequence)` — one row per speaker segment, not one row per call. Effectively immutable once published — fetch once per quarter, never refetch.
 - **Insider Sentiment** — own table, key `(ticker, year, month)` with `last_updated`. TTL: refetch only if current month has no row.
@@ -38,6 +39,7 @@ Daily: Market News (FH), Market Indexes (FRED)
 
 On Stock Lookup (Everytime): Quote (FH), Time Series (TD)
 On Stock Lookup (If stale): Company Profile 2 (FH), Basic Financials (FH), Financials As Reported (FH), Insider Sentiment (FH), Recommendation Trends (FH), EPS Surprises (FH), Peers (FH), Earnings Call Transcript (AV)
+On Stock Lookup (If Finnhub left a gap): SEC Balance Sheets (SEC EDGAR)
 
 ---
 ## Data Flow Diagram
@@ -48,6 +50,7 @@ flowchart TD
     FH(["Finnhub"])
     TD(["Twelve Data"])
     FRED(["FRED"])
+    SEC(["SEC EDGAR"])
 
     subgraph ORCH["Dagster orchestration"]
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
@@ -82,7 +85,8 @@ flowchart TD
     GATE -->|"stale → fetch"| FH
     GATE -->|"stale → fetch"| TD
     GATE -->|"stale → fetch"| FRED
-    AV & FH & TD & FRED -->|"land responses"| RAW
+    GATE -->|"Finnhub left a gap → fetch"| SEC
+    AV & FH & TD & FRED & SEC -->|"land responses"| RAW
     RUN -->|"land responses"| RAW
 
     RAW -->|"load / unnest / type"| STG

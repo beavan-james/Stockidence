@@ -49,6 +49,8 @@ class Settings:
     min_interval_seconds: dict[str, float] = None
     alpha_vantage_pace_file: str = ""
     dagster_web_url: str = "http://localhost:3000"
+    # SEC asks every caller to name itself and give a contact email
+    sec_user_agent: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -68,8 +70,11 @@ class Settings:
                 "twelve_data": float(os.environ.get("TWELVE_DATA_MIN_INTERVAL_S", "2.0")),
                 "alpha_vantage": float(os.environ.get("ALPHA_VANTAGE_MIN_INTERVAL_S", "61.0")),
                 "fred": float(os.environ.get("FRED_MIN_INTERVAL_S", "1.0")),
+                # SEC's fair-access limit is 10 requests a second
+                "sec": float(os.environ.get("SEC_MIN_INTERVAL_S", "0.15")),
             },
             dagster_web_url=os.environ.get("DAGSTER_WEB_URL", "http://localhost:3000"),
+            sec_user_agent=os.environ.get("SEC_USER_AGENT", ""),
         )
 
 

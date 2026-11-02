@@ -28,7 +28,7 @@ centralized constants in the scoring module
 2. Stage-1 growth g = forward EPS growth (forward estimate from the earnings calendar annualized ×4; fallback to trailing EPS growth from EPS Surprises actuals, then to a proxy) (cap config, e.g. 20%); terminal growth g_ter = 2% (config).
 3. Discount rate r = CAPM: risk-free (config, ~4%) + Beta × market premium (config, 5%). WACC proxies initially.
 4. Firm value = Σ FCF·(1+g)^t/(1+r)^t over 5yr + terminal value / (1+r)^5; TV = FCF₅·(1+g_ter)/(r − g_ter).
-5. Equity value = firm value − net debt (Balance Sheet concepts from Financials As Reported). Per-share = equity / shares outstanding (Company Profile 2 `shareOutstanding`).
+5. Equity value = firm value − net debt (Balance Sheet concepts from Financials As Reported; a balance sheet Finnhub serves empty is filled from the same filing on SEC EDGAR). Per-share = equity / shares outstanding (Company Profile 2 `shareOutstanding`).
 
 **Comparables leg (50%):** "Comparable" = the company against its **own 3-5yr historical median multiples** (this repo's sources don't give a clean peer universe; Peers-based multiples are an optional later enrichment).
 1. P/E: historical median P/E × forward EPS (forward estimate from earnings calendar)

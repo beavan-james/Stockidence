@@ -10,6 +10,7 @@ Cadence follows ARCHITECTURE.md:
   hot-path                    -> behind the Finnhub quote cache (TTL ~1 min)
   on-demand-stale             -> fetched per ticker via the staleness gate
   immutable / conditional     -> variation of on-demand-stale
+  gap-fill                    -> fetched only to fill a gap another source left
   derived                     -> no API call, pipelined derivation
 """
 
@@ -25,6 +26,7 @@ class Provider(StrEnum):
     FINNHUB = "finnhub"
     TWELVE_DATA = "twelve_data"
     FRED = "fred"
+    SEC_EDGAR = "sec_edgar"
     DERIVED = "derived"
 
 
@@ -42,6 +44,7 @@ class Cadence(StrEnum):
     HOT_PATH = "hot_path"
     IMMUTABLE = "immutable"
     CONDITIONAL = "conditional"
+    GAP_FILL = "gap_fill"
     DERIVED = "derived"
 
 
@@ -297,6 +300,21 @@ _REGISTRY: list[EndpointSpec] = [
         ttl=None,
         notes="freq=annual; staleness gated by the filing itself — refetch only "
         "if a newer accessNumber exists for that ticker, not on a day-count TTL",
+    ),
+    # Must stay after financials_reported: the gap check reads the filings
+    # that endpoint just landed.
+    EndpointSpec(
+        name="sec_balance_sheets",
+        provider=Provider.SEC_EDGAR,
+        method="company_facts",
+        trigger=Trigger.ON_DEMAND_STALE,
+        cadence=Cadence.GAP_FILL,
+        watermark=("ticker", "accession_number"),
+        artifacts=("raw_sec_balance_sheets",),
+        ttl=None,
+        notes="SEC companyfacts balance sheets, fetched only when Finnhub landed a "
+        "filing with an empty balance sheet since the ticker's last SEC fetch; "
+        "a filing never changes, so no TTL",
     ),
     EndpointSpec(
         name="eps_surprises",

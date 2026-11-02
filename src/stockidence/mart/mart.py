@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..staging.staging import rebuild_prices_daily
+from ..staging.staging import rebuild_financials_reported, rebuild_prices_daily
 from ..storage import Warehouse
 
 
@@ -426,6 +426,7 @@ def rebuild_all_for_ticker(warehouse: Warehouse, ticker: str) -> dict[str, int]:
     """Run every staging & mart derivation for one ticker in dependency order."""
     return {
         "stg_prices_daily": rebuild_prices_daily(warehouse, ticker),
+        "stg_financials_reported": rebuild_financials_reported(warehouse, ticker),
         "m_prices_weekly": rebuild_prices_weekly(warehouse, ticker),
         "m_prices_monthly": rebuild_prices_monthly(warehouse, ticker),
         "m_advanced_analytics": rebuild_advanced_analytics(warehouse, ticker),

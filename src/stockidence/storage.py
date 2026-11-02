@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -68,6 +69,10 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("quarter", "INTEGER"),
         ("year", "INTEGER"),
     ],
+    # SEC companyfacts balance sheets, one row per filing. Keyed on the
+    # filing's accession number, the same id Finnhub's filings carry, so
+    # staging matches the two exactly.
+    "raw_sec_balance_sheets": [("ticker", "VARCHAR"), ("accession_number", "VARCHAR")],
     "raw_eps_surprises": [("ticker", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER")],
     "raw_transcript_segments": [
         ("ticker", "VARCHAR"),
@@ -158,6 +163,14 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
     # The PK is (series, date) — market-wide, not per ticker.
     "stg_fred_market": [
         ("series", "VARCHAR"), ("date", "DATE"), ("value", "DOUBLE"),
+    ],
+    # one row per Finnhub filing, its empty balance sheet filled from SEC
+    # (bs_source says which). The PK is (ticker, accession_number).
+    "stg_financials_reported": [
+        ("ticker", "VARCHAR"), ("accession_number", "VARCHAR"),
+        ("year", "INTEGER"), ("quarter", "INTEGER"), ("form", "VARCHAR"),
+        ("filed_date", "DATE"), ("end_date", "DATE"),
+        ("bs_source", "VARCHAR"), ("payload", "JSON"),
     ],
 }
 
@@ -337,7 +350,8 @@ class Warehouse:
             for table, keys in STAGING_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 # staging PK = the first two declared columns: (ticker, date)
-                # for bars, (series, date) for the market-wide FRED table.
+                # for bars, (series, date) for the market-wide FRED table,
+                # (ticker, accession_number) for filings.
                 pk = ", ".join(f'"{name}"' for name, _ in keys[:2])
                 con.execute(
                     f"""
@@ -658,11 +672,14 @@ class Warehouse:
         *,
         fetched_at: datetime | None = None,
         high_watermark: str | None = None,
+        merge: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
     ) -> int:
         """Upsert raw rows idempotently keyed on the artifact's PK columns.
 
         Each row keeps its full original response fragment as JSON `payload`
-        (raw is minimally transformed by design). Returns rows written.
+        (raw is minimally transformed by design). With `merge`, a key that is
+        already stored gets merge(incoming, stored) instead of the incoming
+        payload (see raw_mapping.MERGERS). Returns rows written.
         """
         if artifact not in RAW_SCHEMA:
             raise KeyError(f"unknown artifact table: {artifact}")
@@ -670,6 +687,7 @@ class Warehouse:
         pk = ", ".join(f'"{name}"' for name in keys)
         fetched_at = fetched_at or datetime.now(timezone.utc)
         set_cols = ", ".join(f'"{name}" = excluded."{name}"' for name in ("payload", "fetched_at"))
+        match = " AND ".join(f'"{name}" = ?' for name in keys)
 
         written = 0
         with self.connect() as con:
@@ -679,6 +697,12 @@ class Warehouse:
                     raise KeyError(f"{artifact}: rows missing key columns {missing}")
                 values = [row[k] for k in keys]
                 payload_json = row.get("payload", row)
+                if merge is not None:
+                    stored = con.execute(
+                        f'SELECT payload FROM raw."{artifact}" WHERE {match}', values
+                    ).fetchone()
+                    if stored is not None:
+                        payload_json = merge(payload_json, json.loads(stored[0]))
                 con.execute(
                     f"""
                     INSERT INTO raw."{artifact}" ({', '.join(f'"{k}"' for k in keys)}, payload, fetched_at)

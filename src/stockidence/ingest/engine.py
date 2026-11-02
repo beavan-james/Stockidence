@@ -24,9 +24,10 @@ from typing import Any
 from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
 from .clients.fred import FredClient
+from .clients.sec_edgar import SecEdgarClient
 from .clients.twelve_data import TwelveDataClient
 from .endpoints import EndpointSpec, Provider, get_endpoint
-from .raw_mapping import normalize_for
+from .raw_mapping import MERGERS, normalize_for
 from .staleness import FetchDecision, StalenessGate
 from ..storage import Warehouse
 
@@ -35,6 +36,7 @@ _PROVIDER_CLIENTS = {
     Provider.TWELVE_DATA: TwelveDataClient,
     Provider.ALPHA_VANTAGE: AlphaVantageClient,
     Provider.FRED: FredClient,
+    Provider.SEC_EDGAR: SecEdgarClient,
 }
 
 # registry endpoint name -> FRED series id (the raw table key column)
@@ -120,6 +122,8 @@ class IngestEngine:
                 "to_date": now.date().isoformat(),
             },
         }
+        if spec.name == "sec_balance_sheets":
+            return {"cik": self._sec_cik(sym)}
         if spec.name == "earnings_call_transcript":
             parts = dimension_key.split("|")
             if len(parts) < 3:
@@ -139,6 +143,22 @@ class IngestEngine:
         if spec.name not in by_name:
             raise ValueError(f"{spec.name}: no on-demand call signature (use ingest_scheduled)")
         return by_name[spec.name]
+
+    def _sec_cik(self, ticker: str) -> str:
+        """The ticker's SEC company id, read off its Finnhub filings (each
+        carries `cik`), so no separate ticker → CIK lookup is needed."""
+        with self.warehouse.connect(read_only=True) as con:
+            row = con.execute(
+                """
+                SELECT json_extract_string(payload, '$.cik') FROM raw.raw_financials_reported
+                WHERE ticker = ? AND json_extract_string(payload, '$.cik') IS NOT NULL
+                LIMIT 1
+                """,
+                [ticker],
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"sec_balance_sheets: no CIK on record for {ticker}")
+        return row[0]
 
     def _scheduled_kwargs(self, spec: EndpointSpec, now: datetime, params: dict[str, Any] | None) -> dict[str, Any]:
         params = dict(params or {})
@@ -172,7 +192,9 @@ class IngestEngine:
         for artifact, artifact_rows in rows.items():
             if not artifact_rows:
                 continue
-            written += self.warehouse.land(artifact, artifact_rows, fetched_at=now, high_watermark=high_watermark)
+            written += self.warehouse.land(
+                artifact, artifact_rows, fetched_at=now, high_watermark=high_watermark,
+                merge=MERGERS.get(artifact))
         return written
 
     def _ingest(self, spec: EndpointSpec, dimension_key: str, kwargs: dict[str, Any], now: datetime) -> IngestResult:

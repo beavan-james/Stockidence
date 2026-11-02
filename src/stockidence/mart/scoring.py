@@ -225,10 +225,10 @@ def _peg_to_score(peg: float | None) -> float | None:
 # ---------------------------------------------------------------------------
 
 def _fetch_raw(con: Any, table: str, where: str, args: list[Any],
-               order: str = "") -> list[dict[str, Any]]:
-    """All rows of a raw table as dicts (key columns + parsed payload)."""
+               order: str = "", schema: str = "raw") -> list[dict[str, Any]]:
+    """All rows of a raw (or staging) table as dicts (key columns + parsed payload)."""
     cur = con.execute(
-        f'SELECT * FROM raw."{table}" WHERE {where} {order}',
+        f'SELECT * FROM {schema}."{table}" WHERE {where} {order}',
         args,
     )
     cols = [d[0] for d in cur.description]
@@ -253,9 +253,10 @@ def _eps_surprise_rows(con: Any, ticker: str) -> list[dict[str, Any]]:
 
 
 def _reported_rows(con: Any, ticker: str) -> list[dict[str, Any]]:
-    """Fiscal-period rows, oldest first (approximation for fiscal ordering)."""
-    return _fetch_raw(con, "raw_financials_reported", "ticker = ?", [ticker],
-                      "ORDER BY year, quarter")
+    """Fiscal-period rows, oldest first (approximation for fiscal ordering).
+    Read from staging, where empty Finnhub balance sheets are filled from SEC."""
+    return _fetch_raw(con, "stg_financials_reported", "ticker = ?", [ticker],
+                      "ORDER BY year, quarter", schema="staging")
 
 
 def _basic_rows(con: Any, ticker: str) -> list[dict[str, Any]]:

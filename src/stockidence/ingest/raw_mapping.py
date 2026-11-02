@@ -14,7 +14,7 @@ Design rules:
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from ..storage import RAW_SCHEMA
@@ -126,6 +126,89 @@ def normalize_financials_reported(payload: dict[str, Any], symbol: str, now: dat
         if entry.get("quarter") is not None and entry.get("year") is not None
     ]
     return _single("raw_financials_reported", rows)
+
+
+REPORT_SECTIONS = ("bs", "ic", "cf")
+
+
+def keep_filled_report_sections(incoming: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
+    """Refetch guard for raw_financials_reported: never trade a filled
+    statement for an empty one.
+
+    Every refetch returns the ticker's whole filing history and replaces each
+    stored filing. Finnhub has re-served filings it once sent complete with an
+    empty balance sheet (`report.bs == []`), which wiped balance sheets the
+    warehouse already held. For the same filing (same accessNumber), a
+    section that comes back empty keeps the stored copy, and `_kept_sections`
+    lists which ones did. A different accessNumber (an amendment replacing the
+    original) lands as sent.
+    """
+    if incoming.get("accessNumber") != stored.get("accessNumber"):
+        return incoming
+    new_report, old_report = incoming.get("report"), stored.get("report")
+    if not isinstance(new_report, dict) or not isinstance(old_report, dict):
+        return incoming
+    kept = [s for s in REPORT_SECTIONS if not new_report.get(s) and old_report.get(s)]
+    if not kept:
+        return incoming
+    return {
+        **incoming,
+        "report": {**new_report, **{s: old_report[s] for s in kept}},
+        "_kept_sections": kept,
+    }
+
+
+# Filings older than this aren't landed from SEC companyfacts. Finnhub's
+# older balance sheets are complete; the SEC fill only has to cover recent
+# filings, and full history would be ~60 filings x ~100 facts per ticker.
+SEC_LOOKBACK_DAYS = 3 * 365
+
+
+def normalize_sec_balance_sheets(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+    """SEC /api/xbrl/companyfacts: one row per filing, holding its balance
+    sheet as filed (every us-gaap USD point-in-time fact on its balance-sheet
+    date).
+
+    companyfacts is organised concept → unit → facts, each fact tagged with
+    the accession number (accn) of the filing that reported it. Facts with a
+    `start` are flows (income statement, cash flow) and are skipped. A filing
+    also repeats prior-period columns, so only facts on its balance-sheet
+    date are kept: the latest date it reports total assets for (every balance
+    sheet has that line), else its latest date. `bs` mirrors Finnhub's
+    report.bs so staging can drop it straight in.
+    """
+    cutoff = (now.date() - timedelta(days=SEC_LOOKBACK_DAYS)).isoformat()
+    filings: dict[str, dict[str, Any]] = {}
+    for concept, body in ((payload.get("facts") or {}).get("us-gaap") or {}).items():
+        for fact in (body.get("units") or {}).get("USD") or []:
+            if "start" in fact or not fact.get("accn") or (fact.get("filed") or "") < cutoff:
+                continue
+            filing = filings.setdefault(
+                fact["accn"], {"form": fact.get("form"), "filed": fact.get("filed"), "facts": []})
+            filing["facts"].append((concept, fact["end"], fact.get("val"), body.get("label")))
+
+    rows = []
+    for accn, filing in filings.items():
+        asset_dates = [end for concept, end, _, _ in filing["facts"] if concept == "Assets"]
+        as_of = max(asset_dates or [end for _, end, _, _ in filing["facts"]])
+        bs, seen = [], set()
+        for concept, end, value, label in filing["facts"]:
+            if end == as_of and concept not in seen:
+                seen.add(concept)
+                bs.append({"concept": f"us-gaap_{concept}", "unit": "usd", "label": label, "value": value})
+        rows.append({
+            "ticker": symbol,
+            "accession_number": accn,
+            "payload": {
+                "cik": payload.get("cik"),
+                "accessNumber": accn,
+                "form": filing["form"],
+                "filedDate": filing["filed"],
+                "endDate": as_of,
+                "bs": bs,
+            },
+        })
+    return _single("raw_sec_balance_sheets", rows)
 
 
 def normalize_eps_surprises(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
@@ -337,6 +420,7 @@ NORMALIZERS: dict[str, Normalizer] = {
     "company_profile2": normalize_company_profile2,
     "basic_financials": normalize_basic_financials,
     "financials_reported": normalize_financials_reported,
+    "sec_balance_sheets": normalize_sec_balance_sheets,
     "eps_surprises": normalize_eps_surprises,
     "earnings_call_transcript": normalize_earnings_call_transcript,
     "insider_sentiment": normalize_insider_sentiment,
@@ -358,6 +442,13 @@ NORMALIZERS: dict[str, Normalizer] = {
     "earnings_calendar": normalize_earnings_calendar,
     "market_news": normalize_market_news,
     "ticker_news": normalize_ticker_news,
+}
+
+
+# artifact -> merge(incoming, stored) applied when an already-stored key is
+# landed again. Raw is replace-on-refetch; these are the exceptions.
+MERGERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = {
+    "raw_financials_reported": keep_filled_report_sections,
 }
 
 

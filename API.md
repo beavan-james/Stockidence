@@ -365,6 +365,45 @@ JSON samples are shown as they come back from the provider.
 }
 ```
 
+### Company Facts — balance-sheet fill (SEC EDGAR)
+
+`GET https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json`. Free, no
+key; SEC asks for a User-Agent with a name and contact email
+(`SEC_USER_AGENT`) and at most 10 requests a second. Called only when Finnhub
+lands a filing with an empty balance sheet (`report.bs == []`). The CIK comes
+from the ticker's Finnhub filings.
+
+Every XBRL fact the company has filed, by taxonomy → concept → unit. Each fact
+carries the accession number (`accn`) of the filing that reported it, the
+same id as Finnhub's `accessNumber`, so a value can be matched to the exact
+filing. Facts with a `start` are flows; the rest are point-in-time
+(balance-sheet) values. Landed to `raw_sec_balance_sheets` keyed
+`(ticker, accession_number)`: one row per filing from the last three years,
+holding its USD instants on its balance-sheet date. `stg_financials_reported`
+drops that list into the Finnhub filing's empty `report.bs`.
+
+```json
+{
+  "cik": 320193,
+  "entityName": "Apple Inc.",
+  "facts": {
+    "us-gaap": {
+      "Assets": {
+        "label": "Assets",
+        "units": {
+          "USD": [
+            {"end": "2026-03-28", "val": 331233000000, "accn": "0000320193-26-000013",
+             "fy": 2026, "fp": "Q2", "form": "10-Q", "filed": "2026-05-01"},
+            ...
+          ]
+        }
+      },
+      ...
+    }
+  }
+}
+```
+
 ### Earnings Estimate (Alpha Vantage) (Not in use)
 
 ```json

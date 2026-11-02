@@ -308,13 +308,17 @@ def _load_advanced_analytics(wh: Warehouse, feature_cols: list[str] | None = Non
 
 
 def _load_financials(wh: Warehouse, tickers: list[str] | None = None) -> pd.DataFrame:
-    """Load PIT financials and extract key metrics from the payload JSON."""
+    """Load PIT financials and extract key metrics from the payload JSON.
+
+    Reads staging, not raw: stg_financials_reported is Finnhub's filings with
+    any empty balance sheet filled from the same filing on SEC EDGAR.
+    """
     import json
 
     where, params = _ticker_filter(tickers)
     with wh.connect(read_only=True) as con:
         rows = con.execute(
-            f"SELECT ticker, year, quarter, payload FROM raw.raw_financials_reported {where}",
+            f"SELECT ticker, year, quarter, payload FROM staging.stg_financials_reported {where}",
             params,
         ).fetchall()
 
