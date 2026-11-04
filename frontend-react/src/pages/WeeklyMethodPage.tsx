@@ -5,7 +5,7 @@ import { LeadFigure, PageHero, Section, Stat, Steps } from "@/components/layout/
 import { WeeklyExcessBars } from "@/components/ranking/ModelCharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWeekly } from "@/hooks/queries";
-import { FEATURES } from "@/lib/features";
+import { FEATURES, featureMeta } from "@/lib/features";
 import { snapshotLabel } from "@/lib/tiers";
 import { leadTone } from "@/lib/utils";
 import type { WeeklyTrackWeek, WeeklyValidation } from "@/types/api";
@@ -231,18 +231,47 @@ export function WeeklyMethodPage() {
 
       <Section
         title="What it looks at"
-        intro="The same 13 inputs as the quarterly model. How much each one counts isn't published for the weekly model yet, so they are listed here without a share."
+        intro={
+          d?.as_of && d.weights.length > 0
+            ? `The same 13 inputs as the quarterly model. A tree model has no fixed weights, so this is the share of a typical stock's score explained by each input in the ${snapshotLabel(d.as_of)} list.`
+            : !weekly.isPending &&
+              "The same 13 inputs as the quarterly model. How much each one counts is published with the next Friday run."
+        }
       >
-        <div className="grid gap-x-10 sm:grid-cols-2">
-          {Object.entries(FEATURES).map(([feature, meta]) => (
-            <div key={feature} className="border-t border-line py-3.5">
-              <span className="text-[15px]">{meta.label}</span>
-              <p className="mt-1 text-xs text-ink-muted">
-                {meta.group} · {meta.help}
-              </p>
-            </div>
-          ))}
-        </div>
+        {weekly.isPending ? (
+          <Skeleton className="h-64" />
+        ) : d && d.weights.length > 0 ? (
+          <div className="grid gap-x-10 sm:grid-cols-2">
+            {d.weights.map((w) => {
+              const meta = featureMeta(w.feature);
+              return (
+                <div key={w.feature} className="bar-target border-t border-line py-3.5">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span className="text-[15px]">{meta.label}</span>
+                    <span className="num text-ink-secondary">{Math.round(w.share * 100)}%</span>
+                  </div>
+                  <div className="mt-2 h-[6px] bg-white/[0.06]">
+                    <div className="bar h-full" style={{ width: `${(w.share / d.weights[0].share) * 100}%` }} />
+                  </div>
+                  <p className="mt-2 text-xs text-ink-muted">
+                    {meta.group} · {meta.help}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid gap-x-10 sm:grid-cols-2">
+            {Object.entries(FEATURES).map(([feature, meta]) => (
+              <div key={feature} className="border-t border-line py-3.5">
+                <span className="text-[15px]">{meta.label}</span>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {meta.group} · {meta.help}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title="How it works">
