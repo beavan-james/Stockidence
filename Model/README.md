@@ -198,7 +198,9 @@ numbers to `mart.weekly_validation`, and the Weekly page shows those:
 Tables (all `mart`): `weekly_rankings` (one ranked list per `as_of`, with
 each stock's `realized_return` once its week closes), `weekly_track_record`
 (per week: top-10, whole-list and VOO returns; `source` = `backtest` or
-`live`) and `weekly_validation` (one row of walk-forward metrics per run).
+`live`), `weekly_validation` (one row of walk-forward metrics per run) and
+`weekly_feature_importance` (per list and input: mean |SHAP contribution|
+across the ranked stocks, measured as in the quarterly model).
 
 **Dates.** `as_of` is the Friday whose close the snapshot uses; the list
 is for the following Monday–Friday and is graded by the next Friday's run.
@@ -206,9 +208,9 @@ Internally weekly rows are labelled by their Monday.
 
 ### Serving
 
-- `GET /api/weekly` → this week's list with each stock's previous rank,
-  last week's top 10 with realized returns, the backtest track and the
-  latest validation row
+- `GET /api/weekly` → this week's list with each stock's previous rank and
+  each input's share of the score, last week's top 10 with realized
+  returns, the backtest track and the latest validation row
 
 ### Caveats
 

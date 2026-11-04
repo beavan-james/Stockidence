@@ -267,16 +267,32 @@ def validation_summary(weeks: pd.DataFrame) -> dict:
     }
 
 
+def _rankable(cohort: pd.DataFrame) -> pd.DataFrame:
+    """The stocks a list can hold: not excluded, every input present."""
+    return cohort[~cohort["ticker"].isin(EXCLUDED)].dropna(subset=FEATURES)
+
+
 def rank_cohort(bst: xgb.Booster, cohort: pd.DataFrame) -> pd.DataFrame:
     """Score this week's snapshot: rank 1 = most likely to lead next week."""
     import xgboost as xgb
 
-    cohort = cohort[~cohort["ticker"].isin(EXCLUDED)].dropna(subset=FEATURES)
+    cohort = _rankable(cohort)
     ranked = cohort[["ticker", "sector"]].assign(
         score=bst.predict(xgb.DMatrix(cohort[FEATURES])))
     ranked = ranked.sort_values("score", ascending=False).reset_index(drop=True)
     ranked["rank"] = range(1, len(ranked) + 1)
     return ranked
+
+
+def feature_importance(bst: xgb.Booster, cohort: pd.DataFrame) -> dict[str, float]:
+    """Mean |SHAP contribution| per input across the stocks this week's list
+    ranks, measured the same way as the quarterly model's input weights."""
+    import numpy as np
+    import xgboost as xgb
+
+    # One column per input, then the base score, which no input accounts for.
+    contribs = bst.predict(xgb.DMatrix(_rankable(cohort)[FEATURES]), pred_contribs=True)
+    return dict(zip(FEATURES, np.abs(contribs[:, :-1]).mean(axis=0).tolist()))
 
 
 # ── Export ──────────────────────────────────────────────────────────────────
@@ -291,12 +307,14 @@ def export_weekly(
     warehouse: Warehouse,
     as_of: str,
     ranked: pd.DataFrame,
+    importance: dict[str, float],
     weeks: pd.DataFrame,
     validation: dict,
     outcomes: pd.DataFrame,
     bench: pd.Series,
 ) -> dict:
-    """Write this week's list, grade earlier lists, replace the backtest.
+    """Write this week's list and input weights, grade earlier lists, replace
+    the backtest.
 
     `outcomes` is every labeled (ticker, week) row: a list published at
     as_of X is graded on the X-week row's OUTCOME (next Monday open to
@@ -320,6 +338,10 @@ def export_weekly(
         con.executemany(
             "INSERT INTO mart.weekly_rankings (as_of, rank, ticker, sector, score)"
             " VALUES (?, ?, ?, ?, ?)", rows)
+        con.execute("DELETE FROM mart.weekly_feature_importance WHERE as_of = ?", [as_of])
+        con.executemany(
+            "INSERT INTO mart.weekly_feature_importance (as_of, feature, mean_abs_contribution)"
+            " VALUES (?, ?, ?)", [(as_of, f, v) for f, v in importance.items()])
 
         pending = [d for (d,) in con.execute(
             "SELECT DISTINCT as_of FROM mart.weekly_rankings"
@@ -378,6 +400,7 @@ def train_and_rank() -> dict:
 
     bst = fit_ranker(md)
     ranked = rank_cohort(bst, cohort)
+    importance = feature_importance(bst, cohort)
     as_of = snapshot_date(cohort["date"].iloc[0])
     validation |= {
         "train_rows": int(len(md)),
@@ -395,6 +418,6 @@ def train_and_rank() -> dict:
 
     warehouse = Warehouse()
     warehouse.init_schema()
-    exported = export_weekly(warehouse, as_of, ranked, weeks, validation, train, bench)
+    exported = export_weekly(warehouse, as_of, ranked, importance, weeks, validation, train, bench)
     return {"as_of": as_of, "top10": ranked["ticker"].head(TOP_K).tolist(),
             **validation, **exported}

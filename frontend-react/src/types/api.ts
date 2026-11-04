@@ -169,6 +169,8 @@ export interface WeeklyEnvelope {
   week_of: string | null;
   universe_size: number;
   items: WeeklyItem[];
+  /** How much each input counts in this list, largest first. Empty until a run records them. */
+  weights: ModelOverview["weights"];
   /** Last week's list: its top 10 and how they did (null returns until that week closes). */
   previous: {
     as_of: string;

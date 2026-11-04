@@ -639,6 +639,18 @@ class Warehouse:
                 )
                 """
             )
+            # How much each input counts in a published list: mean |SHAP
+            # contribution| across the stocks ranked that week.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.weekly_feature_importance (
+                    as_of DATE NOT NULL,
+                    feature VARCHAR NOT NULL,
+                    mean_abs_contribution DOUBLE NOT NULL,
+                    PRIMARY KEY (as_of, feature)
+                )
+                """
+            )
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).

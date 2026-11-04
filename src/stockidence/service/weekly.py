@@ -19,7 +19,7 @@ def _week_of(as_of: date) -> str:
 
 
 def _empty() -> dict:
-    return {"as_of": None, "week_of": None, "universe_size": 0, "items": [],
+    return {"as_of": None, "week_of": None, "universe_size": 0, "items": [], "weights": [],
             "previous": None, "backtest": None, "live": None, "validation": None}
 
 
@@ -43,6 +43,23 @@ def _summary(rows: list[tuple]) -> dict:
         "hit_rate_vs_spx": sum(1 for x in vs_spx if x > 0) / len(vs_spx) if vs_spx else None,
         "avg_excess_vs_universe": sum(vs_uni) / len(vs_uni) if vs_uni else None,
     }
+
+
+def _weights(con, as_of: date) -> list[dict]:
+    """Each input's share of a typical stock's score in that list, largest
+    first; empty for a list from before a run recorded them."""
+    try:
+        rows = con.execute(
+            "SELECT feature, mean_abs_contribution FROM mart.weekly_feature_importance"
+            " WHERE as_of = ? ORDER BY mean_abs_contribution DESC",
+            [as_of],
+        ).fetchall()
+    except Exception as exc:
+        if not _missing_table(exc):
+            raise
+        return []
+    total = sum(w for _, w in rows) or 1.0
+    return [{"feature": f, "share": w / total} for f, w in rows]
 
 
 @_resilient
@@ -74,6 +91,7 @@ def _fetch_weekly() -> dict:
             """,
             [prev, latest],
         ).fetchall()
+        weights = _weights(con, latest)
         prev_items = con.execute(
             "SELECT rank, ticker, sector, realized_return FROM mart.weekly_rankings"
             " WHERE as_of = ? AND rank <= 10 ORDER BY rank",
@@ -107,6 +125,7 @@ def _fetch_weekly() -> dict:
              "previous_rank": int(p) if p is not None else None}
             for rk, t, s, sc, p in items
         ],
+        "weights": weights,
         "previous": {
             "as_of": _iso(prev),
             "week_of": _week_of(prev),
