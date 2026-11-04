@@ -28,12 +28,12 @@ export function DistributionStrip({
               key={r.ticker}
               to={`/stocks/${r.ticker}`}
               title={`#${r.rank} ${r.ticker}`}
-              className="flex-1 transition-opacity hover:opacity-70"
+              className="bar bar-tick flex-1"
               style={{
                 height: on ? 44 : 24,
                 minWidth: on ? 3 : undefined,
-                background: on ? "#fff" : TIER_COLORS[tierOf(r.rank, n)],
-                boxShadow: on ? "0 0 0 3px rgba(255,255,255,.12)" : undefined,
+                backgroundColor: on ? "#fff" : TIER_COLORS[tierOf(r.rank, n)],
+                outline: on ? "3px solid rgba(255,255,255,.12)" : undefined,
               }}
             />
           );

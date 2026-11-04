@@ -13,10 +13,9 @@
   --color-raised: #161b2a;
   --color-line: #1f2534;
 
-  /* Brand gradient: light blue -> cobalt. Accent = interactive/brand text. */
+  /* Accent = anything active: hovered links, rows and chart bars. */
   --color-accent: #8fd8ff;
   --color-accent-strong: #bfe9ff;
-  --color-cobalt: #2f5bea;
   --color-accent-dim: rgba(143, 216, 255, 0.12);
 
   /* Text ramp */
@@ -50,6 +49,77 @@ body {
 /* Figures render tabular so columns of numbers align */
 .num {
   font-variant-numeric: tabular-nums;
+}
+
+/* Chart bars: white at rest, muted below zero. While a bar, or the row or column
+   holding it (.bar-target), is hovered it turns light blue. Strip ticks already
+   carry a tier colour, set inline, so they turn white instead. */
+.bar {
+  background-color: var(--color-ink);
+  transition: background-color 120ms ease-out;
+}
+.bar-down {
+  background-color: #3a4256;
+}
+.bar:hover,
+.bar-target:hover .bar {
+  background-color: var(--color-accent);
+}
+.bar-tick:hover {
+  background-color: #fff !important;
+}
+
+/* A section's top rule: a hairline that starts with a short run of accent */
+.section-rule {
+  background-image:
+    linear-gradient(var(--color-accent), var(--color-accent)),
+    linear-gradient(var(--color-line), var(--color-line));
+  background-repeat: no-repeat;
+  background-position: left top;
+  background-size: 3rem 1px, 100% 1px;
+}
+
+/* One table style site-wide. Layered so a cell's utilities can still override it. */
+@layer components {
+  .data-table {
+    width: 100%;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  .data-table th {
+    padding-bottom: 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-align: left;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+  }
+  .data-table td {
+    border-top: 1px solid var(--color-line);
+    padding-block: 0.625rem;
+  }
+  .data-table th + th,
+  .data-table td + td {
+    padding-left: 0.75rem;
+  }
+  /* A clickable row: its ticker goes from white to light blue, like a bar filling */
+  .row-link {
+    cursor: pointer;
+    transition: background-color 150ms;
+  }
+  .row-link:hover {
+    background-color: rgb(255 255 255 / 0.025);
+  }
+  .ticker {
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    transition: color 150ms;
+  }
+  .row-link:hover .ticker {
+    color: var(--color-accent);
+  }
 }
 
 /* Soft brand glow behind a page header; the only decorative gradient */
@@ -102,5 +172,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sk-shimmer {
     animation: none;
+  }
+  .bar {
+    transition: none;
   }
 }

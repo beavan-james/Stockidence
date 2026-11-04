@@ -1,3 +1,4 @@
+import { snapshotLabel } from "@/lib/tiers";
 import type { Commodity, MacroMetric, SeriesPoint } from "@/types/api";
 
 function Sparkline({ points }: { points: SeriesPoint[] }) {
@@ -14,49 +15,38 @@ function Sparkline({ points }: { points: SeriesPoint[] }) {
       <polyline
         points={coords}
         fill="none"
-        stroke="var(--color-accent)"
-        strokeWidth="2"
+        className="stroke-ink transition-colors group-hover:stroke-accent"
+        strokeWidth="1.5"
         vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
 }
 
-/** Macro indicator cards: latest reading + sparkline of the recent series. */
-export function MacroGrid({ metrics }: { metrics: MacroMetric[] }) {
+/** Macro readings with a sparkline of the recent series, then commodity prices, on one grid. */
+export function MacroGrid({ metrics, commodities }: { metrics: MacroMetric[]; commodities: Commodity[] }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
       {metrics.map((m) => (
-        <div key={m.label} className="space-y-2 border-b border-line/60 pb-4">
-          <div className="flex items-baseline justify-between">
-            <p className="text-sm font-medium">{m.label}</p>
-            <p className="num text-lg font-semibold">
-              {m.value?.toLocaleString("en-US")}
-              <span className="ml-1 text-xs font-normal text-ink-muted">{m.unit}</span>
-            </p>
+        <div key={m.label} className="group border-t border-line pt-4">
+          <p className="text-sm text-ink-secondary">{m.label}</p>
+          <p className="num mt-1 text-3xl">
+            {m.value?.toLocaleString("en-US")}
+            <span className="ml-1 text-xs text-ink-muted">{m.unit}</span>
+          </p>
+          <div className="mt-3">
+            <Sparkline points={m.series} />
           </div>
-          <Sparkline points={m.series} />
-          <p className="text-[11px] text-ink-muted">
-            {m.detail} · as of {m.as_of}
+          <p className="mt-2 text-xs text-ink-muted">
+            {m.detail} · as of {snapshotLabel(m.as_of)}
           </p>
         </div>
       ))}
-    </div>
-  );
-}
-
-export function CommoditiesRow({ commodities }: { commodities: Commodity[] }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
       {commodities.map((c) => (
-        <div key={c.nominal} className="flex items-baseline justify-between border-b border-line/60 pb-4">
-          <p className="text-sm font-medium">{c.label}</p>
-          <div className="text-right">
-            <p className="num text-lg font-semibold">
-              ${c.price?.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </p>
-            <p className="text-[11px] text-ink-muted">{c.unit}</p>
-          </div>
+        <div key={c.nominal} className="border-t border-line pt-4">
+          <p className="text-sm text-ink-secondary">{c.label}</p>
+          <p className="num mt-1 text-3xl">${c.price?.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+          <p className="mt-2 text-xs text-ink-muted">{c.unit}</p>
         </div>
       ))}
     </div>

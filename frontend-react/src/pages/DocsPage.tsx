@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { PageHero } from "@/components/layout/Page";
 import { useActiveSection } from "@/hooks/useActiveSection";
 import { mdComponents } from "@/components/markdown";
 import readme from "../../../README.md?raw";
@@ -27,31 +28,41 @@ export function DocsPage() {
   }, []);
 
   return (
-    <div className="flex gap-10">
-      <nav className="sticky top-24 hidden w-44 shrink-0 space-y-1 self-start text-sm md:block">
-        {SECTIONS.map((s) => (
-          <a
-            key={s.id}
-            href={`#${s.id}`}
-            className={`block rounded-lg px-3 py-1.5 transition-colors ${
-              activeId === s.id
-                ? "bg-accent/10 font-medium text-accent"
-                : "text-ink-secondary hover:bg-raised hover:text-ink"
-            }`}
-          >
-            {s.label}
-          </a>
-        ))}
-      </nav>
+    <div>
+      <PageHero
+        eyebrow="Documentation"
+        title={
+          <>
+            How Stockidence <em className="not-italic text-accent">is built.</em>
+          </>
+        }
+        lede="The pipeline, the ranking models and the data sources, from the write-ups in the repo."
+      />
 
-      <div className="min-w-0 flex-1 space-y-16">
-        {SECTIONS.map((s) => (
-          <section key={s.id} id={s.id} className="scroll-mt-24">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-              {s.content}
-            </ReactMarkdown>
-          </section>
-        ))}
+      <div className="flex gap-10">
+        <nav className="sticky top-24 hidden w-44 shrink-0 self-start text-sm md:block">
+          {SECTIONS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className={`block border-l py-1.5 pl-3 transition-colors ${
+                activeId === s.id ? "border-accent text-accent" : "border-line text-ink-secondary hover:text-accent"
+              }`}
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="min-w-0 flex-1">
+          {SECTIONS.map((s) => (
+            <section key={s.id} id={s.id} className="section-rule scroll-mt-24 pb-16 pt-6">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                {s.content}
+              </ReactMarkdown>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

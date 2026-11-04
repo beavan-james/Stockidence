@@ -162,7 +162,7 @@ week is scored by a model that saw it. The live job refits every week.
 
 Development run on a copy of the local warehouse (prices to 2026-08-28;
 398 test weeks, 125,791 test rows). Each production run writes its own
-numbers to `mart.weekly_validation`, and the Weekly page shows those:
+numbers to `mart.weekly_validation`, and the Weekly method page shows those:
 
 - Top 10 vs the whole list: **+67 bp/week** (t=+2.79, ahead in 58% of weeks)
 - Top 10 vs S&P 500 (VOO): **+71 bp/week**, ahead in 57% of weeks

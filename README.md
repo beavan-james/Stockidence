@@ -24,10 +24,9 @@ score).
 
 | Page | What it shows |
 | ---- | ------------- |
-| **Rankings** (home) | The quarter's full ranked list, a lookup that searches only ranked stocks, every stock as a tier-coloured distribution strip, the top of the list, sector tilt of the top fifth |
-| **Weekly** | Stocks of the Week: a ranking rebuilt every Friday after the close for the coming week. Top 10 with each stock's move since last week, the full list, how last week's top 10 did, and the walk-forward backtest |
-| **Stock page** | Rank context plus the input-by-input score breakdown and a plain-English verdict ("strong on momentum, held back by risk") |
-| **Model** | Walk-forward track record vs the S&P 500 by quarter, what the model weighs most, how it works and its limits |
+| **Quarterly** (home) | The quarter's full ranked list, a lookup that searches only ranked stocks, every stock as a tier-coloured distribution strip, the top of the list, sector tilt of the top fifth. Its **method page** (`/model`) has the walk-forward track record vs the S&P 500 by quarter, what the model weighs most, how it works and its limits |
+| **Weekly** | Stocks of the Week: a ranking rebuilt every Friday after the close for the coming week. Top 10 with each stock's move since last week, how last week's top 10 did, the walk-forward backtest and the full list. Its **method page** (`/week/method`) has the track record by year, ranking quality, the inputs, how it works and its limits |
+| **Stock page** | Quarterly model, labelled as such with a link to the stock's place on this week's list: rank context plus the input-by-input score breakdown and a plain-English verdict ("strong on momentum, held back by risk") |
 | **Market** | Context, not the product: daily movers, macro and commodities, news, IPO and earnings calendars |
 
 **Dates.** A ranking is labelled by its *snapshot date* — the quarter end
@@ -37,8 +36,9 @@ is the Q4 2026 ranking. Only finished quarters are ranked.
 **Design.** Dark blue-black canvas, one typeface (Inter Tight) throughout, with
 Instrument Serif kept for the header wordmark only. Sections are separated by
 hairline rules rather than boxed cards. One brand gradient (light blue → cobalt) that doubles as the tier
-scale: brighter means more favoured. No decorative motion; colour is reserved
-for meaning (tiers, gains/losses).
+scale: brighter means more favoured. Things are white at rest and light blue when
+active: hovered links, rows and chart bars. Other colour is reserved for meaning
+(tiers, gains/losses).
 
 ---
 ## How it's built

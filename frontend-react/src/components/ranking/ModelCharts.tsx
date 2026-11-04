@@ -37,19 +37,12 @@ function LeadBars({
         const h = (Math.abs(r.excess) / max) * height;
         const label = `${r.label}: ${r.excess >= 0 ? "+" : ""}${(r.excess * 100).toFixed(1)} pp`;
         return (
-          <div key={r.key} className="flex flex-1 flex-col" title={label}>
+          <div key={r.key} className="bar-target flex flex-1 flex-col" title={label}>
             <div className="flex items-end border-b border-white/20" style={{ height }}>
-              {r.excess > 0 && (
-                <div
-                  className="w-full"
-                  style={{ height: h, background: "linear-gradient(180deg, var(--color-accent), var(--color-cobalt))" }}
-                />
-              )}
+              {r.excess > 0 && <div className="bar w-full" style={{ height: h }} />}
             </div>
             <div style={{ height: down }}>
-              {r.excess < 0 && (
-                <div className="w-full bg-[#3a4256]" style={{ height: Math.min(h, down) }} />
-              )}
+              {r.excess < 0 && <div className="bar bar-down w-full" style={{ height: Math.min(h, down) }} />}
             </div>
           </div>
         );
@@ -64,16 +57,10 @@ export function WeightBars({ weights }: { weights: ModelOverview["weights"] }) {
   return (
     <div className="space-y-2.5">
       {weights.map((w) => (
-        <div key={w.feature} className="grid grid-cols-[minmax(0,11rem)_1fr_2.5rem] items-center gap-3 text-sm">
+        <div key={w.feature} className="bar-target grid grid-cols-[minmax(0,11rem)_1fr_2.5rem] items-center gap-3 text-sm">
           <span className="truncate text-ink-secondary">{featureMeta(w.feature).label}</span>
-          <div className="h-[7px] overflow-hidden bg-white/[0.06]">
-            <div
-              className="h-full"
-              style={{
-                width: `${(w.share / top) * 100}%`,
-                background: "linear-gradient(90deg, var(--color-cobalt), var(--color-accent))",
-              }}
-            />
+          <div className="h-[7px] bg-white/[0.06]">
+            <div className="bar h-full" style={{ width: `${(w.share / top) * 100}%` }} />
           </div>
           <span className="num text-right text-ink-secondary">{Math.round(w.share * 100)}%</span>
         </div>
@@ -92,16 +79,10 @@ export function SectorTilt({ items }: { items: RankedTicker[] }) {
   return (
     <div className="space-y-2.5">
       {rows.map(([sector, count]) => (
-        <div key={sector} className="grid grid-cols-[minmax(0,11rem)_1fr_1.75rem] items-center gap-3 text-sm">
+        <div key={sector} className="bar-target grid grid-cols-[minmax(0,11rem)_1fr_1.75rem] items-center gap-3 text-sm">
           <span className="truncate text-ink-secondary">{sector}</span>
-          <div className="h-2 overflow-hidden bg-white/[0.06]">
-            <div
-              className="h-full"
-              style={{
-                width: `${(count / max) * 100}%`,
-                background: "linear-gradient(90deg, var(--color-cobalt), var(--color-accent))",
-              }}
-            />
+          <div className="h-2 bg-white/[0.06]">
+            <div className="bar h-full" style={{ width: `${(count / max) * 100}%` }} />
           </div>
           <span className="num text-right text-ink-secondary">{count}</span>
         </div>

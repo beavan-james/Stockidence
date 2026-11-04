@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 
+import { LeadFigure, PageHero, Section, Stat } from "@/components/layout/Page";
 import { DistributionStrip } from "@/components/ranking/DistributionStrip";
 import { ExcessBars, SectorTilt } from "@/components/ranking/ModelCharts";
 import { RankingsTable } from "@/components/ranking/RankingsTable";
@@ -9,6 +10,7 @@ import { TierLegend } from "@/components/ranking/TierLabel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useModelOverview, useRankings } from "@/hooks/queries";
 import { leadingSector } from "@/lib/tiers";
+import { QUIET_LINK } from "@/lib/utils";
 
 export function RankingsPage() {
   const rankings = useRankings();
@@ -25,30 +27,28 @@ export function RankingsPage() {
 
   return (
     <div>
-      <section className="hero-glow pb-14">
-        <p className="pt-10 text-xs uppercase tracking-[0.14em] text-ink-secondary">
-          Quarterly ranking model
-        </p>
-        {rankings.isPending ? (
-          <Skeleton className="mt-5 h-40 max-w-3xl" />
-        ) : (
-          <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-6xl">
-            {lead && lead.share >= 0.3 ? (
-              <>
-                This quarter the model leans into <em className="not-italic text-accent">{lead.sector}.</em>
-              </>
-            ) : (
-              <>
-                This quarter's favourites are <em className="not-italic text-accent">spread across sectors.</em>
-              </>
-            )}
-          </h1>
-        )}
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-secondary">
-          Every quarter{n ? `, ${n}` : ""} US stocks are ordered by how likely they are to beat the
-          rest of the list over the next three months. Look one up to see where it stands, and why.
-        </p>
-
+      <PageHero
+        eyebrow="Quarterly ranking model"
+        link={{ to: "/model", label: "How the model works →" }}
+        loading={rankings.isPending}
+        title={
+          lead && lead.share >= 0.3 ? (
+            <>
+              This quarter the model leans into <em className="not-italic text-accent">{lead.sector}.</em>
+            </>
+          ) : (
+            <>
+              This quarter's favourites are <em className="not-italic text-accent">spread across sectors.</em>
+            </>
+          )
+        }
+        lede={
+          <>
+            Every quarter{n ? `, ${n}` : ""} US stocks are ordered by how likely they are to beat the rest of the list
+            over the next three months. Look one up to see where it stands, and why.
+          </>
+        }
+      >
         <div className="mt-10">{n > 0 && <StockLookup items={items} />}</div>
 
         {rankings.isError ? (
@@ -59,69 +59,58 @@ export function RankingsPage() {
             <TierLegend />
           </div>
         ) : null}
-      </section>
+      </PageHero>
 
-      <section className="grid gap-12 pb-16 lg:grid-cols-[1.55fr_1fr]">
-        <div>
-          <div className="mb-4 flex items-baseline justify-between">
-            <h2 className="font-medium text-4xl tracking-tight">Top of the list</h2>
-            <a href="#all" className="text-sm text-ink-secondary hover:text-ink">
+      <div className="grid gap-x-12 lg:grid-cols-[1.55fr_1fr]">
+        <Section
+          title="Top of the list"
+          aside={
+            <a href="#all" className={QUIET_LINK}>
               View all {n} ↓
             </a>
-          </div>
-          {rankings.isPending ? (
-            <Skeleton className="h-96" />
-          ) : (
-            <RankingsTable items={items} limit={10} />
-          )}
-        </div>
+          }
+        >
+          {rankings.isPending ? <Skeleton className="h-96" /> : <RankingsTable items={items} limit={10} />}
+        </Section>
 
-        <div className="space-y-10">
+        <div>
           {summary?.avg_excess_vs_spx != null && (
-            <div className="border-t border-line pt-6">
-              <div className="flex items-baseline justify-between">
-                <h3 className="font-medium text-2xl">Track record</h3>
-                <Link to="/model" className="text-sm text-ink-secondary hover:text-ink">
+            <Section
+              level={3}
+              title="Track record"
+              aside={
+                <Link to="/model" className={QUIET_LINK}>
                   Details →
                 </Link>
-              </div>
-              <p className="num mt-4 font-medium text-6xl leading-none tracking-tight">
-                {summary.avg_excess_vs_spx >= 0 ? "+" : "−"}
-                {Math.abs(summary.avg_excess_vs_spx * 100).toFixed(1)}
-                <span className="text-3xl"> pp</span>
-              </p>
+              }
+            >
+              <LeadFigure
+                value={`${summary.avg_excess_vs_spx >= 0 ? "+" : "−"}${Math.abs(summary.avg_excess_vs_spx * 100).toFixed(1)}`}
+                unit="pp"
+              />
               <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                Average quarterly lead of the model's top 20 over the S&amp;P 500 in walk-forward
-                testing.
+                Average quarterly lead of the model's top 20 over the S&amp;P 500 in walk-forward testing.
               </p>
               <div className="mt-5">
                 <ExcessBars quarters={overview.data!.track_record} />
               </div>
               <div className="mt-5 grid grid-cols-2 gap-5 border-t border-line pt-5">
-                <div>
-                  <p className="num text-2xl">{Math.round((summary.hit_rate_vs_spx ?? 0) * 100)}%</p>
-                  <p className="text-xs text-ink-muted">of quarters beat the index</p>
-                </div>
-                <div>
-                  <p className="num text-2xl">{summary.quarters}</p>
-                  <p className="text-xs text-ink-muted">quarters tested</p>
-                </div>
+                <Stat value={`${Math.round((summary.hit_rate_vs_spx ?? 0) * 100)}%`} label="of quarters beat the index" />
+                <Stat value={summary.quarters} label="quarters tested" />
               </div>
-            </div>
+            </Section>
           )}
           {n > 0 && (
-            <div className="border-t border-line pt-6">
-              <h3 className="mb-4 font-medium text-2xl">Where the top fifth sits</h3>
+            <Section level={3} title="Where the top fifth sits">
               <SectorTilt items={items} />
-            </div>
+            </Section>
           )}
         </div>
-      </section>
+      </div>
 
-      <section id="all" className="scroll-mt-24 pb-10">
-        <h2 className="mb-4 font-medium text-4xl tracking-tight">All {n} rankings</h2>
+      <Section id="all" title={`All ${n} rankings`}>
         {n > 0 && <RankingsTable items={items} />}
-      </section>
+      </Section>
     </div>
   );
 }
