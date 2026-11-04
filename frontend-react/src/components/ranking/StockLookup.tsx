@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { TierLabel } from "@/components/ranking/TierLabel";
+import { Input } from "@/components/ui/input";
 import { tierOf } from "@/lib/tiers";
 import type { RankedTicker } from "@/types/api";
 
@@ -28,7 +29,7 @@ export function StockLookup({ items }: { items: RankedTicker[] }) {
 
   return (
     <div className="relative w-full max-w-md">
-      <input
+      <Input
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -47,10 +48,10 @@ export function StockLookup({ items }: { items: RankedTicker[] }) {
         }}
         placeholder={`Find a stock in this quarter's ${n}…`}
         aria-label="Find a ranked stock"
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-5 py-4 text-base text-ink backdrop-blur placeholder:text-ink-muted focus:border-accent/50 focus:outline-none"
+        className="h-14 px-5 text-base"
       />
       {q && (
-        <div className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-line bg-surface shadow-2xl shadow-black/40">
+        <div className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-line bg-surface shadow-2xl shadow-black/40">
           {matches.length === 0 ? (
             <p className="px-5 py-4 text-sm text-ink-muted">
               {q.toUpperCase()} isn't in this quarter's ranking.

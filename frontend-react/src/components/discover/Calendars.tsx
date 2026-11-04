@@ -2,25 +2,21 @@ import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 
 import { useIsRanked } from "@/hooks/queries";
+import { dayLabel } from "@/lib/tiers";
 import type { EarningsRelease, IpoListing } from "@/types/api";
 import { cn } from "@/lib/utils";
 
 const MAX_VISIBLE = 10;
+const HEADING = "mb-4 font-medium text-2xl tracking-tight";
+const SCROLL = "overflow-y-auto no-scrollbar";
 
-function hourBadge(hour: string | null): { label: string; cls: string } {
-  if (hour === "amc") return { label: "AMC", cls: "bg-accent-dim text-accent-strong" };
-  if (hour === "bmo") return { label: "BMO", cls: "bg-raised text-ink-secondary" };
-  return { label: "N/A", cls: "" };
-}
+const HOURS: Record<string, string> = { amc: "After close", bmo: "Before open" };
 
-function statusPill(status: string | null): { label: string; cls: string } | null {
+/** IPO status as plain text: priced in a softened accent, the rest muted. */
+function ipoStatus(status: string | null): { label: string; cls: string } | null {
   if (!status) return null;
-  const map: Record<string, { label: string; cls: string }> = {
-    priced: { label: "Priced", cls: "text-gain" },
-    expected: { label: "Expected", cls: "text-accent-strong" },
-    filed: { label: "Filed", cls: "text-ink-muted" },
-  };
-  return map[status] ?? { label: status, cls: "text-ink-muted" };
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  return { label, cls: status === "priced" ? "text-accent/70" : "text-ink-muted" };
 }
 
 export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
@@ -31,38 +27,30 @@ export function IpoCalendar({ listings }: { listings: IpoListing[] }) {
 
   return (
     <div>
-      <div
-          className={cn("overflow-y-auto no-scrollbar pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
-      >
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
-            <tr className="text-left text-xs text-ink-muted">
-              <th className="px-3 pb-2 font-normal">Date</th>
-              <th className="px-3 pb-2 font-normal">Symbol</th>
-              <th className="px-3 pb-2 font-normal">Company</th>
-              <th className="px-3 pb-2 text-right font-normal">Price</th>
+      <h3 className={HEADING}>IPOs</h3>
+      <div className={cn(SCROLL, sorted.length > MAX_VISIBLE && "max-h-96")}>
+        <table className="data-table">
+          <thead className="sticky top-0 bg-bg">
+            <tr>
+              <th>Date</th>
+              <th>Symbol</th>
+              <th>Company</th>
+              <th className="text-right">Price</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((ipo, i) => {
-              const pill = statusPill(ipo.status);
+              const status = ipoStatus(ipo.status);
               return (
-                <tr
-                  key={`${ipo.symbol ?? i}-${ipo.date}`}
-                  className="border-t border-line/60"
-                >
-                  <td className="num px-3 py-2.5 text-ink-secondary">{ipo.date}</td>
-                  <td className="px-3 py-2.5">
-                    <span className="num font-semibold">{ipo.symbol ?? "N/A"}</span>
-                    {pill && (
-                      <span className={cn("ml-2 text-[11px]", pill.cls)}>
-                        {pill.label}
-                      </span>
-                    )}
+                <tr key={`${ipo.symbol ?? i}-${ipo.date}`}>
+                  <td className="num whitespace-nowrap text-ink-secondary">{dayLabel(ipo.date)}</td>
+                  <td>
+                    <span className="num ticker">{ipo.symbol ?? "—"}</span>
+                    {status && <span className={cn("ml-2 text-[11px]", status.cls)}>{status.label}</span>}
                   </td>
-                  <td className="max-w-40 truncate px-3 py-2.5 text-ink-secondary">{ipo.name}</td>
-                  <td className={cn("num px-3 py-2.5 text-right", ipo.price ? "font-medium" : "text-ink-muted")}>
-                    {ipo.price ? `$${ipo.price}` : "N/A"}
+                  <td className="max-w-40 truncate text-ink-secondary">{ipo.name}</td>
+                  <td className={cn("num text-right", !ipo.price && "text-ink-muted")}>
+                    {ipo.price ? `$${ipo.price}` : "—"}
                   </td>
                 </tr>
               );
@@ -90,60 +78,34 @@ export function EarningsCalendar({ releases }: { releases: EarningsRelease[] }) 
 
   return (
     <div>
-      <div
-          className={cn("overflow-y-auto no-scrollbar pt-1", sorted.length > MAX_VISIBLE && "max-h-96")}
-      >
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-bg/90 backdrop-blur-sm">
-            <tr className="text-left text-xs text-ink-muted">
-              <th className="px-3 pb-2 font-normal">Date</th>
-              <th className="px-3 pb-2 font-normal">Symbol</th>
-              <th className="px-3 pb-2 font-normal">When</th>
-              <th className="px-3 pb-2 text-right font-normal">EPS est.</th>
-              <th className="px-3 pb-2 text-right font-normal">Rev est.</th>
+      <h3 className={HEADING}>Earnings</h3>
+      <div className={cn(SCROLL, sorted.length > MAX_VISIBLE && "max-h-96")}>
+        <table className="data-table">
+          <thead className="sticky top-0 bg-bg">
+            <tr>
+              <th>Date</th>
+              <th>Symbol</th>
+              <th>When</th>
+              <th className="text-right">EPS est.</th>
+              <th className="text-right">Rev est.</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((e, i) => {
-              const badge = hourBadge(e.hour);
-              return (
-                <tr
-                  key={`${e.symbol}-${i}`}
-                  className={cn(
-                    "border-t border-line/60",
-                    isRanked(e.symbol) && "cursor-pointer transition-colors hover:bg-raised/60",
-                  )}
-                  onClick={isRanked(e.symbol) ? () => void navigate(`/stocks/${e.symbol}`) : undefined}
-                >
-                  <td className="num px-3 py-2.5 text-ink-secondary">{e.date}</td>
-                  <td className="num px-3 py-2.5 font-semibold">{e.symbol}</td>
-                  <td className="px-3 py-2.5">
-                    {badge.label !== "N/A" ? (
-                      <span className={cn("inline-flex rounded-md px-2 py-0.5 text-xs font-medium", badge.cls)}>
-                        {badge.label}
-                      </span>
-                    ) : (
-                      <span className="text-ink-muted">N/A</span>
-                    )}
-                  </td>
-                  <td
-                    className={cn(
-                      "num px-3 py-2.5 text-right font-medium",
-                      e.eps_estimate == null
-                        ? "text-ink-muted"
-                        : e.eps_estimate >= 0
-                          ? "text-gain"
-                          : "text-loss",
-                    )}
-                  >
-                    {e.eps_estimate?.toFixed(2) ?? "N/A"}
-                  </td>
-                  <td className="num px-3 py-2.5 text-right text-ink-secondary">
-                    {e.revenue_estimate_display ?? "N/A"}
-                  </td>
-                </tr>
-              );
-            })}
+            {sorted.map((e, i) => (
+              <tr
+                key={`${e.symbol}-${i}`}
+                className={cn(isRanked(e.symbol) && "row-link")}
+                onClick={isRanked(e.symbol) ? () => void navigate(`/stocks/${e.symbol}`) : undefined}
+              >
+                <td className="num whitespace-nowrap text-ink-secondary">{dayLabel(e.date)}</td>
+                <td className="num ticker">{e.symbol}</td>
+                <td className="whitespace-nowrap text-[11px] text-ink-muted">{HOURS[e.hour ?? ""] ?? "—"}</td>
+                <td className={cn("num text-right", e.eps_estimate == null && "text-ink-muted")}>
+                  {e.eps_estimate?.toFixed(2) ?? "—"}
+                </td>
+                <td className="num text-right text-ink-secondary">{e.revenue_estimate_display ?? "—"}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

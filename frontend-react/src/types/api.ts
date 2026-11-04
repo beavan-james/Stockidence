@@ -182,7 +182,27 @@ export interface WeeklyEnvelope {
   } | null;
   backtest: (WeeklySummary & { track: WeeklyTrackWeek[] }) | null;
   live: WeeklySummary | null;
-  validation: { weeks: number; rank_ic: number; top10_excess: number; top10_t: number; top10_hit: number } | null;
+  validation: WeeklyValidation | null;
+}
+
+/** Walk-forward metrics from the latest Friday run (mart.weekly_validation). */
+export interface WeeklyValidation {
+  run_at: string;
+  as_of: string | null;
+  weeks: number;
+  test_rows: number;
+  rank_ic: number;
+  top10_excess: number;
+  top10_t: number;
+  top10_hit: number;
+  top10_vs_spx: number | null;
+  top10_vs_spx_hit: number | null;
+  precision10: number;
+  precision10_random: number;
+  train_rows: number;
+  train_tickers: number;
+  train_first: string;
+  train_last: string;
 }
 
 export interface SeriesPoint {

@@ -7,6 +7,7 @@ import { MarketPage } from "@/pages/MarketPage";
 import { ModelPage } from "@/pages/ModelPage";
 import { RankingsPage } from "@/pages/RankingsPage";
 import { StockPage } from "@/pages/StockPage";
+import { WeeklyMethodPage } from "@/pages/WeeklyMethodPage";
 import { WeeklyPage } from "@/pages/WeeklyPage";
 
 const queryClient = new QueryClient({
@@ -27,6 +28,7 @@ export default function App() {
             <Route index element={<RankingsPage />} />
             <Route path="/stocks/:symbol" element={<StockPage />} />
             <Route path="/week" element={<WeeklyPage />} />
+            <Route path="/week/method" element={<WeeklyMethodPage />} />
             <Route path="/model" element={<ModelPage />} />
             <Route path="/market" element={<MarketPage />} />
             <Route path="/docs" element={<DocsPage />} />
