@@ -3,7 +3,8 @@
 Staging cleans, mart aggregates. stg_prices_daily is typing/cleaning/dedup
 plus grain-preserving transforms (return_1d); stg_fred_market types the FRED
 series; stg_financials_reported merges Finnhub filings with SEC balance
-sheets. Everything that aggregates over bars lives in mart.mart.
+sheets; stg_news_articles types both news providers' payloads into one
+layout. Everything that aggregates over bars lives in mart.mart.
 
 Pure derivation, no API calls (registry cadence DERIVED). The rebuild is a
 full per-ticker recompute: delete the ticker's staging rows, rebuild from
@@ -123,6 +124,80 @@ def rebuild_financials_reported(warehouse: Warehouse, ticker: str | None = None)
         return con.execute(
             f"SELECT COUNT(*) FROM staging.stg_financials_reported {where}", args
         ).fetchone()[0]
+
+
+# Alpha Vantage tags every ticker an article mentions, each with a relevance
+# score; below this the ticker is a passing mention, not what the article is
+# about. Finnhub's `related` has no score and is kept whole.
+NEWS_TICKER_MIN_RELEVANCE = 0.5
+
+
+def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
+    """Typed articles from raw.raw_news_articles, restaged incrementally.
+
+    Both providers land in the same raw table and share three payload keys:
+    `title`, `time_published` (UTC 'YYYYMMDDTHHMMSS') and `ticker_sentiment`.
+    Only a Finnhub payload has `headline`, which is how `provider` is told.
+
+    The newest staged fetched_at is the high watermark: only rows landed at
+    or after it are restaged (the batch at the watermark is re-read, which
+    is harmless and can't miss a row that shares its timestamp), and a
+    re-landed article gets a new fetched_at, so it is restaged too. `full=True`, or an empty table, restages everything.
+    Articles missing a headline, URL or valid timestamp are dropped. Returns
+    rows written.
+    """
+    with warehouse.connect() as con:
+        since = None if full else con.execute(
+            "SELECT MAX(fetched_at) FROM staging.stg_news_articles"
+        ).fetchone()[0]
+        con.execute("BEGIN TRANSACTION")
+        con.execute(
+            """
+            CREATE OR REPLACE TEMP TABLE news_batch AS
+            SELECT
+                article_id,
+                try_strptime(payload->>'time_published', '%Y%m%dT%H%M%S') AS published_at,
+                CASE WHEN payload->>'headline' IS NOT NULL THEN 'finnhub' ELSE 'alpha_vantage' END AS provider,
+                NULLIF(trim(payload->>'source'), '') AS source,
+                trim(payload->>'title') AS headline,
+                NULLIF(trim(payload->>'summary'), '') AS summary,
+                payload->>'url' AS url,
+                -- plain US symbols only (drops CRYPTO:BTC, FOREX:USD, preferred-share
+                -- lines like BNY-P-K) at or above the relevance floor, most
+                -- relevant first, so tickers[1] is the stock the article is about
+                list_filter(ranked, lambda t, i: list_position(ranked, t) = i) AS tickers,
+                fetched_at
+            FROM (
+                SELECT *, list_transform(list_reverse_sort(list_transform(list_filter(
+                    COALESCE(from_json(payload->'ticker_sentiment',
+                        '[{"ticker": "VARCHAR", "relevance_score": "VARCHAR"}]'), []),
+                    lambda t: regexp_full_match(t.ticker, '[A-Z][A-Z.]{0,5}')
+                        AND COALESCE(TRY_CAST(t.relevance_score AS DOUBLE), 1) >= ?),
+                    -- position breaks ties, keeping Finnhub's own order
+                    lambda t, i: {'relevance': COALESCE(TRY_CAST(t.relevance_score AS DOUBLE), 1),
+                                  'position': -i, 'ticker': t.ticker})),
+                    lambda t: t.ticker) AS ranked
+                FROM raw.raw_news_articles
+            )
+            WHERE (CAST(? AS TIMESTAMPTZ) IS NULL OR fetched_at >= ?)
+              AND try_strptime(payload->>'time_published', '%Y%m%dT%H%M%S') IS NOT NULL
+              AND NULLIF(trim(payload->>'title'), '') IS NOT NULL
+              AND NULLIF(payload->>'url', '') IS NOT NULL
+            """,
+            [NEWS_TICKER_MIN_RELEVANCE, since, since],
+        )
+        if since is None:
+            con.execute("DELETE FROM staging.stg_news_articles")
+        else:
+            con.execute(
+                "DELETE FROM staging.stg_news_articles"
+                " WHERE article_id IN (SELECT article_id FROM news_batch)"
+            )
+        con.execute("INSERT INTO staging.stg_news_articles SELECT * FROM news_batch")
+        written = con.execute("SELECT COUNT(*) FROM news_batch").fetchone()[0]
+        con.execute("DROP TABLE news_batch")
+        con.execute("COMMIT")
+        return written
 
 
 def balance_sheet_sources(warehouse: Warehouse, since: str) -> dict[str, int]:

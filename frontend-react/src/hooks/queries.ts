@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ApiError, client } from "@/lib/api";
 import type {
   Commodity,
+  DigestEnvelope,
   EarningsRelease,
   IpoListing,
   MacroMetric,
@@ -58,6 +59,18 @@ export function useWeekly() {
     queryFn: () => client.weekly(),
     // Changes once a week (Friday evening): refetch at most hourly.
     staleTime: 60 * 60_000,
+  });
+}
+
+/** One weekday's news digest; the latest when no date is given. */
+export function useDailyDigest(date: string | undefined) {
+  return useQuery<DigestEnvelope>({
+    queryKey: ["digest", "daily", date ?? "latest"],
+    queryFn: () => client.dailyDigest(date),
+    // Built once each weekday morning: refetch at most every 15 minutes.
+    staleTime: 15 * 60_000,
+    // 404 = no digest that day (a weekend, or before the first run): a real answer.
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
 }
 

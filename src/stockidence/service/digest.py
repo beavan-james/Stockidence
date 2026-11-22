@@ -1,0 +1,151 @@
+"""Daily news digest read path: one day's top stories from the tables
+stockidence.mart.news_digest builds, with the articles grouped under each."""
+
+from __future__ import annotations
+
+from datetime import date
+
+from .ranking import _missing_table
+from .warehouse import _resilient
+
+PERIOD = "daily"
+
+
+def _iso(d) -> str | None:
+    return d.isoformat() if hasattr(d, "isoformat") else None
+
+
+def _utc_iso(ts) -> str | None:
+    """Digest timestamps are stored as naive UTC; say so on the wire."""
+    return f"{ts.isoformat()}Z" if ts is not None else None
+
+
+def _weights() -> dict[str, float]:
+    from ..mart.news_digest import IMPORTANCE_WEIGHTS
+
+    return dict(IMPORTANCE_WEIGHTS)
+
+
+def _full_marks() -> dict[str, float]:
+    """Where coverage and reaction stop adding to a story's score."""
+    from ..mart.news_digest import COVERAGE_FULL_AT, REACTION_FULL_AT
+
+    return {"coverage_outlets": COVERAGE_FULL_AT, "move": REACTION_FULL_AT}
+
+
+def _empty() -> dict:
+    return {"period": PERIOD, "digest_date": None, "previous_date": None, "next_date": None,
+            "window_start": None, "window_end": None, "built_at": None, "articles": 0,
+            "routine_dropped": 0, "commentary_dropped": 0, "stories": 0, "outlets": 0,
+            "session_gap_minutes": None, "weights": _weights(), "full_marks": _full_marks(), "items": []}
+
+
+def get_daily_digest(digest_date: date | None = None) -> dict | None:
+    """Envelope for one day's digest (the latest when no date is given).
+
+    Empty (not an error) before the first digest run or when the warehouse
+    is absent; None when a specific date was asked for and has no digest.
+    """
+    try:
+        return _fetch_daily(digest_date)
+    except (FileNotFoundError, ImportError):
+        return None if digest_date else _empty()
+
+
+@_resilient
+def _fetch_daily(digest_date: date | None) -> dict | None:
+    """Load the envelope; raises on failure (retried by decorator)."""
+    from .warehouse import read_connect
+
+    with read_connect() as con:
+        try:
+            head = con.execute(
+                """
+                SELECT digest_date, window_start, window_end, built_at, articles,
+                       routine_dropped, commentary_dropped, stories, outlets,
+                       session_gap_minutes
+                FROM mart.news_digests
+                WHERE period = ? AND (CAST(? AS DATE) IS NULL OR digest_date = ?)
+                ORDER BY digest_date DESC LIMIT 1
+                """,
+                [PERIOD, digest_date, digest_date],
+            ).fetchone()
+        except Exception as exc:
+            if not _missing_table(exc):
+                raise
+            return None if digest_date else _empty()
+        if head is None:
+            return None if digest_date else _empty()
+        day = head[0]
+        prev_day, next_day = con.execute(
+            """
+            SELECT max(digest_date) FILTER (WHERE digest_date < ?),
+                   min(digest_date) FILTER (WHERE digest_date > ?)
+            FROM mart.news_digests WHERE period = ?
+            """,
+            [day, day, PERIOD],
+        ).fetchone()
+        stories = con.execute(
+            """
+            SELECT rank, headline, summary, url, source, published_at, tickers,
+                   categories, n_articles, n_outlets, move_ticker, move_return,
+                   coverage, reaction, category, on_site, score
+            FROM mart.news_digest_stories
+            WHERE period = ? AND digest_date = ?
+            ORDER BY rank
+            """,
+            [PERIOD, day],
+        ).fetchall()
+        # Every other article in each story, earliest first: the lead is
+        # already the story's headline, so it is left out here.
+        coverage = con.execute(
+            """
+            SELECT a.rank, n.source, n.headline, n.url, n.published_at
+            FROM mart.news_digest_articles a
+            JOIN staging.stg_news_articles n USING (article_id)
+            JOIN mart.news_digest_stories s
+              ON s.period = a.period AND s.digest_date = a.digest_date AND s.rank = a.rank
+            WHERE a.period = ? AND a.digest_date = ? AND n.url <> s.url
+            ORDER BY a.rank, n.published_at, n.article_id
+            """,
+            [PERIOD, day],
+        ).fetchall()
+
+    also: dict[int, list[dict]] = {}
+    for rank, source, headline, url, published in coverage:
+        also.setdefault(int(rank), []).append(
+            {"source": source, "headline": headline, "url": url,
+             "published_at": _utc_iso(published)}
+        )
+    return {
+        "period": PERIOD,
+        "digest_date": _iso(day),
+        "previous_date": _iso(prev_day),
+        "next_date": _iso(next_day),
+        "window_start": _utc_iso(head[1]),
+        "window_end": _utc_iso(head[2]),
+        "built_at": _iso(head[3]),
+        "articles": head[4],
+        "routine_dropped": head[5],
+        "commentary_dropped": head[6],
+        "stories": head[7],
+        "outlets": head[8],
+        "session_gap_minutes": head[9],
+        "weights": _weights(), "full_marks": _full_marks(),
+        "items": [
+            {
+                "rank": int(rank), "headline": headline, "summary": summary, "url": url,
+                "source": source, "published_at": _utc_iso(published),
+                "tickers": list(tickers or []), "categories": list(categories or []),
+                "n_articles": n_articles, "n_outlets": n_outlets,
+                "move_ticker": move_ticker, "move_return": move_return,
+                "score": round(score, 4),
+                "components": {"coverage": round(cov, 4), "reaction": round(rea, 4),
+                               "category": round(cat, 4), "on_site": round(site, 4)},
+                "also_covered": also.get(int(rank), []),
+            }
+            for (rank, headline, summary, url, source, published, tickers, categories,
+                 n_articles, n_outlets, move_ticker, move_return,
+                 cov, rea, cat, site, score) in stories
+        ],
+    }

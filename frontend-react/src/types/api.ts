@@ -253,3 +253,55 @@ export interface EarningsRelease {
   revenue_actual: number | null;
   revenue_actual_display: string | null;
 }
+
+export type DigestInput = "coverage" | "reaction" | "category" | "on_site";
+
+export interface DigestArticle {
+  source: string | null;
+  headline: string;
+  url: string;
+  published_at: string;
+}
+
+export interface DigestStory {
+  rank: number;
+  headline: string;
+  summary: string | null;
+  url: string;
+  source: string | null;
+  /** UTC, ISO 8601 with Z. */
+  published_at: string;
+  /** Most relevant first; the first is the stock the story leads with. */
+  tickers: string[];
+  categories: string[];
+  n_articles: number;
+  n_outlets: number;
+  /** The stock the story leads with, when it has a 1-day move for the session after the news. */
+  move_ticker: string | null;
+  move_return: number | null;
+  score: number;
+  /** Each input on a 0-1 scale, before weighting. */
+  components: Record<DigestInput, number>;
+  /** The story's other articles, earliest first. */
+  also_covered: DigestArticle[];
+}
+
+export interface DigestEnvelope {
+  period: "daily";
+  digest_date: string | null;
+  previous_date: string | null;
+  next_date: string | null;
+  window_start: string | null;
+  window_end: string | null;
+  built_at: string | null;
+  articles: number;
+  routine_dropped: number;
+  commentary_dropped: number;
+  stories: number;
+  outlets: number;
+  /** Longest stretch of the session with no article. */
+  session_gap_minutes: number | null;
+  weights: Record<DigestInput, number>;
+  full_marks: { coverage_outlets: number; move: number };
+  items: DigestStory[];
+}

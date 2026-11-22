@@ -11,6 +11,8 @@
 - **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
 - **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published (Finnhub general news; older Alpha Vantage rows also carry overall_sentiment_score) (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with ticker/date filters so paging never loads the full table)
 - **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — from Finnhub's `related` field (older Alpha Vantage rows also carry relevance_score, ticker_sentiment_score). This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
+- **News (staged)** — `staging.stg_news_articles`, key `article_id` — one typed row per article from either provider: `published_at` as a UTC timestamp, outlet, headline, summary, url, and `tickers` (most relevant first: Finnhub's `related` order, Alpha Vantage tickers with relevance ≥ 0.5). Incremental: each run restages only articles landed since the newest staged `fetched_at`.
+- **Daily news digest** — `mart.news_digests` (one row per weekday: window, article counts, how much was filtered out, the longest stretch of the session with no article), `mart.news_digest_stories` (the top 10 stories with each score input) and `mart.news_digest_articles` (which articles were grouped under each story), all keyed by `(period, digest_date)`. Built at 07:30 ET on weekdays from the 24h to 07:00 ET (Monday's covers the weekend). Rule-based, no model: drop routine filings and opinion pieces, group articles about the same event by headline overlap, then rank by coverage (outlets), the 1-day move of the stock it leads with, story type (deal / earnings / macro) and whether the stock is in one of the site's rankings. A rebuild replaces that day's rows.
 ---
 ## Real-Time / Ticker-Partitioned Data
 *Fetched on-demand per ticker via dynamic partitions, gated by a staleness check against `last_updated`.*
@@ -56,6 +58,7 @@ flowchart TD
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
         WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
+        DIGEST["daily_digest · weekdays 07:30 ET<br/>news pull → stage → group + rank stories"]
         PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
         RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
@@ -69,6 +72,7 @@ flowchart TD
         M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
         M_RANK["model_rankings<br/>rank · ticker · sector · score<br/>quarterly snapshot"]
         M_WEEK["weekly_rankings · weekly_track_record<br/>Stocks of the Week + realized returns"]
+        M_NEWS["news_digests · news_digest_stories<br/>news_digest_articles<br/>daily top 10 stories"]
     end
 
     UI["FastAPI + React SPA<br/>reads mart/raw · launches jobs (no sensors)"]
@@ -78,6 +82,8 @@ flowchart TD
     QUART -->|"ranking snapshot"| M_RANK
     WEEK -->|"incremental refresh<br/>prices forced"| RAW
     WEEK -->|"weekly list · grade last week"| M_WEEK
+    DIGEST -->|"news pull"| RAW
+    DIGEST -->|"top stories"| M_NEWS
     UI -->|"POST /api/pipeline/refresh<br/>when no/fresh snapshot"| PUSH
     PUSH -->|"ingest + derived + score"| RUN
     RUN <--> GATE
@@ -99,6 +105,7 @@ flowchart TD
     MART -->|"rating snapshot<br/>source=warehouse"| UI
     M_RANK -->|"GET /api/rankings"| UI
     M_WEEK -->|"GET /api/weekly"| UI
+    M_NEWS -->|"GET /api/digest/daily"| UI
     RAW -->|"quotes · news · commodities · macro"| UI
     M_RESH -->|"GET /api/prices"| UI
     M_TECH -->|"GET /api/technicals"| UI
@@ -132,6 +139,13 @@ flowchart TD
 >   Friday `weekly_model_refresh` job does the same weekly into
 >   `mart.weekly_rankings`, and fills in `realized_return` on the previous
 >   list once its week has closed (an incremental update, not a rewrite).
+>   The weekday `daily_digest` job pulls news once more, restages it into
+>   `staging.stg_news_articles`, and rebuilds that morning's digest. It reads
+>   `stg_prices_daily` for the lead stock's move and the ranking tables for
+>   which stocks the site covers; it calls no API beyond the news pull. Finnhub
+>   only serves the latest ~100 articles per pull, so the job logs a warning
+>   when the trading session has a long stretch with no article (news likely
+>   fell between pulls).
 >
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
 > over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a mostly-read
@@ -141,4 +155,5 @@ flowchart TD
 > in-ranking lookup), Weekly (`mart.weekly_rankings`: Stocks of the
 > Week, last week's results, backtest), stock page (rank context + per-input SHAP breakdown),
 > Model (track record, input weights, methodology), Market (movers, macro,
-> news, calendars), Docs.
+> news, calendars), Daily digest (`mart.news_digest_*`: the morning's top
+> stories under Market, with what each score input gave them), Docs.

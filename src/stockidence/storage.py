@@ -172,7 +172,20 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("filed_date", "DATE"), ("end_date", "DATE"),
         ("bs_source", "VARCHAR"), ("payload", "JSON"),
     ],
+    # one row per article, Alpha Vantage history and Finnhub alike, typed
+    # into the same columns. published_at is UTC; tickers are the stocks the
+    # article is about. fetched_at carries over from raw and is the
+    # incremental rebuild's high watermark. The PK is article_id alone.
+    "stg_news_articles": [
+        ("article_id", "VARCHAR"), ("published_at", "TIMESTAMP"),
+        ("provider", "VARCHAR"), ("source", "VARCHAR"),
+        ("headline", "VARCHAR"), ("summary", "VARCHAR"), ("url", "VARCHAR"),
+        ("tickers", "VARCHAR[]"), ("fetched_at", "TIMESTAMPTZ"),
+    ],
 }
+
+# Staging tables whose PK isn't their first two columns.
+_STAGING_PK: dict[str, tuple[str, ...]] = {"stg_news_articles": ("article_id",)}
 
 
 # mart tables: aggregations and derivations the scoring layer reads — resampled
@@ -351,8 +364,10 @@ class Warehouse:
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 # staging PK = the first two declared columns: (ticker, date)
                 # for bars, (series, date) for the market-wide FRED table,
-                # (ticker, accession_number) for filings.
-                pk = ", ".join(f'"{name}"' for name, _ in keys[:2])
+                # (ticker, accession_number) for filings. Exceptions are
+                # listed in _STAGING_PK.
+                pk_cols = _STAGING_PK.get(table, tuple(name for name, _ in keys[:2]))
+                pk = ", ".join(f'"{name}"' for name in pk_cols)
                 con.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS staging."{table}" (
@@ -648,6 +663,67 @@ class Warehouse:
                     feature VARCHAR NOT NULL,
                     mean_abs_contribution DOUBLE NOT NULL,
                     PRIMARY KEY (as_of, feature)
+                )
+                """
+            )
+            # News digest (stockidence.mart.news_digest), keyed by period
+            # ('daily' for now) and the digest's date. news_digests holds the
+            # window and how much news it saw; news_digest_stories the top
+            # stories with each score input; news_digest_articles the
+            # articles grouped under each story. A rebuild replaces the
+            # digest's rows in all three.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.news_digests (
+                    period VARCHAR NOT NULL,
+                    digest_date DATE NOT NULL,
+                    window_start TIMESTAMP NOT NULL,
+                    window_end TIMESTAMP NOT NULL,
+                    articles INTEGER NOT NULL,
+                    routine_dropped INTEGER NOT NULL,
+                    commentary_dropped INTEGER NOT NULL,
+                    stories INTEGER NOT NULL,
+                    outlets INTEGER NOT NULL,
+                    session_gap_minutes INTEGER,
+                    built_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (period, digest_date)
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.news_digest_stories (
+                    period VARCHAR NOT NULL,
+                    digest_date DATE NOT NULL,
+                    rank INTEGER NOT NULL,
+                    headline VARCHAR NOT NULL,
+                    summary VARCHAR,
+                    url VARCHAR NOT NULL,
+                    source VARCHAR,
+                    published_at TIMESTAMP NOT NULL,
+                    tickers VARCHAR[],
+                    categories VARCHAR[],
+                    n_articles INTEGER NOT NULL,
+                    n_outlets INTEGER NOT NULL,
+                    move_ticker VARCHAR,
+                    move_return DOUBLE,
+                    coverage DOUBLE NOT NULL,
+                    reaction DOUBLE NOT NULL,
+                    category DOUBLE NOT NULL,
+                    on_site DOUBLE NOT NULL,
+                    score DOUBLE NOT NULL,
+                    PRIMARY KEY (period, digest_date, rank)
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.news_digest_articles (
+                    period VARCHAR NOT NULL,
+                    digest_date DATE NOT NULL,
+                    rank INTEGER NOT NULL,
+                    article_id VARCHAR NOT NULL,
+                    PRIMARY KEY (period, digest_date, article_id)
                 )
                 """
             )

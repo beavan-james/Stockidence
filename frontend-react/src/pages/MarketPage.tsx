@@ -34,6 +34,7 @@ export function MarketPage() {
     return (
         <div>
             <PageHero
+                link={{ to: "/market/digest", label: "Daily news digest →" }}
                 title={
                     <>
                         Around the market. <span className="text-accent">Context for the rankings.</span>

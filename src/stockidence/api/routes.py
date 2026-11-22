@@ -13,7 +13,16 @@ Contracts carried over from the Reflex read path:
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ..service import dagster_client, market, ranking, rating_service, sub_scores, warehouse, weekly
+from ..service import (
+    dagster_client,
+    digest,
+    market,
+    ranking,
+    rating_service,
+    sub_scores,
+    warehouse,
+    weekly,
+)
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
@@ -177,6 +186,25 @@ def get_news(
     return market.get_news_page(
         ticker=ticker, date_from=start, date_to=end, page=page, page_size=page_size
     )
+
+
+@market_router.get("/digest/daily")
+def get_daily_digest(
+    date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+) -> dict:
+    """One weekday's news digest (the latest when `date` is omitted): the
+    top stories, what each score input gave them, and the other articles
+    grouped under each. 404 for a date with no digest."""
+    from datetime import date as _date
+
+    try:
+        day = _date.fromisoformat(date) if date else None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"not a date: {date}") from exc
+    result = digest.get_daily_digest(day)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"no daily digest for {date}")
+    return result
 
 
 @meta_router.get("/model-weights")

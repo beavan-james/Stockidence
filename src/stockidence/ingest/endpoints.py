@@ -426,6 +426,30 @@ _REGISTRY: list[EndpointSpec] = [
         ttl=None,
         notes="MIN/MAX/MEAN/STDDEV/VARIANCE/MAX_DRAWDOWN from raw_prices_daily",
     ),
+    EndpointSpec(
+        name="news_articles",
+        provider=Provider.DERIVED,
+        method=None,
+        trigger=Trigger.DERIVED,
+        cadence=Cadence.DERIVED,
+        watermark=("article_id",),
+        artifacts=("stg_news_articles",),
+        ttl=None,
+        notes="both providers' raw_news_articles payloads typed into one layout; "
+        "incremental, high watermark = newest staged fetched_at",
+    ),
+    EndpointSpec(
+        name="news_digest.daily",
+        provider=Provider.DERIVED,
+        method=None,
+        trigger=Trigger.DERIVED,
+        cadence=Cadence.DERIVED,
+        watermark=("period", "digest_date"),
+        artifacts=("news_digests", "news_digest_stories", "news_digest_articles"),
+        ttl=None,
+        notes="top stories of the 24h to 07:00 New York time, from stg_news_articles; "
+        "built weekdays 07:30 NY by the daily_digest job, a rebuild replaces the date",
+    ),
 ]
 
 REGISTRY: dict[str, EndpointSpec] = {spec.name: spec for spec in _REGISTRY}

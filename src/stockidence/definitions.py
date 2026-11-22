@@ -21,11 +21,13 @@ Exposes:
     ingest + derived rebuilds + scoring
   - refresh_quotes job (frontend-triggered): quote-only pull for explicit
     user refresh (portfolio button) — no rebuilds, no scoring
+  - daily_digest job (schedule-bound, weekdays 07:30 New York): news pull
+    -> news staging -> the day's news digest
   - ticker_data asset with a dynamic ticker partition per lookup
     (manual materialization path)
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from dagster import (
@@ -36,12 +38,12 @@ from dagster import (
     Definitions,
     DynamicPartitionsDefinition,
     OpExecutionContext,
+    asset,
     in_process_executor,
     job,
     op,
     resource,
     schedule,
-    asset,
 )
 
 from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
@@ -49,18 +51,22 @@ from .ingest.engine import IngestEngine
 from .ingest.refresh import refresh_tickers
 from .mart.mart import (
     rebuild_advanced_analytics,
-    rebuild_fred_market as rebuild_fred_mart,
     rebuild_prices_monthly,
     rebuild_prices_weekly,
     rebuild_technical_indicators,
 )
+from .mart.mart import (
+    rebuild_fred_market as rebuild_fred_mart,
+)
+from .mart.news_digest import build_daily_digests, latest_digest_date
 from .mart.scoring import score_ticker
-from .staging.staging import rebuild_fred_market as rebuild_fred_staging
 from .staging.staging import (
     balance_sheet_sources,
     rebuild_financials_reported,
+    rebuild_news_articles,
     rebuild_prices_daily,
 )
+from .staging.staging import rebuild_fred_market as rebuild_fred_staging
 from .storage import Warehouse
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
@@ -150,11 +156,12 @@ def daily_schedule() -> dict:  # noqa: ANN401
 
 
 @op(name="ingest_news_op", required_resource_keys={"engine"})
-def ingest_news_op(context) -> None:
+def ingest_news_op(context) -> dict:
     engine = context.resources.engine
     result = engine.ingest_scheduled("market_news", now=_now())
     context.log.info(
         f"[scheduled:market_news] {result.reason} ({result.rows_written} rows)")
+    return {"news_rows": result.rows_written}
 
 
 @job(name="news_ingest")
@@ -176,6 +183,65 @@ def news_morning_schedule() -> dict:  # noqa: ANN401
           default_status=DefaultScheduleStatus.RUNNING)
 def news_evening_schedule() -> dict:  # noqa: ANN401
     """23:00 UTC (~7pm ET): evening news pull."""
+    return {}
+
+
+# A session with no article for this long means the general feed (latest
+# ~100 articles per pull) likely missed news between pulls.
+_DIGEST_GAP_WARN_MINUTES = 120
+
+
+class DailyDigestConfig(Config):
+    """Which digests to build: the one dated `digest_date` (YYYY-MM-DD; empty
+    means the newest whose window has closed) and the `days - 1` weekdays
+    before it. days > 1 backfills the archive from news already landed."""
+
+    digest_date: str = ""
+    days: int = 1
+
+
+@op(required_resource_keys={"engine"})
+def stage_news_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Restage the articles landed since the last run into stg_news_articles."""
+    rows = rebuild_news_articles(context.resources.engine.warehouse)
+    context.log.info(f"[derived:stg_news_articles] restaged {rows} articles")
+    return {**prev, "staged": rows}
+
+
+@op(required_resource_keys={"engine"})
+def build_digest_op(context: OpExecutionContext, config: DailyDigestConfig, prev: dict) -> dict:
+    """Pick the day's top stories into mart.news_digest_* (one digest per date)."""
+    last = (date.fromisoformat(config.digest_date)
+            if config.digest_date else latest_digest_date(_now()))
+    built = build_daily_digests(context.resources.engine.warehouse, last, max(config.days, 1))
+    for d in built:
+        context.log.info(
+            f"[digest:{d['digest_date']}] {d['picked']} of {d['stories']} stories from "
+            f"{d['articles']} articles ({d['routine_dropped']} routine, "
+            f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets")
+        if d["session_gap_minutes"] >= _DIGEST_GAP_WARN_MINUTES:
+            context.log.warning(
+                f"[digest:{d['digest_date']}] no article for {d['session_gap_minutes']} minutes "
+                "of the session: the news feed likely missed stories between pulls")
+    return {**prev, "digests": built}
+
+
+@job(name="daily_digest")
+def daily_digest_job() -> None:
+    """Weekday morning chain: news pull -> news staging -> digest."""
+    build_digest_op(stage_news_op(ingest_news_op()))
+
+
+@schedule(
+    job=daily_digest_job,
+    cron_schedule="30 7 * * 1-5",
+    execution_timezone="America/New_York",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+def daily_digest_schedule() -> dict:
+    """07:30 New York time on weekdays, before the open: the digest covers
+    the 24 hours to 07:00 (the weekend too, on Mondays). New York time, so
+    DST never shifts it."""
     return {}
 
 
@@ -554,11 +620,11 @@ defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data, stg_prices_daily, stg_financials_reported, m_prices_weekly,
             m_prices_monthly, m_advanced_analytics, m_technical_indicators, ticker_score],
-    jobs=[monthly_job, weekdays_job, daily_job, news_job, refresh_tickers_job,
-          refresh_quotes_job, quarterly_model_refresh_job, model_retrain_job,
-          weekly_model_refresh_job, weekly_rank_job],
+    jobs=[monthly_job, weekdays_job, daily_job, news_job, daily_digest_job,
+          refresh_tickers_job, refresh_quotes_job, quarterly_model_refresh_job,
+          model_retrain_job, weekly_model_refresh_job, weekly_rank_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
-               news_morning_schedule, news_evening_schedule,
+               news_morning_schedule, news_evening_schedule, daily_digest_schedule,
                quarterly_schedule, weekly_schedule],
     # DuckDB is a single-writer file: with the default multiprocess executor
     # DuckDB is a single-writer file: with the default multiprocess executor
