@@ -6,8 +6,8 @@ function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       className={cn(
-        "h-9 w-full rounded-lg border border-line bg-transparent px-3 text-sm text-ink placeholder:text-ink-muted",
-        "focus:border-accent/50 focus:outline-none",
+        "h-10 w-full rounded-[10px] border border-white/[0.16] bg-black/55 px-3.5 text-sm text-ink placeholder:text-ink-muted",
+        "transition-colors focus:border-accent focus:outline-none",
         className,
       )}
       {...props}

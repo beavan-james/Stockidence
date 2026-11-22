@@ -4,19 +4,20 @@ import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QUIET_LINK, cn } from "@/lib/utils";
 
+/** The one page-title scale site-wide; the home page's hero uses it too. */
+export const TITLE = "font-medium text-[40px] leading-[1.02] tracking-[-0.025em] sm:text-[44px] min-[900px]:text-6xl";
+
 /**
- * The top of every page: which model or area it belongs to, a link to its
- * sibling page, and one title size site-wide.
+ * The top of every page: an optional link to its sibling page, then the title
+ * and an optional one-line lede.
  */
 export function PageHero({
-  eyebrow,
   link,
   title,
   loading = false,
   lede,
   children,
 }: {
-  eyebrow: string;
   link?: { to: string; label: string } | null;
   title: ReactNode;
   loading?: boolean;
@@ -24,19 +25,16 @@ export function PageHero({
   children?: ReactNode;
 }) {
   return (
-    <section className="hero-glow pb-14">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 pt-10">
-        <p className="text-xs uppercase tracking-[0.14em] text-accent/80">{eyebrow}</p>
-        {link && (
-          <Link to={link.to} className={QUIET_LINK}>
-            {link.label}
-          </Link>
-        )}
-      </div>
+    <section className="pb-14 pt-14 min-[900px]:pt-20">
+      {link && (
+        <Link to={link.to} className={cn(QUIET_LINK, "mb-5 inline-block")}>
+          {link.label}
+        </Link>
+      )}
       {loading ? (
-        <Skeleton className="mt-5 h-40 max-w-3xl" />
+        <Skeleton className="h-40 max-w-3xl" />
       ) : (
-        <h1 className="mt-4 max-w-4xl font-medium text-5xl leading-[1.02] tracking-tight sm:text-6xl">{title}</h1>
+        <h1 className={cn(TITLE, "max-w-4xl")}>{title}</h1>
       )}
       {lede && <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-secondary">{lede}</p>}
       {children}
@@ -64,7 +62,12 @@ export function Section({
   return (
     <section id={id} className={cn("section-rule scroll-mt-24 pt-6", level === 2 ? "pb-16" : "pb-10")}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <Heading className={cn("font-medium tracking-tight", level === 2 ? "text-4xl" : "text-2xl leading-tight")}>
+        <Heading
+          className={cn(
+            "font-medium",
+            level === 2 ? "text-[30px] tracking-[-0.02em] sm:text-4xl" : "text-2xl leading-tight tracking-[-0.015em]",
+          )}
+        >
           {title}
         </Heading>
         {aside}
@@ -88,8 +91,8 @@ export function Section({
 export function Stat({ value, label }: { value: ReactNode; label: ReactNode }) {
   return (
     <div>
-      <p className="num text-2xl sm:text-3xl">{value}</p>
-      <p className="mt-1 text-xs text-ink-muted">{label}</p>
+      <p className="num text-2xl font-medium tracking-[-0.02em] sm:text-[28px]">{value}</p>
+      <p className="mt-1 text-[13px] text-ink-muted">{label}</p>
     </div>
   );
 }
@@ -97,9 +100,9 @@ export function Stat({ value, label }: { value: ReactNode; label: ReactNode }) {
 /** The headline number of a track record. */
 export function LeadFigure({ value, unit }: { value: string; unit?: string }) {
   return (
-    <p className="num font-medium text-6xl leading-none tracking-tight">
+    <p className="num flex items-baseline gap-1.5 font-medium text-[56px] leading-none tracking-[-0.03em]">
       {value}
-      {unit && <span className="text-3xl"> {unit}</span>}
+      {unit && <span className="text-xl tracking-normal text-ink-secondary">{unit}</span>}
     </p>
   );
 }

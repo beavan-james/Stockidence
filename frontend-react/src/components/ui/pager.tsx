@@ -1,5 +1,5 @@
 const BUTTON =
-  "rounded-lg border border-line px-3 py-1 text-ink-secondary transition-colors enabled:hover:text-accent disabled:opacity-40";
+  "rounded-[10px] border border-white/[0.16] px-3 py-1 text-ink-secondary transition-colors enabled:hover:text-accent disabled:opacity-40";
 
 /** Previous/next for a paged list; `page` counts from 1. */
 export function Pager({

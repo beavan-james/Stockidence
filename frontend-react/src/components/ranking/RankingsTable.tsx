@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { TierLabel } from "@/components/ranking/TierLabel";
 import { Input } from "@/components/ui/input";
 import { Pager } from "@/components/ui/pager";
 import { tierOf, topPercent } from "@/lib/tiers";
+import { cn } from "@/lib/utils";
 import type { RankedTicker } from "@/types/api";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type Row = RankedTicker & { previous_rank?: number | null };
 
@@ -24,18 +25,15 @@ function RankChange({ rank, previous }: { rank: number; previous: number | null 
   );
 }
 
-/** The full ranked list: filter by ticker or sector, 25 per page. `showChange`
+/** The full ranked list: filter by ticker or sector, 10 per page. `showChange`
  *  adds each row's move since the previous list (weekly ranking). */
 export function RankingsTable({
   items,
-  limit,
   showChange = false,
 }: {
   items: Row[];
-  limit?: number;
   showChange?: boolean;
 }) {
-  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const n = items.length;
@@ -48,62 +46,63 @@ export function RankingsTable({
     );
   }, [items, query]);
 
-  const paged = limit == null;
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const rows = paged
-    ? filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
-    : items.slice(0, limit);
+  const rows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const grid = cn(
+    "grid items-center gap-3",
+    showChange
+      ? "grid-cols-[40px_64px_minmax(0,1fr)_40px_84px] sm:grid-cols-[56px_88px_minmax(0,1fr)_56px_96px_96px]"
+      : "grid-cols-[40px_72px_minmax(0,1fr)_84px] sm:grid-cols-[56px_88px_minmax(0,1fr)_96px_96px]",
+  );
 
   return (
     <div>
-      {paged && (
-        <Input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(0);
-          }}
-          placeholder="Filter by ticker or sector…"
-          aria-label="Filter by ticker or sector"
-          className="mb-5 sm:max-w-xs"
-        />
-      )}
+      <Input
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setPage(0);
+        }}
+        placeholder="Filter by ticker or sector…"
+        aria-label="Filter by ticker or sector"
+        className="mb-5 sm:max-w-xs"
+      />
       {rows.length === 0 ? (
         <p className="py-4 text-sm text-ink-muted">Nothing matches “{query.trim()}”.</p>
       ) : (
-        <table className="data-table text-[15px]">
-          <thead>
-            <tr>
-              <th className="w-14">Rank</th>
-              <th className="w-24">Stock</th>
-              <th>Sector</th>
-              {showChange && <th className="w-14 text-right">Move</th>}
-              <th className="hidden text-right sm:table-cell">Standing</th>
-              <th className="text-right">Tier</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.ticker} onClick={() => void navigate(`/stocks/${r.ticker}`)} className="row-link">
-                <td className="num py-3.5 text-ink-muted">{String(r.rank).padStart(2, "0")}</td>
-                <td className="ticker py-3.5">{r.ticker}</td>
-                <td className="py-3.5 text-ink-secondary">{r.sector ?? "—"}</td>
-                {showChange && (
-                  <td className="py-3.5 text-right">
-                    <RankChange rank={r.rank} previous={r.previous_rank} />
-                  </td>
-                )}
-                <td className="num hidden py-3.5 text-right sm:table-cell">Top {topPercent(r.rank, n)}%</td>
-                <td className="py-3.5 text-right">
-                  <TierLabel tier={tierOf(r.rank, n)} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="text-[15px]">
+          <div className={cn(grid, "pb-2 text-xs uppercase tracking-[0.05em] text-ink-muted")}>
+            <span>Rank</span>
+            <span>Stock</span>
+            <span>Sector</span>
+            {showChange && <span className="text-right">Move</span>}
+            <span className="hidden text-right sm:block">Standing</span>
+            <span className="text-right">Tier</span>
+          </div>
+          {rows.map((r) => (
+            <Link
+              key={r.ticker}
+              to={`/stocks/${r.ticker}`}
+              className={cn(grid, "row-link border-t border-line py-3.5")}
+            >
+              <span className="num text-ink-muted">{String(r.rank).padStart(2, "0")}</span>
+              <span className="ticker">{r.ticker}</span>
+              <span className="truncate text-ink-secondary">{r.sector ?? "—"}</span>
+              {showChange && (
+                <span className="text-right">
+                  <RankChange rank={r.rank} previous={r.previous_rank} />
+                </span>
+              )}
+              <span className="num hidden text-right sm:block">Top {topPercent(r.rank, n)}%</span>
+              <span className="text-right">
+                <TierLabel tier={tierOf(r.rank, n)} />
+              </span>
+            </Link>
+          ))}
+        </div>
       )}
-      {paged && pageCount > 1 && <Pager page={safePage + 1} pageCount={pageCount} onPage={(p) => setPage(p - 1)} />}
+      {pageCount > 1 && <Pager page={safePage + 1} pageCount={pageCount} onPage={(p) => setPage(p - 1)} />}
     </div>
   );
 }

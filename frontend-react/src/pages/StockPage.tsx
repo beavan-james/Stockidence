@@ -125,7 +125,6 @@ export function StockPage() {
     const missing = detail.error instanceof ApiError && detail.error.status === 404;
     return (
       <PageHero
-        eyebrow="Quarterly ranking model"
         link={{ to: "/", label: "← This quarter's list" }}
         title={symbol}
         lede={
@@ -147,7 +146,6 @@ export function StockPage() {
   return (
     <div>
       <PageHero
-        eyebrow={`Quarterly ranking model · ${quarterLabel(d.as_of)}`}
         link={
           weeklyRank != null
             ? { to: "/week", label: `On this week's list: #${weeklyRank} of ${weekly.data?.universe_size} →` }
@@ -201,12 +199,7 @@ export function StockPage() {
             </p>
           ) : (
             <>
-              <p className="max-w-2xl leading-relaxed text-ink-secondary">
-                The score starts from the model's baseline and each of the {d.features.length} inputs
-                pushes it up or down. These are the end-of-quarter values the model saw, next to the
-                median across all {d.universe_size} ranked stocks.
-              </p>
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3.5 text-sm text-ink-secondary">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-y border-line py-3.5 text-sm text-ink-secondary">
                 <span>
                   Model baseline <b className="num font-medium text-ink">0.0</b>
                 </span>
@@ -221,10 +214,6 @@ export function StockPage() {
                 <span>Net effect vs the baseline</span>
                 <b className="num text-xl font-medium text-accent-strong">{formatPoints(net)}</b>
               </div>
-              <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-                Points are the model's per-input SHAP contributions ×100; they add up exactly to the
-                stock's ranking score. Only the order of scores matters: a higher score ranks higher.
-              </p>
             </>
           )}
         </Section>
@@ -232,11 +221,7 @@ export function StockPage() {
         <div>
           {v && <Section level={3} title={v.title} intro={v.body || undefined} />}
           {weights.length > 0 && (
-            <Section
-              level={3}
-              title="What the quarterly model weighs most"
-              intro="Share of a typical stock's score explained by each input, across this quarter's list."
-            >
+            <Section level={3} title="What the model weighs most">
               <WeightBars weights={weights} />
             </Section>
           )}

@@ -1,39 +1,40 @@
-@import "@fontsource-variable/inter-tight";
+@import "@fontsource-variable/bricolage-grotesque/opsz.css";
 @import "@fontsource/instrument-serif/400.css";
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter Tight Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
   /* One typeface site-wide; the serif is reserved for the header wordmark. */
   --font-logo: "Instrument Serif", ui-serif, Georgia, serif;
 
-  /* Surfaces: blue-black canvas, layered panels, hairline borders */
-  --color-bg: #090c14;
-  --color-surface: #0f1320;
-  --color-raised: #161b2a;
-  --color-line: #1f2534;
+  /* Surfaces: a black canvas, near-black overlays, hairline borders */
+  --color-bg: #000000;
+  --color-surface: #0c0b0b;
+  --color-raised: #171514;
+  --color-line: #1c1b1a;
 
-  /* Accent = anything active: hovered links, rows and chart bars. */
-  --color-accent: #8fd8ff;
-  --color-accent-strong: #bfe9ff;
-  --color-accent-dim: rgba(143, 216, 255, 0.12);
+  /* Accent = anything active: hovered links, rows and chart bars. Bright galaxy orange. */
+  --color-accent: #ff8d00;
+  --color-accent-strong: #ffc46b;
+  --color-accent-dim: rgba(255, 141, 0, 0.12);
 
-  /* Text ramp */
-  --color-ink: #ecedf2;
-  --color-ink-secondary: #a6abb8;
-  --color-ink-muted: #6e7381;
+  /* Text ramp, warm greys */
+  --color-ink: #ededec;
+  --color-ink-secondary: #a9a7a4;
+  --color-ink-muted: #7b7977;
 
-  /* Ranking tiers, top fifth -> bottom fifth: brighter = more favoured */
-  --color-tier-1: #a5e3ff;
-  --color-tier-2: #62b6f7;
-  --color-tier-3: #3b82f6;
-  --color-tier-4: #2d55d8;
-  --color-tier-5: #28304f;
+  /* Ranking tiers, top fifth -> bottom fifth: brighter = more favoured. The
+     same stops the home page's disc resolves each fifth to. */
+  --color-tier-1: #ffc46b;
+  --color-tier-2: #ff8d00;
+  --color-tier-3: #e36700;
+  --color-tier-4: #b84a17;
+  --color-tier-5: #86301a;
 
   /* Data colors: reserved for prices and sentiment, never decoration */
   --color-gain: #34d399;
   --color-loss: #f87171;
-  --color-neutral-data: #94a3b8;
+  --color-neutral-data: #8f8b87;
 }
 
 html {
@@ -43,7 +44,12 @@ html {
 
 body {
   font-family: var(--font-sans);
+  background-color: var(--color-bg);
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: rgba(255, 141, 0, 0.35);
 }
 
 /* Figures render tabular so columns of numbers align */
@@ -51,32 +57,38 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Chart bars: white at rest, muted below zero. While a bar, or the row or column
-   holding it (.bar-target), is hovered it turns light blue. Strip ticks already
-   carry a tier colour, set inline, so they turn white instead. */
+/* A canvas drawn at art resolution and enlarged without smoothing */
+.pixelated {
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* Chart bars take the disc's colours: orange at rest, the bottom tier's umber
+   below zero. While a bar, or the row or column holding it (.bar-target), is
+   hovered it brightens a step. Strip ticks already carry a tier colour, set
+   inline, so they turn white instead. */
 .bar {
-  background-color: var(--color-ink);
+  background-color: var(--color-accent);
   transition: background-color 120ms ease-out;
 }
 .bar-down {
-  background-color: #3a4256;
+  background-color: var(--color-tier-5);
 }
 .bar:hover,
 .bar-target:hover .bar {
-  background-color: var(--color-accent);
+  background-color: var(--color-accent-strong);
+}
+.bar-down:hover,
+.bar-target:hover .bar-down {
+  background-color: var(--color-tier-4);
 }
 .bar-tick:hover {
   background-color: #fff !important;
 }
 
-/* A section's top rule: a hairline that starts with a short run of accent */
+/* A section's top rule: a plain hairline */
 .section-rule {
-  background-image:
-    linear-gradient(var(--color-accent), var(--color-accent)),
-    linear-gradient(var(--color-line), var(--color-line));
-  background-repeat: no-repeat;
-  background-position: left top;
-  background-size: 3rem 1px, 100% 1px;
+  border-top: 1px solid var(--color-line);
 }
 
 /* One table style site-wide. Layered so a cell's utilities can still override it. */
@@ -104,7 +116,7 @@ body {
   .data-table td + td {
     padding-left: 0.75rem;
   }
-  /* A clickable row: its ticker goes from white to light blue, like a bar filling */
+  /* A clickable row: its ticker goes from white to orange, like a bar filling */
   .row-link {
     cursor: pointer;
     transition: background-color 150ms;
@@ -120,24 +132,6 @@ body {
   .row-link:hover .ticker {
     color: var(--color-accent);
   }
-}
-
-/* Soft brand glow behind a page header; the only decorative gradient */
-.hero-glow {
-  position: relative;
-  isolation: isolate;
-}
-.hero-glow::before {
-  content: "";
-  position: absolute;
-  inset: -240px -20vw auto -20vw;
-  height: 720px;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(560px 340px at 20% 45%, rgba(47, 91, 234, 0.4), transparent 70%),
-    radial-gradient(520px 320px at 80% 25%, rgba(143, 216, 255, 0.16), transparent 70%);
-  filter: blur(10px);
 }
 
 /* Scrollable region with the scrollbar hidden but scrolling intact */
@@ -162,7 +156,7 @@ body {
   background-image: linear-gradient(
     100deg,
     var(--color-raised) 40%,
-    #1e2436 50%,
+    #221f1d 50%,
     var(--color-raised) 60%
   );
   background-size: 200% 100%;
@@ -173,7 +167,8 @@ body {
   .sk-shimmer {
     animation: none;
   }
-  .bar {
+  .bar,
+  .row-link {
     transition: none;
   }
 }

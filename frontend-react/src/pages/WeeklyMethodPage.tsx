@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
 
 import { LeadFigure, PageHero, Section, Stat, Steps } from "@/components/layout/Page";
 import { WeeklyExcessBars } from "@/components/ranking/ModelCharts";
@@ -78,10 +77,7 @@ function RankingQuality({ v, spxT }: { v: WeeklyValidation; spxT: number | null 
     { label: "S&P 500", lead: v.top10_vs_spx, hit: v.top10_vs_spx_hit, t: spxT },
   ];
   return (
-    <Section
-      title="Ranking quality"
-      intro="The same walk-forward test, graded on the whole list rather than one index: how well the order matched what actually happened, and how far the top 10 pulled ahead."
-    >
+    <Section title="Ranking quality">
       <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr]">
         <div>
           <LeadFigure value={`${v.rank_ic >= 0 ? "+" : "−"}${Math.abs(v.rank_ic).toFixed(3)}`} />
@@ -118,12 +114,9 @@ function RankingQuality({ v, spxT }: { v: WeeklyValidation; spxT: number | null 
             </tbody>
           </table>
           <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-            Lead is the top 10's average weekly return minus the benchmark's. A t-stat near 2 or
-            above is the usual bar for an edge unlikely to be luck. Tested on{" "}
-            {v.test_rows.toLocaleString("en-US")} stock-weeks; the model is trained on{" "}
-            {v.train_rows.toLocaleString("en-US")} rows across {v.train_tickers} stocks (
-            {snapshotLabel(v.train_first)} to {snapshotLabel(v.train_last)}). Measured{" "}
-            {snapshotLabel(v.run_at.slice(0, 10))}.
+            {v.test_rows.toLocaleString("en-US")} stock-weeks tested; trained on{" "}
+            {v.train_rows.toLocaleString("en-US")} rows across {v.train_tickers} stocks,{" "}
+            {snapshotLabel(v.train_first)} to {snapshotLabel(v.train_last)}.
           </p>
         </div>
       </div>
@@ -147,23 +140,13 @@ export function WeeklyMethodPage() {
   return (
     <div>
       <PageHero
-        eyebrow="Weekly ranking model"
         link={{ to: "/week", label: "← This week's list" }}
         title={
           <>
-            Re-ranked every Friday. <em className="not-italic text-accent">Graded the Friday after.</em>
+            Re-ranked every Friday. <span className="text-accent">Graded the Friday after.</span>
           </>
         }
-        lede={
-          <>
-            This model orders stocks by how likely they are to beat the rest of the list next week. Here is how it does
-            that, how it has performed, and what it looks at. It is separate from the{" "}
-            <Link to="/model" className="text-accent hover:text-accent-strong">
-              quarterly model
-            </Link>
-            , which ranks for the next three months.
-          </>
-        }
+        lede="Stocks ordered by how likely they are to beat the rest of the list next week."
       />
 
       <Section title="Track record">
@@ -185,7 +168,6 @@ export function WeeklyMethodPage() {
               </div>
               <div className="mt-7">
                 <WeeklyExcessBars weeks={recent} height={96} />
-                <p className="mt-2 text-xs text-ink-muted">Top 10 minus S&amp;P 500, last {recent.length} weeks</p>
               </div>
               {d?.live && d.live.avg_excess_vs_spx != null && (
                 <p className="mt-5 border-t border-line pt-5 text-sm leading-relaxed text-ink-secondary">
@@ -198,7 +180,7 @@ export function WeeklyMethodPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Year</th>
+                    <th>Avg week in</th>
                     <th className="text-right">Top 10</th>
                     <th className="text-right">S&amp;P 500</th>
                     <th className="text-right">Whole list</th>
@@ -219,9 +201,6 @@ export function WeeklyMethodPage() {
                   ))}
                 </tbody>
               </table>
-              <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-                Each row is the average week in that year, by the Friday the list was built on.
-              </p>
             </div>
           </div>
         )}
@@ -232,8 +211,8 @@ export function WeeklyMethodPage() {
       <Section
         title="What it looks at"
         intro={
-          d?.as_of && d.weights.length > 0
-            ? `The same 13 inputs as the quarterly model. A tree model has no fixed weights, so this is the share of a typical stock's score explained by each input in the ${snapshotLabel(d.as_of)} list.`
+          d && d.weights.length > 0
+            ? "The same 13 inputs as the quarterly model."
             : !weekly.isPending &&
               "The same 13 inputs as the quarterly model. How much each one counts is published with the next Friday run."
         }
@@ -279,12 +258,7 @@ export function WeeklyMethodPage() {
         <p className="mt-8 max-w-2xl text-sm leading-relaxed text-ink-muted">
           Limits worth knowing: the backtest deducts no trading costs, and the list changes names every
           week; stocks delisted since 2019 are missing from the test, which flatters absolute returns, so
-          read the lead rather than the raw return; and the top 10 can lean heavily on one sector. Not
-          investment advice. The full technical write-up lives in the{" "}
-          <Link to="/docs" className="text-accent hover:text-accent-strong">
-            documentation
-          </Link>
-          .
+          read the lead rather than the raw return; and the top 10 can lean heavily on one sector.
         </p>
       </Section>
     </div>

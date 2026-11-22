@@ -34,13 +34,11 @@ export function MarketPage() {
     return (
         <div>
             <PageHero
-                eyebrow="Market"
                 title={
                     <>
-                        Around the market. <em className="not-italic text-accent">Context for the rankings.</em>
+                        Around the market. <span className="text-accent">Context for the rankings.</span>
                     </>
                 }
-                lede="The day's movers, the economy, news and what's coming up."
             />
 
             {movers.data || movers.isError ? (

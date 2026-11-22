@@ -4,7 +4,7 @@ import { Link, Outlet, useLocation, useNavigationType } from "react-router-dom";
 import logoUrl from "@/assets/logo.svg";
 import { useRankings, useWeekly } from "@/hooks/queries";
 import { dayLabel, quarterLabel, snapshotLabel } from "@/lib/tiers";
-import { cn } from "@/lib/utils";
+import { CONTAINER, cn } from "@/lib/utils";
 
 type Area = "quarterly" | "weekly" | "market";
 
@@ -44,14 +44,14 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen overflow-x-clip bg-bg text-ink">
-      <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-6 lg:grid lg:grid-cols-[1fr_auto_1fr]">
+      <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-black/70 backdrop-blur-md">
+        <div className={cn(CONTAINER, "flex h-16 items-center justify-between gap-6 lg:grid lg:grid-cols-[1fr_auto_1fr]")}>
           <Link
             to="/"
             aria-label="Stockidence"
-            className="flex shrink-0 items-center gap-2 justify-self-start font-logo text-[28px] leading-none tracking-tight"
+            className="flex shrink-0 items-center gap-2.5 justify-self-start font-logo text-[28px] leading-none tracking-[-0.01em]"
           >
-            <img src={logoUrl} alt="" className="h-8 w-8" />
+            <img src={logoUrl} alt="" className="h-[30px] w-[30px]" />
             {/* Icon only on phones, so the nav links fit beside it. */}
             <span className="hidden sm:inline">Stockidence</span>
           </Link>
@@ -77,12 +77,12 @@ export function AppShell() {
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-7xl px-6">
+      <main className={cn(CONTAINER, "relative")}>
         <Outlet />
       </main>
 
       <footer className="border-t border-white/[0.07] py-8">
-        <div className="mx-auto flex max-w-7xl flex-wrap justify-between gap-4 px-6 text-xs text-ink-muted">
+        <div className={cn(CONTAINER, "flex flex-wrap justify-between gap-4 text-xs text-ink-muted")}>
           <p>Stockidence ranks stocks; it doesn't give investment advice.</p>
           <Link to="/docs" className="transition-colors hover:text-accent">
             Documentation

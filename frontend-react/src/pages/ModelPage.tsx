@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { Link } from "react-router-dom";
 
 import { LeadFigure, PageHero, Section, Stat, Steps } from "@/components/layout/Page";
 import { ExcessBars } from "@/components/ranking/ModelCharts";
@@ -42,10 +41,7 @@ function RankingQuality({ v }: { v: ModelValidation }) {
     { label: "Top fifth", excess: v.topq_excess, t: v.topq_t, hit: v.topq_hit },
   ];
   return (
-    <Section
-      title="Ranking quality"
-      intro="The same walk-forward test, graded on the whole list rather than one index: how well the order matched what actually happened, and how far the head of the list pulled ahead of the rest."
-    >
+    <Section title="Ranking quality">
       <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr]">
         <div>
           <LeadFigure value={`${v.rank_ic >= 0 ? "+" : "−"}${Math.abs(v.rank_ic).toFixed(3)}`} />
@@ -86,12 +82,9 @@ function RankingQuality({ v }: { v: ModelValidation }) {
             </tbody>
           </table>
           <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-            Lead is the picks' average quarterly return minus the whole list's. A t-stat near 2 or
-            above is the usual bar for an edge unlikely to be luck. Tested on{" "}
-            {v.test_rows.toLocaleString("en-US")} stock-quarters; the model is trained on{" "}
-            {v.train_rows.toLocaleString("en-US")} rows across {v.train_tickers} stocks (
-            {snapshotLabel(v.train_first)} to {snapshotLabel(v.train_last)}). Measured{" "}
-            {snapshotLabel(v.run_at.slice(0, 10))}.
+            {v.test_rows.toLocaleString("en-US")} stock-quarters tested; trained on{" "}
+            {v.train_rows.toLocaleString("en-US")} rows across {v.train_tickers} stocks,{" "}
+            {snapshotLabel(v.train_first)} to {snapshotLabel(v.train_last)}.
           </p>
         </div>
       </div>
@@ -112,23 +105,13 @@ export function ModelPage() {
   return (
     <div>
       <PageHero
-        eyebrow="Quarterly ranking model"
         link={{ to: "/", label: "← This quarter's list" }}
         title={
           <>
-            Ranked, not predicted. <em className="not-italic text-accent">Tested before it's trusted.</em>
+            Ranked, not predicted. <span className="text-accent">Tested before it's trusted.</span>
           </>
         }
-        lede={
-          <>
-            Stockidence orders stocks by how likely they are to beat the rest of the list next quarter. Here is how it
-            does that, how it has performed, and what it pays attention to. It is separate from the{" "}
-            <Link to="/week/method" className="text-accent hover:text-accent-strong">
-              weekly model
-            </Link>
-            , which re-ranks every Friday for the coming week.
-          </>
-        }
+        lede="Stocks ordered by how likely they are to beat the rest of the list next quarter."
       />
 
       <Section title="Track record">
@@ -150,7 +133,6 @@ export function ModelPage() {
               </div>
               <div className="mt-7">
                 <ExcessBars quarters={o.track_record} height={96} />
-                <p className="mt-2 text-xs text-ink-muted">Top 20 minus S&amp;P 500, by quarter</p>
               </div>
             </div>
             <div className="max-h-[30rem] overflow-y-auto no-scrollbar">
@@ -193,10 +175,7 @@ export function ModelPage() {
       {o?.validation && <RankingQuality v={o.validation} />}
 
       {o && o.weights.length > 0 && (
-        <Section
-          title="What it pays attention to"
-          intro={`A tree model has no fixed weights, so this is the share of a typical stock's score explained by each input in the ${quarterLabel(o.as_of!)} ranking. Each stock's page shows its own breakdown.`}
-        >
+        <Section title="What it pays attention to">
           <div className="grid gap-x-10 sm:grid-cols-2">
             {o.weights.map((w) => {
               const meta = featureMeta(w.feature);
@@ -224,11 +203,7 @@ export function ModelPage() {
         <p className="mt-8 max-w-2xl text-sm leading-relaxed text-ink-muted">
           Limits worth knowing: four new data points a year means slow feedback; past quarters don't
           guarantee future ones; and the list covers a fixed universe of mostly large-cap US stocks, not the whole
-          market. Not investment advice. The full technical write-up lives in the{" "}
-          <Link to="/docs" className="text-accent hover:text-accent-strong">
-            documentation
-          </Link>
-          .
+          market.
         </p>
       </Section>
     </div>

@@ -40,9 +40,9 @@ export function DistributionStrip({
         })}
       </div>
       <div className="mt-2 flex justify-between text-xs text-ink-muted">
-        <span>#1 · most favoured</span>
+        <span>#1</span>
         {caption && <span>{caption}</span>}
-        <span>#{n} · least favoured</span>
+        <span>#{n}</span>
       </div>
     </div>
   );

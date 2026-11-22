@@ -30,13 +30,11 @@ export function DocsPage() {
   return (
     <div>
       <PageHero
-        eyebrow="Documentation"
         title={
           <>
-            How Stockidence <em className="not-italic text-accent">is built.</em>
+            How Stockidence <span className="text-accent">is built.</span>
           </>
         }
-        lede="The pipeline, the ranking models and the data sources, from the write-ups in the repo."
       />
 
       <div className="flex gap-10">

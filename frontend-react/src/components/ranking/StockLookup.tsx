@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { TierLabel } from "@/components/ranking/TierLabel";
@@ -8,9 +8,16 @@ import type { RankedTicker } from "@/types/api";
 
 /**
  * Look a stock up in this quarter's ranking. Searches only the ranked list
- * (client-side, instant); Enter or a click opens the stock's page.
+ * (client-side, instant); Enter or a click opens the stock's page. `onMatch`
+ * hears the highlighted match, so the page can light it up elsewhere.
  */
-export function StockLookup({ items }: { items: RankedTicker[] }) {
+export function StockLookup({
+  items,
+  onMatch,
+}: {
+  items: RankedTicker[];
+  onMatch?: (ticker: string | null) => void;
+}) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -26,9 +33,14 @@ export function StockLookup({ items }: { items: RankedTicker[] }) {
 
   const open = (ticker: string) => void navigate(`/stocks/${ticker}`);
   const q = query.trim();
+  const current = matches[active]?.ticker ?? null;
+
+  useEffect(() => {
+    onMatch?.(current);
+  }, [current, onMatch]);
 
   return (
-    <div className="relative w-full max-w-md">
+    <div className="relative w-full max-w-sm">
       <Input
         value={query}
         onChange={(e) => {
@@ -46,14 +58,14 @@ export function StockLookup({ items }: { items: RankedTicker[] }) {
             open(matches[active].ticker);
           }
         }}
-        placeholder={`Find a stock in this quarter's ${n}…`}
+        placeholder="Search by ticker"
         aria-label="Find a ranked stock"
-        className="h-14 px-5 text-base"
+        className="h-12 px-4 text-base"
       />
       {q && (
-        <div className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-line bg-surface shadow-2xl shadow-black/40">
+        <div className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-[10px] border border-white/[0.1] bg-black/90 backdrop-blur-md">
           {matches.length === 0 ? (
-            <p className="px-5 py-4 text-sm text-ink-muted">
+            <p className="px-4 py-3.5 text-sm text-ink-muted">
               {q.toUpperCase()} isn't in this quarter's ranking.
             </p>
           ) : (
@@ -62,8 +74,8 @@ export function StockLookup({ items }: { items: RankedTicker[] }) {
                 key={r.ticker}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => open(r.ticker)}
-                className={`flex w-full items-center gap-4 px-5 py-3 text-left text-sm ${
-                  i === active ? "bg-raised" : ""
+                className={`flex w-full items-center gap-4 px-4 py-3 text-left text-sm ${
+                  i === active ? "bg-white/[0.06]" : ""
                 }`}
               >
                 <span className="w-16 font-semibold">{r.ticker}</span>

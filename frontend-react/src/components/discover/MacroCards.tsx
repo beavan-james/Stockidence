@@ -15,7 +15,7 @@ function Sparkline({ points }: { points: SeriesPoint[] }) {
       <polyline
         points={coords}
         fill="none"
-        className="stroke-ink transition-colors group-hover:stroke-accent"
+        className="stroke-accent transition-colors group-hover:stroke-accent-strong"
         strokeWidth="1.5"
         vectorEffect="non-scaling-stroke"
       />
