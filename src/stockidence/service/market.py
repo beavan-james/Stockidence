@@ -520,43 +520,51 @@ def _parse_news_row(payload) -> dict | None:
     }
 
 
-_NEWS_WHERE = """
-    (? = '' OR array_to_string(
-        CAST(json_extract(payload, '$.ticker_sentiment[*].ticker') AS VARCHAR[]), ','
-    ) ILIKE '%' || ? || '%')
-    AND (? IS NULL OR substr(payload->>'time_published', 1, 8) >= ?)
-    AND (? IS NULL OR substr(payload->>'time_published', 1, 8) <= ?)
-"""
+def _headline_terms(q: str) -> list[str]:
+    """A headline search split into lowercase words; every word must appear."""
+    return (q or "").lower().split()
 
 
-def _news_params(ticker: str, date_from: str | None, date_to: str | None) -> list:
-    q = (ticker or "").strip().upper()
-    return [q, q, date_from, date_from, date_to, date_to]
+def _news_where(terms: list[str], date_from: str | None, date_to: str | None) -> tuple[str, list]:
+    """WHERE clause and params for the news filters, read from raw.raw_news_articles.
+
+    Each headline term is a literal, case-insensitive substring match
+    (`contains`, not LIKE, so `%` and `_` in a query match themselves).
+    """
+    clauses = ["contains(lower(payload->>'title'), ?)" for _ in terms]
+    params: list = list(terms)
+    if date_from:
+        clauses.append("substr(payload->>'time_published', 1, 8) >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("substr(payload->>'time_published', 1, 8) <= ?")
+        params.append(date_to)
+    return " AND ".join(clauses) or "TRUE", params
 
 
 def get_news_page(
-    ticker: str = "",
+    q: str = "",
     date_from: str | None = None,
     date_to: str | None = None,
     page: int = 1,
-    page_size: int = 25,
+    page_size: int = 10,
 ) -> dict:
     """One page of news, filtered and counted in SQL.
 
     Only the page's payloads are parsed — the full 23k+ article table is
-    never loaded, so paging stays fast as history grows. `date_from` /
-    `date_to` are YYYY-MM-DD against the article publish date.
+    never loaded, so paging stays fast as history grows. `q` searches
+    headlines (every word must appear); `date_from` / `date_to` are
+    YYYYMMDD against the article publish date.
     """
-    params = _news_params(ticker, date_from, date_to)
+    terms = _headline_terms(q)
+    where, params = _news_where(terms, date_from, date_to)
     total_rows = _read(
-        f"SELECT COUNT(*) FROM raw.raw_news_articles WHERE {_NEWS_WHERE}",
+        f"SELECT COUNT(*) FROM raw.raw_news_articles WHERE {where}",
         params,
     )
     if total_rows is None:
         demo = [_finalize_news(item) for item in _DEMO_NEWS]
-        query = (ticker or "").strip().upper()
-        if query:
-            demo = [n for n in demo if query in (n.get("sentiment_tickers") or "").upper()]
+        demo = [n for n in demo if all(t in (n.get("title") or "").lower() for t in terms)]
         return {
             "items": demo,
             "total": len(demo),
@@ -568,7 +576,7 @@ def get_news_page(
     offset = (max(page, 1) - 1) * page_size
     rows = _read(
         f"""SELECT payload FROM raw.raw_news_articles
-            WHERE {_NEWS_WHERE}
+            WHERE {where}
             ORDER BY payload->>'time_published' DESC
             LIMIT ? OFFSET ?""",
         [*params, page_size, offset],

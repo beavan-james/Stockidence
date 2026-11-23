@@ -32,9 +32,9 @@ export const client = {
 
   movers: () => api<import("@/types/api").Movers>("/api/movers"),
 
-  news: (params: { ticker?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) => {
+  news: (params: { headline?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
-    if (params.ticker) qs.set("ticker", params.ticker);
+    if (params.headline) qs.set("q", params.headline);
     if (params.dateFrom) qs.set("date_from", params.dateFrom);
     if (params.dateTo) qs.set("date_to", params.dateTo);
     if (params.page) qs.set("page", String(params.page));

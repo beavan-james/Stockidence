@@ -85,7 +85,7 @@ export function useModelOverview() {
   });
 }
 
-export function useNews(params: { ticker?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) {
+export function useNews(params: { headline?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) {
   return useQuery<NewsEnvelope>({
     queryKey: ["news", params],
     queryFn: () => client.news(params),

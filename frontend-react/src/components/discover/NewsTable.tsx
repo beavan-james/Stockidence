@@ -7,7 +7,7 @@ import { useNews } from "@/hooks/queries";
 import { useDebounced } from "@/hooks/useDebounced";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 /** "Somewhat-Bullish" as plain text, softened green or red by direction. */
 function sentiment(label: string): { text: string; tone: string } {
@@ -19,16 +19,16 @@ function sentiment(label: string): { text: string; tone: string } {
   };
 }
 
-/** Market news with server-side ticker/date filters and SQL paging. */
+/** Market news with server-side headline/date filters and SQL paging. */
 export function NewsTable() {
-  const [tickerQuery, setTickerQuery] = useState("");
+  const [headlineQuery, setHeadlineQuery] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
-  const filter = useDebounced(tickerQuery.trim());
+  const filter = useDebounced(headlineQuery.trim());
 
   const { data, isLoading, isFetching } = useNews({
-    ticker: filter || undefined,
+    headline: filter || undefined,
     dateFrom: from || undefined,
     dateTo: to || undefined,
     page,
@@ -50,14 +50,15 @@ export function NewsTable() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            value={tickerQuery}
+            type="search"
+            value={headlineQuery}
             onChange={(e) => {
-              setTickerQuery(e.target.value.toUpperCase());
+              setHeadlineQuery(e.target.value);
               resetPage();
             }}
-            placeholder="Ticker search"
-            aria-label="Filter news by ticker"
-            className="num w-36"
+            placeholder="Search headlines"
+            aria-label="Search news by headline"
+            className="w-64"
           />
           <Input
             type="date"
@@ -92,7 +93,9 @@ export function NewsTable() {
       ) : (
         <ul className="divide-y divide-line border-t border-line">
           {data?.items.length === 0 && (
-            <li className="py-8 text-center text-sm text-ink-muted">No articles match “{filter}”.</li>
+            <li className="py-8 text-center text-sm text-ink-muted">
+              {filter ? `No headlines match “${filter}”.` : "No articles in that date range."}
+            </li>
           )}
           {data?.items.map((n) => {
             const s = n.overall_sentiment_label ? sentiment(n.overall_sentiment_label) : null;
