@@ -6,7 +6,7 @@ network); scheduled jobs are verified against the registry composition."""
 from __future__ import annotations
 
 import pytest
-from dagster import DagsterInstance, materialize
+from dagster import DagsterInstance, ResourceDefinition, materialize
 from dagster._core.definitions.partitions.context import partition_loading_context
 
 from stockidence.ingest.endpoints import Cadence, scheduled_endpoints
@@ -171,3 +171,53 @@ def test_full_ticker_run_executes_green_for_partition(tmp_path):
     assert row is not None
     assert row[0] in ("Buy", "Strong Buy")
     assert 55.0 <= row[1] <= 85.0
+
+def test_scheduled_and_retrain_ops_share_the_warehouse_pool(defs):
+    """Every op a schedule or a retrain runs claims the one-slot warehouse
+    pool, so overlapping jobs queue instead of failing on the DuckDB lock.
+    The site-triggered jobs stay out, so a visitor never waits on a retrain."""
+    from stockidence.definitions import WAREHOUSE_POOL
+
+    site_triggered = {"refresh_tickers", "refresh_quotes"}
+    jobs = {j.name: j for j in defs.resolve_all_job_defs() if not j.name.startswith("__")}
+    assert {s.job_name for s in defs.schedules} | {"model_retrain", "weekly_rank"} <= set(jobs)
+    for name, job in jobs.items():
+        pools = {n: node.definition.pool for n, node in job.graph.node_dict.items()}
+        expected = None if name in site_triggered else WAREHOUSE_POOL
+        assert set(pools.values()) == {expected}, (name, pools)
+
+
+def test_digest_jobs_read_the_picked_articles(defs):
+    for name in ("daily_digest", "weekly_digest"):
+        nodes = set(defs.get_job_def(name).graph.node_dict)
+        assert {"fetch_articles_op", "stage_article_text_op"} <= nodes
+
+
+def test_article_ops_run_after_a_digest(tmp_path):
+    """The two article ops in a job of their own: no stories to read on an
+    empty warehouse, so nothing is fetched, but every log line and output
+    key is exercised."""
+    from dagster import job, op
+
+    from stockidence.definitions import fetch_articles_op, stage_article_text_op
+    from stockidence.storage import Warehouse
+
+    wh = Warehouse(tmp_path / "test.duckdb")
+    wh.init_schema()
+
+    class FakeEngine:
+        warehouse = wh
+
+    @op
+    def built_digest() -> dict:
+        return {"digests": [{"period": "weekly", "digest_date": "2026-11-20"}]}
+
+    @job(resource_defs={"engine": ResourceDefinition.hardcoded_resource(FakeEngine())})
+    def articles_only():
+        stage_article_text_op(fetch_articles_op(built_digest()))
+
+    result = articles_only.execute_in_process(instance=DagsterInstance.ephemeral())
+    assert result.success
+    out = result.output_for_node("stage_article_text_op")
+    assert out["articles"]["stories"] == 0 and out["articles"]["page_requests"] == 0
+    assert out["article_text"] == 0

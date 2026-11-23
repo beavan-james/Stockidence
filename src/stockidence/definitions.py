@@ -22,9 +22,16 @@ Exposes:
   - refresh_quotes job (frontend-triggered): quote-only pull for explicit
     user refresh (portfolio button) — no rebuilds, no scoring
   - daily_digest job (schedule-bound, weekdays 07:30 New York): news pull
-    -> news staging -> the day's news digest
+    -> news staging -> the day's news digest -> the picked stories' article
+    pages -> their text
+  - weekly_digest job (schedule-bound, Saturdays 07:30 New York): the same
+    chain into the week's digest
   - ticker_data asset with a dynamic ticker partition per lookup
     (manual materialization path)
+
+Every op in a scheduled job claims a slot in the "warehouse" concurrency
+pool (limit 1, dagster.yaml), so two scheduled jobs never write DuckDB at
+once: one waits at an op boundary instead of failing on the lock.
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -46,6 +53,7 @@ from dagster import (
     schedule,
 )
 
+from .ingest.articles import MAX_REQUESTS, digests_to_read, fetch_digest_articles
 from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest.engine import IngestEngine
 from .ingest.refresh import refresh_tickers
@@ -58,8 +66,14 @@ from .mart.mart import (
 from .mart.mart import (
     rebuild_fred_market as rebuild_fred_mart,
 )
-from .mart.news_digest import build_daily_digests, latest_digest_date
+from .mart.news_digest import (
+    build_daily_digests,
+    build_weekly_digests,
+    latest_digest_date,
+    latest_weekly_date,
+)
 from .mart.scoring import score_ticker
+from .staging.article_text import rebuild_article_text
 from .staging.staging import (
     balance_sheet_sources,
     rebuild_financials_reported,
@@ -72,6 +86,14 @@ from .storage import Warehouse
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
 
 _ON_DEMAND_ENDPOINTS = tuple(spec.name for spec in on_demand_endpoints())
+
+# DuckDB takes one writer at a time, and the retrains keep it busy for
+# hours. Every op of a scheduled or retrain job claims this pool (limit 1
+# in dagster.yaml), so a job that lands on top of another waits for the
+# slot instead of failing after Warehouse.connect's ~3 minutes of retries.
+# The site-triggered jobs (refresh_tickers, refresh_quotes) stay out: a
+# visitor never waits behind a retrain, and the retries cover them.
+WAREHOUSE_POOL = "warehouse"
 
 
 def _now() -> datetime:
@@ -98,7 +120,7 @@ def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...
     if not names:
         return None
 
-    @op(name=f"ingest_{cadence.value}_op", required_resource_keys={"engine"})
+    @op(name=f"ingest_{cadence.value}_op", required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
     def ingest_cadence(context) -> None:
         engine = context.resources.engine
         for name in names:
@@ -108,7 +130,8 @@ def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...
 
     derived_ops: list[Any] = []
     for i, (label, rebuild) in enumerate(post_derived):
-        @op(name=f"{cadence.value}_{label}_op", required_resource_keys={"engine"})
+        @op(name=f"{cadence.value}_{label}_op", required_resource_keys={"engine"},
+            pool=WAREHOUSE_POOL)
         def derive_cadence(context, _rebuild: Any = rebuild, _label: str = label) -> None:
             rows = _rebuild(context.resources.engine.warehouse)
             context.log.info(f"[derived:{_label}] rebuilt {rows} rows")
@@ -155,7 +178,7 @@ def daily_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
-@op(name="ingest_news_op", required_resource_keys={"engine"})
+@op(name="ingest_news_op", required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def ingest_news_op(context) -> dict:
     engine = context.resources.engine
     result = engine.ingest_scheduled("market_news", now=_now())
@@ -200,7 +223,7 @@ class DailyDigestConfig(Config):
     days: int = 1
 
 
-@op(required_resource_keys={"engine"})
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def stage_news_op(context: OpExecutionContext, prev: dict) -> dict:
     """Restage the articles landed since the last run into stg_news_articles."""
     rows = rebuild_news_articles(context.resources.engine.warehouse)
@@ -208,28 +231,89 @@ def stage_news_op(context: OpExecutionContext, prev: dict) -> dict:
     return {**prev, "staged": rows}
 
 
-@op(required_resource_keys={"engine"})
+class WeeklyDigestConfig(Config):
+    """Which weekly digests to build: the one dated Friday `digest_date`
+    (YYYY-MM-DD; empty means the newest whose window has closed) and the
+    `weeks - 1` before it."""
+
+    digest_date: str = ""
+    weeks: int = 1
+
+
+def _log_digests(context: OpExecutionContext, built: list[dict]) -> None:
+    for d in built:
+        tag = f"[digest:{d['period']}:{d['digest_date']}]"
+        context.log.info(
+            f"{tag} {d['picked']} of {d['stories']} stories from "
+            f"{d['articles']} articles ({d['routine_dropped']} routine, "
+            f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets")
+        if d["session_gap_minutes"] >= _DIGEST_GAP_WARN_MINUTES:
+            context.log.warning(
+                f"{tag} no article for {d['session_gap_minutes']} minutes of a session: "
+                "the news feed likely missed stories between pulls")
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def build_digest_op(context: OpExecutionContext, config: DailyDigestConfig, prev: dict) -> dict:
     """Pick the day's top stories into mart.news_digest_* (one digest per date)."""
     last = (date.fromisoformat(config.digest_date)
             if config.digest_date else latest_digest_date(_now()))
     built = build_daily_digests(context.resources.engine.warehouse, last, max(config.days, 1))
-    for d in built:
-        context.log.info(
-            f"[digest:{d['digest_date']}] {d['picked']} of {d['stories']} stories from "
-            f"{d['articles']} articles ({d['routine_dropped']} routine, "
-            f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets")
-        if d["session_gap_minutes"] >= _DIGEST_GAP_WARN_MINUTES:
-            context.log.warning(
-                f"[digest:{d['digest_date']}] no article for {d['session_gap_minutes']} minutes "
-                "of the session: the news feed likely missed stories between pulls")
+    _log_digests(context, built)
     return {**prev, "digests": built}
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def build_weekly_digest_op(context: OpExecutionContext, config: WeeklyDigestConfig, prev: dict) -> dict:
+    """Pick the week's top stories into mart.news_digest_* (period 'weekly')."""
+    last = (date.fromisoformat(config.digest_date)
+            if config.digest_date else latest_weekly_date(_now()))
+    built = build_weekly_digests(context.resources.engine.warehouse, last, max(config.weeks, 1))
+    _log_digests(context, built)
+    return {**prev, "digests": built}
+
+
+class FetchArticlesConfig(Config):
+    """Page requests allowed in one run; raise it for a backfill."""
+
+    max_requests: int = MAX_REQUESTS
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def fetch_articles_op(context: OpExecutionContext, config: FetchArticlesConfig, prev: dict) -> dict:
+    """Fetch the article pages behind the stories the digests just picked
+    into raw.news_article_pages (NEWS_SUMMARIES.md has the rules).
+
+    The warehouse is open only to plan and to land, not while pages are
+    fetched; the op keeps its pool slot for the few minutes it runs.
+    """
+    digests = digests_to_read(prev.get("digests", []))
+    info = fetch_digest_articles(
+        context.resources.engine.warehouse, digests, now=_now(), max_requests=config.max_requests)
+    context.log.info(
+        f"[articles] read {info['stories_read']} of {info['stories']} stories still unread "
+        f"with {info['page_requests']} page requests: {info['outcomes']}")
+    if info["skipped_domains"]:
+        context.log.info(f"[articles] skipped by robots.txt or unreachable: {info['skipped_domains']}")
+    if info["capped"]:
+        context.log.warning(
+            f"[articles] stopped at {config.max_requests} page requests; the rest wait for the next run")
+    return {**prev, "articles": info}
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def stage_article_text_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Extract each new page's main text into staging.stg_news_article_text."""
+    rows = rebuild_article_text(context.resources.engine.warehouse, now=_now())
+    context.log.info(f"[derived:stg_news_article_text] extracted {rows} pages")
+    return {**prev, "article_text": rows}
 
 
 @job(name="daily_digest")
 def daily_digest_job() -> None:
-    """Weekday morning chain: news pull -> news staging -> digest."""
-    build_digest_op(stage_news_op(ingest_news_op()))
+    """Weekday morning chain: news pull -> news staging -> digest -> the
+    picked stories' article pages -> their text."""
+    stage_article_text_op(fetch_articles_op(build_digest_op(stage_news_op(ingest_news_op()))))
 
 
 @schedule(
@@ -242,6 +326,26 @@ def daily_digest_schedule() -> dict:
     """07:30 New York time on weekdays, before the open: the digest covers
     the 24 hours to 07:00 (the weekend too, on Mondays). New York time, so
     DST never shifts it."""
+    return {}
+
+
+@job(name="weekly_digest")
+def weekly_digest_job() -> None:
+    """Saturday morning chain: news pull -> news staging -> the week's digest
+    -> article pages for its stories and the week's daily stories -> text."""
+    stage_article_text_op(fetch_articles_op(build_weekly_digest_op(stage_news_op(ingest_news_op()))))
+
+
+@schedule(
+    job=weekly_digest_job,
+    cron_schedule="30 7 * * 6",
+    execution_timezone="America/New_York",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+def weekly_digest_schedule() -> dict:
+    """07:30 New York time on Saturdays: the week's digest covers the seven
+    days to 07:00, so Friday's session, its evening and the earnings
+    released after the close are in."""
     return {}
 
 
@@ -398,7 +502,7 @@ def refresh_quotes_job() -> None:
     refresh_quotes_op()
 
 
-@op(required_resource_keys={"engine"})
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def quarterly_refresh_op(context: OpExecutionContext) -> dict:
     """Incremental refresh of every ticker in the warehouse (recent quarter only).
 
@@ -464,19 +568,19 @@ def _rebuild_dataset(context: OpExecutionContext) -> dict:
     return info
 
 
-@op
+@op(pool=WAREHOUSE_POOL)
 def rebuild_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
     """Rebuild the training dataset from the freshly refreshed mart."""
     return {**prev, "dataset": _rebuild_dataset(context)}
 
 
-@op
+@op(pool=WAREHOUSE_POOL)
 def rebuild_dataset_only_op(context: OpExecutionContext) -> dict:
     """Rebuild the training dataset from the mart as it stands (no refresh)."""
     return {"dataset": _rebuild_dataset(context)}
 
 
-@op
+@op(pool=WAREHOUSE_POOL)
 def retrain_model_op(context: OpExecutionContext, prev: dict) -> dict:
     """Re-execute the ranking notebook: retrains and exports the snapshot
     to mart.model_rankings (the notebook's final cell)."""
@@ -513,7 +617,7 @@ def quarterly_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
-@op(required_resource_keys={"engine"})
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def weekly_refresh_op(context: OpExecutionContext) -> dict:
     """Refresh every ticker in the warehouse plus the S&P 500 benchmark.
 
@@ -561,19 +665,19 @@ def _rebuild_weekly_dataset(context: OpExecutionContext) -> dict:
     return info
 
 
-@op
+@op(pool=WAREHOUSE_POOL)
 def weekly_dataset_op(context: OpExecutionContext, prev: dict) -> dict:
     """Rebuild the weekly dataset from the freshly refreshed mart."""
     return {**prev, "dataset": _rebuild_weekly_dataset(context)}
 
 
-@op
+@op(pool=WAREHOUSE_POOL)
 def weekly_dataset_only_op(context: OpExecutionContext) -> dict:
     """Rebuild the weekly dataset from the mart as it stands (no refresh)."""
     return {"dataset": _rebuild_weekly_dataset(context)}
 
 
-@op
+@op(pool=WAREHOUSE_POOL)
 def weekly_rank_op(context: OpExecutionContext, prev: dict) -> dict:
     """Walk-forward validate, refit, rank this week's snapshot and export
     to mart.weekly_rankings (grading last week's list on the way)."""
@@ -620,17 +724,18 @@ defs = Definitions(
     resources={"engine": engine_resource},
     assets=[ticker_data, stg_prices_daily, stg_financials_reported, m_prices_weekly,
             m_prices_monthly, m_advanced_analytics, m_technical_indicators, ticker_score],
-    jobs=[monthly_job, weekdays_job, daily_job, news_job, daily_digest_job,
+    jobs=[monthly_job, weekdays_job, daily_job, news_job, daily_digest_job, weekly_digest_job,
           refresh_tickers_job, refresh_quotes_job, quarterly_model_refresh_job,
           model_retrain_job, weekly_model_refresh_job, weekly_rank_job],
     schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
                news_morning_schedule, news_evening_schedule, daily_digest_schedule,
+               weekly_digest_schedule,
                quarterly_schedule, weekly_schedule],
-    # DuckDB is a single-writer file: with the default multiprocess executor
     # DuckDB is a single-writer file: with the default multiprocess executor
     # every step runs in its own subprocess and the four mart siblings (all
     # depending only on stg_prices_daily) launch concurrently and fight over
-    # the write lock. In-process keeps each run's steps sequential; cross-run
-    # overlap is still safe because Warehouse.connect retries on lock.
+    # the write lock. In-process keeps each run's steps sequential; across
+    # runs, the warehouse pool keeps scheduled jobs apart and
+    # Warehouse.connect retries cover the site-triggered ones.
     executor=in_process_executor,
 )

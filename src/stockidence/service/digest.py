@@ -1,5 +1,6 @@
-"""Daily news digest read path: one day's top stories from the tables
-stockidence.mart.news_digest builds, with the articles grouped under each."""
+"""News digest read path: one day's or one week's top stories from the
+tables stockidence.mart.news_digest builds, with the articles grouped under
+each."""
 
 from __future__ import annotations
 
@@ -7,8 +8,6 @@ from datetime import date
 
 from .ranking import _missing_table
 from .warehouse import _resilient
-
-PERIOD = "daily"
 
 
 def _iso(d) -> str | None:
@@ -26,34 +25,37 @@ def _weights() -> dict[str, float]:
     return dict(IMPORTANCE_WEIGHTS)
 
 
-def _full_marks() -> dict[str, float]:
+def _full_marks(period: str) -> dict[str, float]:
     """Where coverage and reaction stop adding to a story's score."""
-    from ..mart.news_digest import COVERAGE_FULL_AT, REACTION_FULL_AT
+    from ..mart.news_digest import PERIODS
 
-    return {"coverage_outlets": COVERAGE_FULL_AT, "move": REACTION_FULL_AT}
+    spec = PERIODS[period]
+    return {"coverage_outlets": spec.coverage_full_at, "move": spec.reaction_full_at}
 
 
-def _empty() -> dict:
-    return {"period": PERIOD, "digest_date": None, "previous_date": None, "next_date": None,
+def _empty(period: str) -> dict:
+    return {"period": period, "digest_date": None, "previous_date": None, "next_date": None,
             "window_start": None, "window_end": None, "built_at": None, "articles": 0,
             "routine_dropped": 0, "commentary_dropped": 0, "stories": 0, "outlets": 0,
-            "session_gap_minutes": None, "weights": _weights(), "full_marks": _full_marks(), "items": []}
+            "session_gap_minutes": None, "weights": _weights(), "full_marks": _full_marks(period),
+            "items": []}
 
 
-def get_daily_digest(digest_date: date | None = None) -> dict | None:
-    """Envelope for one day's digest (the latest when no date is given).
+def get_digest(period: str, digest_date: date | None = None) -> dict | None:
+    """Envelope for one 'daily' or 'weekly' digest (the latest when no date
+    is given; a weekly digest is dated by its week's Friday).
 
     Empty (not an error) before the first digest run or when the warehouse
     is absent; None when a specific date was asked for and has no digest.
     """
     try:
-        return _fetch_daily(digest_date)
+        return _fetch(period, digest_date)
     except (FileNotFoundError, ImportError):
-        return None if digest_date else _empty()
+        return None if digest_date else _empty(period)
 
 
 @_resilient
-def _fetch_daily(digest_date: date | None) -> dict | None:
+def _fetch(period: str, digest_date: date | None) -> dict | None:
     """Load the envelope; raises on failure (retried by decorator)."""
     from .warehouse import read_connect
 
@@ -68,14 +70,14 @@ def _fetch_daily(digest_date: date | None) -> dict | None:
                 WHERE period = ? AND (CAST(? AS DATE) IS NULL OR digest_date = ?)
                 ORDER BY digest_date DESC LIMIT 1
                 """,
-                [PERIOD, digest_date, digest_date],
+                [period, digest_date, digest_date],
             ).fetchone()
         except Exception as exc:
             if not _missing_table(exc):
                 raise
-            return None if digest_date else _empty()
+            return None if digest_date else _empty(period)
         if head is None:
-            return None if digest_date else _empty()
+            return None if digest_date else _empty(period)
         day = head[0]
         prev_day, next_day = con.execute(
             """
@@ -83,7 +85,7 @@ def _fetch_daily(digest_date: date | None) -> dict | None:
                    min(digest_date) FILTER (WHERE digest_date > ?)
             FROM mart.news_digests WHERE period = ?
             """,
-            [day, day, PERIOD],
+            [day, day, period],
         ).fetchone()
         stories = con.execute(
             """
@@ -94,7 +96,7 @@ def _fetch_daily(digest_date: date | None) -> dict | None:
             WHERE period = ? AND digest_date = ?
             ORDER BY rank
             """,
-            [PERIOD, day],
+            [period, day],
         ).fetchall()
         # Every other article in each story, earliest first: the lead is
         # already the story's headline, so it is left out here.
@@ -108,7 +110,7 @@ def _fetch_daily(digest_date: date | None) -> dict | None:
             WHERE a.period = ? AND a.digest_date = ? AND n.url <> s.url
             ORDER BY a.rank, n.published_at, n.article_id
             """,
-            [PERIOD, day],
+            [period, day],
         ).fetchall()
 
     also: dict[int, list[dict]] = {}
@@ -118,7 +120,7 @@ def _fetch_daily(digest_date: date | None) -> dict | None:
              "published_at": _utc_iso(published)}
         )
     return {
-        "period": PERIOD,
+        "period": period,
         "digest_date": _iso(day),
         "previous_date": _iso(prev_day),
         "next_date": _iso(next_day),
@@ -131,7 +133,7 @@ def _fetch_daily(digest_date: date | None) -> dict | None:
         "stories": head[7],
         "outlets": head[8],
         "session_gap_minutes": head[9],
-        "weights": _weights(), "full_marks": _full_marks(),
+        "weights": _weights(), "full_marks": _full_marks(period),
         "items": [
             {
                 "rank": int(rank), "headline": headline, "summary": summary, "url": url,

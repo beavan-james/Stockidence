@@ -254,6 +254,8 @@ export interface EarningsRelease {
   revenue_actual_display: string | null;
 }
 
+export type DigestPeriod = "daily" | "weekly";
+
 export type DigestInput = "coverage" | "reaction" | "category" | "on_site";
 
 export interface DigestArticle {
@@ -276,7 +278,8 @@ export interface DigestStory {
   categories: string[];
   n_articles: number;
   n_outlets: number;
-  /** The stock the story leads with, when it has a 1-day move for the session after the news. */
+  /** The stock the story leads with, when it has a price move: over the day's session in a daily
+   *  digest, over the week's sessions in a weekly one. */
   move_ticker: string | null;
   move_return: number | null;
   score: number;
@@ -287,7 +290,8 @@ export interface DigestStory {
 }
 
 export interface DigestEnvelope {
-  period: "daily";
+  period: DigestPeriod;
+  /** A weekly digest is dated by its week's Friday. */
   digest_date: string | null;
   previous_date: string | null;
   next_date: string | null;
@@ -299,7 +303,7 @@ export interface DigestEnvelope {
   commentary_dropped: number;
   stories: number;
   outlets: number;
-  /** Longest stretch of the session with no article. */
+  /** Longest stretch of a session with no article. */
   session_gap_minutes: number | null;
   weights: Record<DigestInput, number>;
   full_marks: { coverage_outlets: number; move: number };

@@ -24,6 +24,7 @@ dependencies = [
     "nbclient>=0.10",
     "ipykernel>=6.29",
     "jupyter_client>=8.6",
+    "trafilatura>=2.0",
 ]
 
 [dependency-groups]

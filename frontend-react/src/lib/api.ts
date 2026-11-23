@@ -49,9 +49,9 @@ export const client = {
 
   weekly: () => api<import("@/types/api").WeeklyEnvelope>("/api/weekly"),
 
-  dailyDigest: (date?: string) =>
+  digest: (period: import("@/types/api").DigestPeriod, date?: string) =>
     api<import("@/types/api").DigestEnvelope>(
-      date ? `/api/digest/daily?date=${encodeURIComponent(date)}` : "/api/digest/daily",
+      date ? `/api/digest/${period}?date=${encodeURIComponent(date)}` : `/api/digest/${period}`,
     ),
 
   modelOverview: () => api<import("@/types/api").ModelOverview>("/api/model/overview"),

@@ -1,12 +1,13 @@
 /** TanStack Query hooks over the API client. */
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { ApiError, client } from "@/lib/api";
 import type {
   Commodity,
   DigestEnvelope,
+  DigestPeriod,
   EarningsRelease,
   IpoListing,
   MacroMetric,
@@ -62,13 +63,15 @@ export function useWeekly() {
   });
 }
 
-/** One weekday's news digest; the latest when no date is given. */
-export function useDailyDigest(date: string | undefined) {
+/** One day's or one week's news digest; the latest when no date is given. */
+export function useDigest(period: DigestPeriod, date: string | undefined) {
   return useQuery<DigestEnvelope>({
-    queryKey: ["digest", "daily", date ?? "latest"],
-    queryFn: () => client.dailyDigest(date),
-    // Built once each weekday morning: refetch at most every 15 minutes.
+    queryKey: ["digest", period, date ?? "latest"],
+    queryFn: () => client.digest(period, date),
+    // Built once a morning: refetch at most every 15 minutes.
     staleTime: 15 * 60_000,
+    // Stepping to another day keeps the current list up until the next one lands.
+    placeholderData: keepPreviousData,
     // 404 = no digest that day (a weekend, or before the first run): a real answer.
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });

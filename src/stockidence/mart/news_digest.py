@@ -1,12 +1,16 @@
-"""Daily news digest: the day's most important stories, picked by rule.
+"""News digests: the day's and the week's most important stories, picked
+by rule.
 
 Reads staging.stg_news_articles, plus staging.stg_prices_daily (how the
 stock a story leads with moved) and the published rankings (which stocks the
 site covers). Writes mart.news_digests, news_digest_stories and
-news_digest_articles. No API calls (registry cadence DERIVED).
+news_digest_articles, keyed by period ('daily' or 'weekly') and date. No API
+calls (registry cadence DERIVED).
 
 A daily digest dated D covers the news up to 07:00 New York time on D, back
-to 07:00 on the weekday before, so Monday's digest covers the weekend.
+to 07:00 on the weekday before, so Monday's digest covers the weekend. A
+weekly digest dated Friday F covers the seven days to 07:00 on the Saturday
+after F: the week's five sessions, their evenings and the weekend before.
 
 Picking the stories:
   1. drop what isn't news: routine filings (fund position changes, insider
@@ -19,11 +23,13 @@ Picking the stories:
      articles leading with the same stock in the same category (Broadcom's
      earnings, say) are one story whatever their words
   3. score each story on four inputs, each 0 to 1, by weighted sum:
-       coverage  how many different outlets ran it (full marks at 8)
-       reaction  the 1-day move of the stock it leads with (full marks at 10%)
+       coverage  how many different outlets ran it
+       reaction  how the stock it leads with moved: its 1-day move in a
+                 daily digest, its move over the week in a weekly one
        category  a deal, earnings, or macro news (Fed, inflation, jobs)
        on_site   names a stock in one of the site's rankings
-  4. keep the top DIGEST_SIZE
+     where coverage and reaction reach full marks is set per period
+  4. keep the period's top stories (10 a day, 15 a week)
 
 Like the scoring weights, the weights and thresholds below are proposals,
 not a locked spec.
@@ -35,8 +41,10 @@ import itertools
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from ..storage import Warehouse
@@ -44,7 +52,6 @@ from ..storage import Warehouse
 NEW_YORK = ZoneInfo("America/New_York")
 CUTOFF = time(7, 0)                   # the digest day turns over here, NY time
 SESSION = (time(9, 30), time(16, 0))  # regular US session, NY time
-DIGEST_SIZE = 10
 
 # ---------------------------------------------------------------------------
 # Story importance (provisional: tune here, not in logic)
@@ -56,8 +63,23 @@ IMPORTANCE_WEIGHTS: dict[str, float] = {
     "category": 0.15,
     "on_site": 0.15,
 }
-COVERAGE_FULL_AT = 8       # outlets
-REACTION_FULL_AT = 0.10    # absolute 1-day return
+
+
+@dataclass(frozen=True)
+class Period:
+    """How one kind of digest is sized and where its inputs top out. A week
+    has more outlets per story and bigger moves than a day, so it needs
+    more of both for full marks."""
+
+    name: str                # the mart key
+    size: int                # stories kept
+    coverage_full_at: int    # outlets
+    reaction_full_at: float  # absolute return over the period
+
+
+DAILY = Period("daily", size=10, coverage_full_at=8, reaction_full_at=0.10)
+WEEKLY = Period("weekly", size=15, coverage_full_at=12, reaction_full_at=0.20)
+PERIODS: dict[str, Period] = {p.name: p for p in (DAILY, WEEKLY)}
 
 # Two articles published within MERGE_WINDOW of each other are the same
 # story when their headlines' shared words carry at least this share of
@@ -73,13 +95,13 @@ _AMOUNT = r"\$[\d.,]+ ?(?:[kmb]|thousand|million|billion)?"
 _NOT_NEWS: dict[str, re.Pattern[str]] = {
     "routine": re.compile("|".join((
         # fund holdings: "X LLC Takes Position in Y", "Has $1.2 Million Stake in Y $Y"
-        r"\b(?:takes?|acquires?|initiates?) (?:a )?(?:new )?(?:position|stake) in\b",
+        rf"\b(?:takes?|acquires?|initiates?|purchases?|buys|opens?) (?:a )?(?:new )?(?:{_AMOUNT} )?(?:position|stake) in\b",
         rf"\b(?:has|holds) {_AMOUNT} (?:stock )?(?:position|stake|holdings) in\b",
         rf"\b(?:invests|makes (?:a )?new (?:{_AMOUNT} )?investment) in\b",
         (r"\b(?:increases|decreases|raises|lowers|reduces|trims|boosts|lifts|cuts|grows) "
         r"(?:its )?(?:holdings|position|stake) in\b"),
         r"\bshares (?:(?:of|in) .+ )?(?:bought|sold|purchased|acquired) by\b",
-        r"\b(?:buys|sells|acquires|purchases|trims|boosts|raises|lowers|cuts) (?:[\d,]+ )?shares (?:of|in)\b",
+        r"\b(?:buys|sells|acquires|purchases|trims|boosts|raises|lowers|cuts) (?:[\d,]+ |new )?shares (?:of|in)\b",
         # insider and congressional trades: "CFO Sells 16,524 Shares", "RSU
         # Vesting", "Insider Sells $206,189 in Stock", "Rep. X Acquires Y Stock"
         r"\b(?:rsus?|10b5-1|form 4|restricted stock units?)\b",
@@ -96,11 +118,15 @@ _NOT_NEWS: dict[str, re.Pattern[str]] = {
         r"\bsets (?:the )?date\b",
         # templated price recaps: "X stock underperforms Tuesday when compared
         # to competitors", "X (Y) Stock Sinks As Market Gains: Key Facts"
-        r"\b(?:under|out)performs \w+ when compared to competitors\b",
+        r"\bstock (?:under|out)performs (?:\w+ )?(?:when compared to )?competitors\b",
         (r"\b(?:as|while|despite) (?:the )?(?:broader )?(?:stock )?market "
         r"(?:gains|rises|climbs|dips|slips|falls|drops|declines|upswing|downturn|slip|dip)\b"),
         r"\b(?:higher|lower) than (?:the )?(?:broader )?market\b",
         r"\b(?:laps|trails|beats|outpaces|lags) (?:the )?stock market\b",
+        # "X stock hits 52-week low at 35.31 USD", "X stock may move 6.2% on
+        # Sept. 10 earnings release": one template, a different stock each
+        r"\bhits? (?:a )?(?:new )?52-week (?:high|low)\b",
+        r"\bmay move [\d.]+% on\b",
         # law-firm solicitations: "Bronstein, Gewirtz & Grossman Urges X
         # Investors to Act", "Shareholder Alert", "Lead Plaintiff Deadline"
         r"\b(?:urges|reminds|encourages|alerts|notifies)\b.*\b(?:investors|shareholders)\b",
@@ -180,6 +206,29 @@ def digest_window(digest_date: date) -> tuple[datetime, datetime]:
     start = datetime.combine(previous_weekday(digest_date), CUTOFF, NEW_YORK)
     end = datetime.combine(digest_date, CUTOFF, NEW_YORK)
     return _utc(start), _utc(end)
+
+
+def weekly_window(friday: date) -> tuple[datetime, datetime]:
+    """[start, end) of the weekly digest dated `friday`, in naive UTC: the
+    seven days to 07:00 New York time on the Saturday after it."""
+    start = datetime.combine(friday - timedelta(days=6), CUTOFF, NEW_YORK)
+    end = datetime.combine(friday + timedelta(days=1), CUTOFF, NEW_YORK)
+    return _utc(start), _utc(end)
+
+
+def week_sessions(friday: date) -> list[date]:
+    """Monday to Friday of the week ending `friday`."""
+    return [friday - timedelta(days=k) for k in range(4, -1, -1)]
+
+
+def latest_weekly_date(now: datetime) -> date:
+    """The Friday of the newest weekly digest whose window has closed: the
+    one before the latest Saturday 07:00 New York time."""
+    local = now.astimezone(NEW_YORK)
+    saturday = local.date() - timedelta(days=(local.weekday() - 5) % 7)
+    if saturday == local.date() and local.time() < CUTOFF:
+        saturday -= timedelta(days=7)
+    return saturday - timedelta(days=1)
 
 
 def latest_digest_date(now: datetime) -> date:
@@ -292,7 +341,7 @@ def story_tickers(articles: list[Article]) -> tuple[str, ...]:
 
 
 def score_story(
-    articles: list[Article], moves: dict[str, float], ranked: set[str]
+    articles: list[Article], moves: dict[str, float], ranked: set[str], period: Period = DAILY
 ) -> Story:
     lead = lead_article(articles)
     tickers = story_tickers(articles)
@@ -303,8 +352,9 @@ def score_story(
     move_ticker = tickers[0] if tickers and tickers[0] in moves else None
     move_return = moves[move_ticker] if move_ticker else None
     inputs = {
-        "coverage": min(1.0, math.log2(n_outlets) / math.log2(COVERAGE_FULL_AT)),
-        "reaction": min(1.0, abs(move_return) / REACTION_FULL_AT) if move_return is not None else 0.0,
+        "coverage": min(1.0, math.log2(n_outlets) / math.log2(period.coverage_full_at)),
+        "reaction": (min(1.0, abs(move_return) / period.reaction_full_at)
+                     if move_return is not None else 0.0),
         "category": 1.0 if cats else 0.0,
         "on_site": 1.0 if ranked.intersection(tickers) else 0.0,
     }
@@ -317,11 +367,11 @@ def score_story(
 
 
 def rank_stories(
-    groups: list[list[Article]], moves: dict[str, float], ranked: set[str]
+    groups: list[list[Article]], moves: dict[str, float], ranked: set[str], period: Period = DAILY
 ) -> list[Story]:
     """Highest score first; ties go to the story with more articles, then
     the more recent one."""
-    stories = [score_story(g, moves, ranked) for g in groups]
+    stories = [score_story(g, moves, ranked, period) for g in groups]
     return sorted(stories, key=lambda s: (-s.score, -len(s.articles),
                                           -s.lead.published_at.timestamp(), s.lead.article_id))
 
@@ -375,8 +425,26 @@ def _moves(con, tickers: set[str], session_date: date, before: date) -> dict[str
     return {t: r for t, r in rows}
 
 
+def _week_moves(con, tickers: set[str], first: date, last: date) -> dict[str, float]:
+    """Each stock's return over the sessions first..last, compounded from
+    its 1-day returns."""
+    if not tickers:
+        return {}
+    rows = con.execute(
+        """
+        SELECT ticker, exp(sum(ln(1 + return_1d))) - 1
+        FROM staging.stg_prices_daily
+        WHERE ticker IN (SELECT UNNEST(?::VARCHAR[]))
+          AND date BETWEEN ? AND ? AND return_1d IS NOT NULL
+        GROUP BY ticker
+        """,
+        [sorted(tickers), first, last],
+    ).fetchall()
+    return {t: r for t, r in rows}
+
+
 def _ranked(con, digest_date: date) -> set[str]:
-    """Stocks in the weekly and quarterly rankings published before the digest."""
+    """Stocks in the weekly and quarterly rankings published before `digest_date`."""
     rows = con.execute(
         """
         SELECT ticker FROM mart.weekly_rankings
@@ -390,33 +458,40 @@ def _ranked(con, digest_date: date) -> set[str]:
     return {t for (t,) in rows}
 
 
-def build_daily_digest(warehouse: Warehouse, digest_date: date) -> dict:
-    """Rebuild one daily digest from the staged news. Replaces that date's
-    rows in all three digest tables; returns what was built."""
-    if digest_date.weekday() >= 5:
-        raise ValueError(f"{digest_date} is a weekend; daily digests are dated Monday to Friday")
-    start, end = digest_window(digest_date)
-    session_date = previous_weekday(digest_date)
+def _build(
+    warehouse: Warehouse,
+    period: Period,
+    digest_date: date,
+    window: tuple[datetime, datetime],
+    sessions: list[date],
+    moves: Callable[[Any, set[str]], dict[str, float]],
+    ranked_before: date,
+) -> dict:
+    """Pick one digest's stories and replace its rows in all three digest
+    tables; returns what was built."""
+    start, end = window
     with warehouse.connect() as con:
         articles = _load_articles(con, start, end)
         kinds = Counter(not_news(a.headline) for a in articles)
         news = [a for a in articles if not_news(a.headline) is None]
         groups = group_stories(news)
         tickers = {t for a in news for t in a.tickers}
-        stories = rank_stories(groups, _moves(con, tickers, session_date, digest_date),
-                               _ranked(con, digest_date))[:DIGEST_SIZE]
+        stories = rank_stories(groups, moves(con, tickers), _ranked(con, ranked_before),
+                               period)[:period.size]
+        published = [a.published_at for a in articles]
         summary = {
+            "period": period.name,
             "digest_date": digest_date.isoformat(),
             "articles": len(articles),
             "routine_dropped": kinds["routine"],
             "commentary_dropped": kinds["commentary"],
             "stories": len(groups),
             "outlets": len({outlet(a.source) for a in news}),
-            "session_gap_minutes": session_gap_minutes([a.published_at for a in articles], session_date),
+            "session_gap_minutes": max(session_gap_minutes(published, d) for d in sessions),
             "picked": len(stories),
         }
 
-        key = ["daily", digest_date]
+        key = [period.name, digest_date]
         con.execute("BEGIN TRANSACTION")
         for table in ("news_digests", "news_digest_stories", "news_digest_articles"):
             con.execute(f"DELETE FROM mart.{table} WHERE period = ? AND digest_date = ?", key)
@@ -452,6 +527,32 @@ def build_daily_digest(warehouse: Warehouse, digest_date: date) -> dict:
     return summary
 
 
+def build_daily_digest(warehouse: Warehouse, digest_date: date) -> dict:
+    """Rebuild one daily digest from the staged news. A story's reaction is
+    its lead stock's move in the session before the digest date."""
+    if digest_date.weekday() >= 5:
+        raise ValueError(f"{digest_date} is a weekend; daily digests are dated Monday to Friday")
+    session = previous_weekday(digest_date)
+    return _build(
+        warehouse, DAILY, digest_date, digest_window(digest_date), [session],
+        lambda con, tickers: _moves(con, tickers, session, digest_date), digest_date,
+    )
+
+
+def build_weekly_digest(warehouse: Warehouse, friday: date) -> dict:
+    """Rebuild the weekly digest dated `friday` from the staged news. A
+    story's reaction is its lead stock's move over the week's sessions; the
+    rankings published that Friday evening count as on the site."""
+    if friday.weekday() != 4:
+        raise ValueError(f"{friday} is not a Friday; weekly digests are dated by the week's Friday")
+    sessions = week_sessions(friday)
+    return _build(
+        warehouse, WEEKLY, friday, weekly_window(friday), sessions,
+        lambda con, tickers: _week_moves(con, tickers, sessions[0], sessions[-1]),
+        friday + timedelta(days=1),
+    )
+
+
 def build_daily_digests(warehouse: Warehouse, last: date, days: int = 1) -> list[dict]:
     """The digest dated `last` and the `days - 1` weekdays before it, oldest
     first: a backfill when the archive should reach further back."""
@@ -459,3 +560,10 @@ def build_daily_digests(warehouse: Warehouse, last: date, days: int = 1) -> list
     while len(dates) < days:
         dates.append(previous_weekday(dates[-1]))
     return [build_daily_digest(warehouse, d) for d in reversed(dates)]
+
+
+def build_weekly_digests(warehouse: Warehouse, last: date, weeks: int = 1) -> list[dict]:
+    """The weekly digest dated Friday `last` and the `weeks - 1` before it,
+    oldest first."""
+    fridays = [last - timedelta(weeks=k) for k in range(max(weeks, 1) - 1, -1, -1)]
+    return [build_weekly_digest(warehouse, f) for f in fridays]

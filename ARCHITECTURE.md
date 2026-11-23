@@ -12,7 +12,9 @@
 - **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published (Finnhub general news; older Alpha Vantage rows also carry overall_sentiment_score) (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with ticker/date filters so paging never loads the full table)
 - **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — from Finnhub's `related` field (older Alpha Vantage rows also carry relevance_score, ticker_sentiment_score). This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
 - **News (staged)** — `staging.stg_news_articles`, key `article_id` — one typed row per article from either provider: `published_at` as a UTC timestamp, outlet, headline, summary, url, and `tickers` (most relevant first: Finnhub's `related` order, Alpha Vantage tickers with relevance ≥ 0.5). Incremental: each run restages only articles landed since the newest staged `fetched_at`.
-- **Daily news digest** — `mart.news_digests` (one row per weekday: window, article counts, how much was filtered out, the longest stretch of the session with no article), `mart.news_digest_stories` (the top 10 stories with each score input) and `mart.news_digest_articles` (which articles were grouped under each story), all keyed by `(period, digest_date)`. Built at 07:30 ET on weekdays from the 24h to 07:00 ET (Monday's covers the weekend). Rule-based, no model: drop routine filings and opinion pieces, group articles about the same event by headline overlap, then rank by coverage (outlets), the 1-day move of the stock it leads with, story type (deal / earnings / macro) and whether the stock is in one of the site's rankings. A rebuild replaces that day's rows.
+- **News digests** — `mart.news_digests` (one row per digest: window, article counts, how much was filtered out, the longest stretch of a session with no article), `mart.news_digest_stories` (the top stories with each score input) and `mart.news_digest_articles` (which articles were grouped under each story), all keyed by `(period, digest_date)`. `daily`: built at 07:30 ET on weekdays from the 24h to 07:00 ET (Monday's covers the weekend), top 10. `weekly`: dated by the week's Friday, built Saturday 07:30 ET from the seven days to 07:00 that morning, top 15. Rule-based, no model: drop routine filings, templated recaps and opinion pieces, group articles about the same event by headline overlap, then rank by coverage (outlets), how the stock it leads with moved (on the day, or over the week), story type (deal / earnings / macro) and whether the stock is in one of the site's rankings. A rebuild replaces that digest's rows.
+- **Article pages** — `raw.news_article_pages`, key `url` — the publisher page behind each story a digest picked (HTML, HTTP status, robots.txt verdict, attempts), fetched inside the digest jobs with robots.txt and AI-crawler opt-outs obeyed; a success, a refusal or a block is final, a timeout or 5xx is retried after 6 hours, at most 3 times. NEWS_SUMMARIES.md is the spec.
+- **Article text** — `staging.stg_news_article_text`, key `url` — each page's main text (forms and pop-ups removed, trafilatura), first 1,500 words kept, with the whole article's word count. Re-extracted only when the extractor changes.
 ---
 ## Real-Time / Ticker-Partitioned Data
 *Fetched on-demand per ticker via dynamic partitions, gated by a staleness check against `last_updated`.*
@@ -53,12 +55,13 @@ flowchart TD
     TD(["Twelve Data"])
     FRED(["FRED"])
     SEC(["SEC EDGAR"])
+    PUB(["Publisher pages"])
 
     subgraph ORCH["Dagster orchestration"]
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
         WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
-        DIGEST["daily_digest · weekdays 07:30 ET<br/>news pull → stage → group + rank stories"]
+        DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → stage → group + rank stories<br/>→ article pages → text"]
         PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
         RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
@@ -72,7 +75,7 @@ flowchart TD
         M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
         M_RANK["model_rankings<br/>rank · ticker · sector · score<br/>quarterly snapshot"]
         M_WEEK["weekly_rankings · weekly_track_record<br/>Stocks of the Week + realized returns"]
-        M_NEWS["news_digests · news_digest_stories<br/>news_digest_articles<br/>daily top 10 stories"]
+        M_NEWS["news_digests · news_digest_stories<br/>news_digest_articles<br/>daily top 10 · weekly top 15"]
     end
 
     UI["FastAPI + React SPA<br/>reads mart/raw · launches jobs (no sensors)"]
@@ -83,6 +86,7 @@ flowchart TD
     WEEK -->|"incremental refresh<br/>prices forced"| RAW
     WEEK -->|"weekly list · grade last week"| M_WEEK
     DIGEST -->|"news pull"| RAW
+    PUB -->|"picked stories' articles"| DIGEST
     DIGEST -->|"top stories"| M_NEWS
     UI -->|"POST /api/pipeline/refresh<br/>when no/fresh snapshot"| PUSH
     PUSH -->|"ingest + derived + score"| RUN
@@ -105,7 +109,7 @@ flowchart TD
     MART -->|"rating snapshot<br/>source=warehouse"| UI
     M_RANK -->|"GET /api/rankings"| UI
     M_WEEK -->|"GET /api/weekly"| UI
-    M_NEWS -->|"GET /api/digest/daily"| UI
+    M_NEWS -->|"GET /api/digest/{daily,weekly}"| UI
     RAW -->|"quotes · news · commodities · macro"| UI
     M_RESH -->|"GET /api/prices"| UI
     M_TECH -->|"GET /api/technicals"| UI
@@ -140,12 +144,17 @@ flowchart TD
 >   `mart.weekly_rankings`, and fills in `realized_return` on the previous
 >   list once its week has closed (an incremental update, not a rewrite).
 >   The weekday `daily_digest` job pulls news once more, restages it into
->   `staging.stg_news_articles`, and rebuilds that morning's digest. It reads
->   `stg_prices_daily` for the lead stock's move and the ranking tables for
->   which stocks the site covers; it calls no API beyond the news pull. Finnhub
->   only serves the latest ~100 articles per pull, so the job logs a warning
->   when the trading session has a long stretch with no article (news likely
->   fell between pulls).
+>   `staging.stg_news_articles`, and rebuilds that morning's digest; the
+>   Saturday `weekly_digest` job runs the same chain into the week's digest.
+>   Both read `stg_prices_daily` for the lead stock's move and the ranking
+>   tables for which stocks the site covers, then fetch the picked stories'
+>   article pages into `raw.news_article_pages` and their text into
+>   `staging.stg_news_article_text`; the only API they call is the news
+>   pull. Every op of a scheduled or retrain job claims the one-slot
+>   `warehouse` concurrency pool, so overlapping jobs wait for each other
+>   instead of failing on DuckDB's write lock. Finnhub only serves the latest ~100 articles per pull, so the jobs
+>   log a warning when a trading session has a long stretch with no article
+>   (news likely fell between pulls).
 >
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
 > over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a mostly-read
@@ -155,5 +164,6 @@ flowchart TD
 > in-ranking lookup), Weekly (`mart.weekly_rankings`: Stocks of the
 > Week, last week's results, backtest), stock page (rank context + per-input SHAP breakdown),
 > Model (track record, input weights, methodology), Market (movers, macro,
-> news, calendars), Daily digest (`mart.news_digest_*`: the morning's top
-> stories under Market, with what each score input gave them), Docs.
+> calendars), News (`mart.news_digest_*`: the day's top stories, then the
+> week's with what each score input gave them, then the full news feed;
+> a method page explains the rules), Docs.

@@ -31,3 +31,13 @@ schedule_storage:
   class: SqliteScheduleStorage
   config:
     base_dir: /app/dagster_home/schedules
+
+# One op at a time in the "warehouse" pool (definitions.WAREHOUSE_POOL):
+# every scheduled and retrain op claims it, so jobs that overlap wait for
+# each other instead of failing on DuckDB's single-writer lock. Pools
+# need the instance's concurrency tables: if the daemon logs that the
+# instance doesn't support them, run `dagster instance migrate` once.
+concurrency:
+  pools:
+    granularity: op
+    default_limit: 1

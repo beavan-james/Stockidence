@@ -16,6 +16,8 @@
  *     CSS (.pixelated) enlarges them without smoothing.
  */
 
+import { LUMA_CUT, PALETTE, STOP_LUMA, hexRGB } from "@/lib/palette";
+
 export interface DiscStock {
   ticker: string;
   rank: number;
@@ -29,23 +31,6 @@ interface DiscCallbacks {
 
 /** Light each fifth gives off before the palette resolve (brighter = more favoured). */
 const GLOW_HEX = ["#ffc46b", "#ff8d00", "#d2601c", "#8c4421", "#4a2a17"];
-
-/** Output palette, dark to light: black, deep-space plums, rust and copper, the
- *  galaxy oranges, then gold to white-hot. Every art pixel is one of these. */
-const PALETTE = [
-  "#000000",
-  "#1d0712",
-  "#360021",
-  "#5a1418",
-  "#86301a",
-  "#b84a17",
-  "#e36700",
-  "#ff8d00",
-  "#ffa500",
-  "#ffc46b",
-  "#ffe6b0",
-  "#fffaf0",
-];
 
 /** A low, slightly rolled view of a flat disc. */
 const CAM = { dist: 2.4, tilt: 0.36, roll: 0.1 };
@@ -70,12 +55,6 @@ const PICK_STICKY = 1.25;
 
 /** Wide layout: the disc sits right of the copy and fades under it. Matches the CSS breakpoint. */
 const WIDE = "(min-width: 900px)";
-
-const hexRGB = (h: string): [number, number, number] => [
-  parseInt(h.slice(1, 3), 16) / 255,
-  parseInt(h.slice(3, 5), 16) / 255,
-  parseInt(h.slice(5, 7), 16) / 255,
-];
 
 /** Seeded (mulberry32), so every load draws the same disc. */
 function seeded(seed: number) {
@@ -493,14 +472,11 @@ export class SplatDisc {
     // Each stop sits at its own luminance, so the resolve keeps the splats'
     // brightness and only snaps it to these colours.
     const stops = new Float32Array(PALETTE.length * 4);
-    PALETTE.forEach((h, i) => {
-      const [r, g, b] = hexRGB(h);
-      stops.set([r, g, b, 0.3 * r + 0.55 * g + 0.15 * b], i * 4);
-    });
+    PALETTE.forEach((h, i) => stops.set([...hexRGB(h), STOP_LUMA[i]], i * 4));
     gl.useProgram(rprog);
     gl.uniform4fv(this.ru.uStops, stops);
     gl.uniform1i(this.ru.uCount, PALETTE.length);
-    gl.uniform1f(this.ru.uCut, 0.025);
+    gl.uniform1f(this.ru.uCut, LUMA_CUT);
     gl.uniform1i(this.ru.uScene, 0);
 
     this.tex = gl.createTexture();

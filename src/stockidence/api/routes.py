@@ -10,6 +10,8 @@ Contracts carried over from the Reflex read path:
     has nothing, so empty sections never become HTTP errors
 """
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -188,22 +190,24 @@ def get_news(
     )
 
 
-@market_router.get("/digest/daily")
-def get_daily_digest(
+@market_router.get("/digest/{period}")
+def get_digest(
+    period: Literal["daily", "weekly"],
     date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ) -> dict:
-    """One weekday's news digest (the latest when `date` is omitted): the
-    top stories, what each score input gave them, and the other articles
-    grouped under each. 404 for a date with no digest."""
+    """One weekday's or one week's news digest (the latest when `date` is
+    omitted; a week is dated by its Friday): the top stories, what each
+    score input gave them, and the other articles grouped under each. 404
+    for a date with no digest."""
     from datetime import date as _date
 
     try:
         day = _date.fromisoformat(date) if date else None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"not a date: {date}") from exc
-    result = digest.get_daily_digest(day)
+    result = digest.get_digest(period, day)
     if result is None:
-        raise HTTPException(status_code=404, detail=f"no daily digest for {date}")
+        raise HTTPException(status_code=404, detail=f"no {period} digest for {date}")
     return result
 
 

@@ -2,7 +2,6 @@ import { useEffect } from "react";
 
 import { MacroGrid } from "@/components/discover/MacroCards";
 import { EarningsCalendar, IpoCalendar } from "@/components/discover/Calendars";
-import { NewsTable } from "@/components/discover/NewsTable";
 import { MoverTable } from "@/components/discover/MoverTable";
 import { PageHero, Section } from "@/components/layout/Page";
 import {
@@ -34,12 +33,7 @@ export function MarketPage() {
     return (
         <div>
             <PageHero
-                link={{ to: "/market/digest", label: "Daily news digest →" }}
-                title={
-                    <>
-                        Around the market. <span className="text-accent">Context for the rankings.</span>
-                    </>
-                }
+                title="Market Info"
             />
 
             {movers.data || movers.isError ? (
@@ -70,10 +64,6 @@ export function MarketPage() {
 
             <Section title="Economy &amp; commodities">
                 <MacroGrid metrics={macro.data ?? []} commodities={commodities.data ?? []} />
-            </Section>
-
-            <Section title="News">
-                <NewsTable />
             </Section>
 
             <Section title="Calendars">

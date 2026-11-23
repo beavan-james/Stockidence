@@ -11,6 +11,9 @@ Cadence follows ARCHITECTURE.md:
   on-demand-stale             -> fetched per ticker via the staleness gate
   immutable / conditional     -> variation of on-demand-stale
   gap-fill                    -> fetched only to fill a gap another source left
+  event                       -> fetched inside another job, only for what that
+                                 job's output names (the pages behind the
+                                 stories a news digest picked)
   derived                     -> no API call, pipelined derivation
 """
 
@@ -27,6 +30,8 @@ class Provider(StrEnum):
     TWELVE_DATA = "twelve_data"
     FRED = "fred"
     SEC_EDGAR = "sec_edgar"
+    # publisher web pages, not an API: ingest.articles fetches them
+    PUBLISHERS = "publishers"
     DERIVED = "derived"
 
 
@@ -34,6 +39,8 @@ class Trigger(StrEnum):
     SCHEDULED = "scheduled"
     ON_DEMAND_EVERY = "on_demand_every"
     ON_DEMAND_STALE = "on_demand_stale"
+    # a step chained inside another job, not a job of its own
+    CHAINED = "chained"
     DERIVED = "derived"
 
 
@@ -45,6 +52,7 @@ class Cadence(StrEnum):
     IMMUTABLE = "immutable"
     CONDITIONAL = "conditional"
     GAP_FILL = "gap_fill"
+    EVENT = "event"
     DERIVED = "derived"
 
 
@@ -449,6 +457,46 @@ _REGISTRY: list[EndpointSpec] = [
         ttl=None,
         notes="top stories of the 24h to 07:00 New York time, from stg_news_articles; "
         "built weekdays 07:30 NY by the daily_digest job, a rebuild replaces the date",
+    ),
+    EndpointSpec(
+        name="news_digest.weekly",
+        provider=Provider.DERIVED,
+        method=None,
+        trigger=Trigger.DERIVED,
+        cadence=Cadence.DERIVED,
+        watermark=("period", "digest_date"),
+        artifacts=("news_digests", "news_digest_stories", "news_digest_articles"),
+        ttl=None,
+        notes="top stories of the 7 days to Saturday 07:00 New York time, dated by the "
+        "week's Friday; built Saturdays 07:30 NY by the weekly_digest job",
+    ),
+    # --- event: the pages behind the digest's stories (NEWS_SUMMARIES.md) ---
+    EndpointSpec(
+        name="news_article.page",
+        provider=Provider.PUBLISHERS,
+        method=None,
+        trigger=Trigger.CHAINED,
+        cadence=Cadence.EVENT,
+        watermark=("url",),
+        artifacts=("news_article_pages",),
+        # a success is never fetched again; this is the wait before retrying
+        # a transient failure (timeout, 429, 5xx, robots.txt unreachable)
+        ttl=timedelta(hours=6),
+        notes="fetched by the digest jobs right after selection, only for picked stories "
+        "with no readable text yet; robots.txt obeyed and AI-crawler opt-outs skipped; "
+        "at most 3 attempts per URL",
+    ),
+    EndpointSpec(
+        name="news_article.text",
+        provider=Provider.DERIVED,
+        method=None,
+        trigger=Trigger.DERIVED,
+        cadence=Cadence.DERIVED,
+        watermark=("url",),
+        artifacts=("stg_news_article_text",),
+        ttl=None,
+        notes="main text of each fetched page (trafilatura), first 1,500 words; "
+        "re-extracted when the extractor version changes",
     ),
 ]
 

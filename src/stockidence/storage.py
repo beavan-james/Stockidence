@@ -182,10 +182,21 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("headline", "VARCHAR"), ("summary", "VARCHAR"), ("url", "VARCHAR"),
         ("tickers", "VARCHAR[]"), ("fetched_at", "TIMESTAMPTZ"),
     ],
+    # main text of each fetched article page (raw.news_article_pages), cut to
+    # the first MAX_WORDS words; `words` counts the whole article, and
+    # `truncated` says the text was cut. `extractor` names the extraction
+    # library and version, so a new version re-extracts every page.
+    "stg_news_article_text": [
+        ("url", "VARCHAR"), ("text", "VARCHAR"), ("words", "INTEGER"),
+        ("truncated", "BOOLEAN"), ("extractor", "VARCHAR"), ("extracted_at", "TIMESTAMPTZ"),
+    ],
 }
 
 # Staging tables whose PK isn't their first two columns.
-_STAGING_PK: dict[str, tuple[str, ...]] = {"stg_news_articles": ("article_id",)}
+_STAGING_PK: dict[str, tuple[str, ...]] = {
+    "stg_news_articles": ("article_id",),
+    "stg_news_article_text": ("url",),
+}
 
 
 # mart tables: aggregations and derivations the scoring layer reads — resampled
@@ -360,6 +371,29 @@ class Warehouse:
                     """
                 )
             _migrate_gainers_losers_bucket(con)
+            # Publisher pages behind the digest's links (ingest.articles), one
+            # row per URL. Not an API response, so not the payload/fetched_at
+            # layout above: each fetch attempt updates the row in place.
+            # robots is the robots.txt verdict for that URL (allowed /
+            # disallowed / ai_optout / unreachable); html is null unless the
+            # page came back as HTML from an allowed URL.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS raw.news_article_pages (
+                    url VARCHAR NOT NULL,
+                    domain VARCHAR NOT NULL,
+                    robots VARCHAR NOT NULL,
+                    http_status INTEGER,
+                    final_url VARCHAR,
+                    html VARCHAR,
+                    error VARCHAR,
+                    attempts INTEGER NOT NULL,
+                    first_tried_at TIMESTAMPTZ NOT NULL,
+                    last_tried_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (url)
+                )
+                """
+            )
             for table, keys in STAGING_SCHEMA.items():
                 cols = ", ".join(f'"{name}" {typ}' for name, typ in keys)
                 # staging PK = the first two declared columns: (ticker, date)

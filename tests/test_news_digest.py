@@ -1,5 +1,5 @@
-"""Daily news digest: window, filters, grouping, scoring, staging, the
-mart build and the read API, on a temporary warehouse."""
+"""News digests: daily and weekly windows, filters, grouping, scoring,
+staging, the mart build and the read API, on a temporary warehouse."""
 
 from __future__ import annotations
 
@@ -9,15 +9,19 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from stockidence.mart.news_digest import (
+    WEEKLY,
     Article,
     build_daily_digest,
+    build_weekly_digest,
     categories_of,
     digest_window,
     group_stories,
     headline_words,
     latest_digest_date,
+    latest_weekly_date,
     not_news,
     score_story,
+    weekly_window,
 )
 from stockidence.staging.staging import rebuild_news_articles
 from stockidence.storage import Warehouse
@@ -58,6 +62,21 @@ def test_latest_digest_date(now, expected):
     assert latest_digest_date(now) == expected
 
 
+def test_weekly_window_runs_saturday_to_saturday_07_new_york():
+    # dated Fri Aug 28 2026 (EDT): Sat Aug 22 07:00 ET to Sat Aug 29 07:00 ET
+    assert weekly_window(date(2026, 8, 28)) == (datetime(2026, 8, 22, 11), datetime(2026, 8, 29, 11))
+
+
+@pytest.mark.parametrize("now, expected", [
+    (datetime(2026, 11, 21, 11, 59, tzinfo=timezone.utc), date(2026, 11, 13)),  # Sat 06:59 EST
+    (datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc), date(2026, 11, 20)),   # Sat 07:00 EST
+    (datetime(2026, 11, 22, 15, 0, tzinfo=timezone.utc), date(2026, 11, 20)),   # Sunday
+    (datetime(2026, 11, 20, 23, 0, tzinfo=timezone.utc), date(2026, 11, 13)),   # Friday evening
+])
+def test_latest_weekly_date(now, expected):
+    assert latest_weekly_date(now) == expected
+
+
 # --- filters ---------------------------------------------------------------
 
 @pytest.mark.parametrize("headline", [
@@ -66,10 +85,16 @@ def test_latest_digest_date(now, expected):
     "Intuit CFO Sells 16,524 Shares of Stock",
     "Goldman Sachs Raises Nvidia Price Target to $250",
     "Brown & Brown Inc. stock underperforms Tuesday when compared to competitors",
+    "Synopsys Inc. stock outperforms competitors on strong trading day",
+    "Evolve Private Wealth LLC Purchases New Position in The PNC Financial Services Group, Inc $PNC",
+    "Ieq Capital LLC Takes $9.78 Million Position in Dollar Tree, Inc. $DLTR",
+    "Maxi Investments CY Ltd Buys New Shares in Salesforce Inc. $CRM",
     "Medtronic (MDT) Stock Dips While Market Gains: Key Facts",
     "Bronstein, Gewirtz & Grossman LLC Urges Intuit Inc. Investors to Act: Class Action Filed",
     "PODD Shareholder Alert: August 31, 2026 Lead Plaintiff Deadline in Insulet Class Action",
     "Apple to Present at Goldman Sachs Communacopia Conference",
+    "Rollins Inc stock hits 52-week low at 35.31 USD By Investing.com",
+    "Copart stock may move 6.2% on Sept. 10 earnings release",
 ])
 def test_routine_headlines_are_dropped(headline):
     assert not_news(headline) == "routine"
@@ -148,6 +173,13 @@ def test_coverage_is_log_scaled_by_outlet_and_capped():
     assert story(2).inputs["coverage"] == pytest.approx(1 / 3)
     assert story(8).inputs["coverage"] == 1.0
     assert story(12).inputs["coverage"] == 1.0
+
+
+def test_a_week_needs_more_outlets_for_full_coverage():
+    arts = [_article(str(i), "Fed holds rates steady", source=f"Outlet{i}") for i in range(8)]
+    assert score_story(arts, {}, set(), WEEKLY).inputs["coverage"] < 1.0
+    arts += [_article(str(i), "Fed holds rates steady", source=f"Outlet{i}") for i in range(8, 12)]
+    assert score_story(arts, {}, set(), WEEKLY).inputs["coverage"] == 1.0
 
 
 def test_same_outlet_under_two_names_counts_once():
@@ -249,6 +281,27 @@ def test_build_refuses_weekends(warehouse):
         build_daily_digest(warehouse, date(2026, 8, 29))
 
 
+def test_weekly_build_covers_the_week_and_compounds_the_move(warehouse):
+    rebuild_news_articles(warehouse)
+    build_daily_digest(warehouse, date(2026, 8, 26))
+    out = build_weekly_digest(warehouse, date(2026, 8, 28))
+    assert out["period"] == "weekly" and out["articles"] == 5  # the Sunday story is in this week
+    with warehouse.connect(read_only=True) as con:
+        periods = con.execute(
+            "SELECT period, COUNT(*) FROM mart.news_digests GROUP BY 1 ORDER BY 1").fetchall()
+        top = con.execute(
+            "SELECT move_ticker, move_return, reaction FROM mart.news_digest_stories"
+            " WHERE period = 'weekly' AND rank = 1").fetchone()
+    assert periods == [("daily", 1), ("weekly", 1)]
+    # Tuesday -3.4% then Wednesday +50%, compounded; full marks past 20%
+    assert top == ("INTU", pytest.approx(0.966 * 1.5 - 1), 1.0)
+
+
+def test_weekly_build_refuses_other_days(warehouse):
+    with pytest.raises(ValueError):
+        build_weekly_digest(warehouse, date(2026, 8, 29))
+
+
 def test_read_api(warehouse, monkeypatch):
     from fastapi.testclient import TestClient
 
@@ -273,6 +326,14 @@ def test_read_api(warehouse, monkeypatch):
     assert client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"] == "2026-08-26"
     assert client.get("/api/digest/daily", params={"date": "2026-08-29"}).status_code == 404
     assert client.get("/api/digest/daily", params={"date": "2026-02-30"}).status_code == 422
+
+    build_weekly_digest(warehouse, date(2026, 8, 28))
+    weekly = client.get("/api/digest/weekly").json()
+    assert weekly["period"] == "weekly" and weekly["digest_date"] == "2026-08-28"
+    assert weekly["full_marks"] == {"coverage_outlets": 12, "move": 0.2}
+    assert latest["full_marks"] == {"coverage_outlets": 8, "move": 0.1}
+    assert client.get("/api/digest/weekly", params={"date": "2026-08-21"}).status_code == 404
+    assert client.get("/api/digest/monthly").status_code == 422
 
 
 def test_read_api_is_empty_before_the_first_digest(tmp_path, monkeypatch):

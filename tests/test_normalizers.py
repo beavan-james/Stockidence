@@ -218,8 +218,11 @@ def test_unknown_endpoint_raises():
 
 
 def test_all_normalizers_cover_registry():
-    from stockidence.ingest.endpoints import REGISTRY, Provider
+    from stockidence.ingest.endpoints import REGISTRY, Provider, Trigger
 
-    fetched = [spec.name for spec in REGISTRY.values() if spec.provider != Provider.DERIVED]
+    # chained endpoints (the digest's article pages) are landed by their own
+    # job op, not through the engine, so they have no JSON normalizer
+    fetched = [spec.name for spec in REGISTRY.values()
+               if spec.provider != Provider.DERIVED and spec.trigger != Trigger.CHAINED]
     missing = [name for name in fetched if name not in NORMALIZERS]
     assert not missing, f"endpoints without normalizers: {missing}"

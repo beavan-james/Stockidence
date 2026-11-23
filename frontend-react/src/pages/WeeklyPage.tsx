@@ -29,23 +29,11 @@ export function WeeklyPage() {
     <div>
       <PageHero
         link={{ to: "/week/method", label: "How the model works →" }}
-        loading={weekly.isPending}
-        title={
-          d?.week_of ? (
-            <>
-              Ten stocks for the week of <span className="text-accent">{dayLabel(d.week_of)}.</span>
-            </>
-          ) : (
-            <>
-              The first weekly list lands <span className="text-accent">Friday after the close.</span>
-            </>
-          )
-        }
+        title="Weekly Stock Rankings"
         lede={
-          <>
-            Every Friday after the close{n ? `, ${n}` : ""} US stocks are re-ranked by how likely they are to beat the
-            rest of the list over the coming week.
-          </>
+          d?.week_of
+            ? `Week of ${dayLabel(d.week_of)}.`
+            : d && "The first list lands Friday after the close."
         }
       >
         {weekly.isError && <p className="mt-10 text-sm text-ink-muted">This week's list is unavailable right now.</p>}

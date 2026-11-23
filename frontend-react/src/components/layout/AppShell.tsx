@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigationType } from "react-router-dom";
 
 import logoUrl from "@/assets/logo.svg";
@@ -6,18 +6,20 @@ import { useRankings, useWeekly } from "@/hooks/queries";
 import { dayLabel, quarterLabel, snapshotLabel } from "@/lib/tiers";
 import { CONTAINER, cn } from "@/lib/utils";
 
-type Area = "quarterly" | "weekly" | "market";
+type Area = "quarterly" | "weekly" | "market" | "news";
 
 const NAV: { area: Area; to: string; label: string }[] = [
   { area: "quarterly", to: "/", label: "Quarterly" },
   { area: "weekly", to: "/week", label: "Weekly" },
   { area: "market", to: "/market", label: "Market" },
+  { area: "news", to: "/news", label: "News" },
 ];
 
 /** A model's method and stock pages stay under that model in the nav. */
 function areaOf(pathname: string): Area | null {
   if (pathname.startsWith("/week")) return "weekly";
   if (pathname.startsWith("/market")) return "market";
+  if (pathname.startsWith("/news")) return "news";
   if (pathname === "/" || pathname.startsWith("/model") || pathname.startsWith("/stocks")) return "quarterly";
   return null;
 }
@@ -37,8 +39,12 @@ export function AppShell() {
   const navigationType = useNavigationType();
   const area = areaOf(pathname);
 
-  // New pages open at the top; Back/Forward keep the browser's restored position.
+  // New pages open at the top; Back/Forward keep the browser's restored
+  // position, and so does a search-only change (stepping a news digest's day).
+  const lastPath = useRef(pathname);
   useEffect(() => {
+    if (pathname === lastPath.current) return;
+    lastPath.current = pathname;
     if (navigationType !== "POP") window.scrollTo(0, 0);
   }, [pathname, navigationType]);
 
