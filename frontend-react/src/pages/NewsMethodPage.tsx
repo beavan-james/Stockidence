@@ -14,7 +14,7 @@ function Inputs({ daily, weekly }: { daily: DigestEnvelope; weekly: DigestEnvelo
   const help: Record<DigestInput, string> = {
     coverage: `How many outlets ran the story. One outlet scores nothing; each doubling adds the same, up to full marks at ${day.coverage_outlets} outlets in a day's digest and ${week.coverage_outlets} in a week's.`,
     reaction: `How the stock the story leads with moved: its one-day move in a day's digest, its move over the five sessions in a week's. Full marks at ${range(day.move)} and ${range(week.move)}.`,
-    category: "Full marks for a deal, earnings or macro story, nothing otherwise.",
+    category: "Full marks for a deal, earnings, macro or policy story, nothing otherwise.",
     on_site: "Full marks when the story names a stock in this week's or this quarter's ranking.",
   };
   const weights = daily.weights;
@@ -85,7 +85,8 @@ export function NewsMethodPage() {
         <div className="grid max-w-4xl gap-6 text-sm leading-relaxed text-ink-secondary md:grid-cols-2">
           <p>
             A day's digest covers the 24 hours to 7:00 ET and is built at 7:30 ET on weekdays, before the open.
-            Monday's covers the weekend too. It keeps the top 10 stories.
+            Monday's covers the weekend too. It keeps the top 10 stories, saving up to two places for government
+            and economic news that scores at least 0.30.
           </p>
           <p>
             A week's digest covers the seven days to 7:00 ET on Saturday, so Friday's session and the earnings

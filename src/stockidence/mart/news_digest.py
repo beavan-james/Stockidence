@@ -26,10 +26,14 @@ Picking the stories:
        coverage  how many different outlets ran it
        reaction  how the stock it leads with moved: its 1-day move in a
                  daily digest, its move over the week in a weekly one
-       category  a deal, earnings, or macro news (Fed, inflation, jobs)
+       category  a deal, earnings, macro news (Fed, inflation, jobs) or
+                 policy news (regulators, Congress, the White House)
        on_site   names a stock in one of the site's rankings
      where coverage and reaction reach full marks is set per period
-  4. keep the period's top stories (10 a day, 15 a week)
+  4. keep the period's top stories (10 a day, 15 a week). A day keeps up to
+     2 of its places for policy or macro stories, which coverage and stock
+     moves crowd out: when fewer make the top 10 on score, the best of the
+     rest scoring at least 0.30 take the places of the lowest-ranked others
 
 Like the scoring weights, the weights and thresholds below are proposals,
 not a locked spec.
@@ -75,11 +79,19 @@ class Period:
     size: int                # stories kept
     coverage_full_at: int    # outlets
     reaction_full_at: float  # absolute return over the period
+    reserved: int = 0        # places kept for RESERVED_CATEGORIES stories
 
 
-DAILY = Period("daily", size=10, coverage_full_at=8, reaction_full_at=0.10)
+DAILY = Period("daily", size=10, coverage_full_at=8, reaction_full_at=0.10, reserved=2)
 WEEKLY = Period("weekly", size=15, coverage_full_at=12, reaction_full_at=0.20)
 PERIODS: dict[str, Period] = {p.name: p for p in (DAILY, WEEKLY)}
+
+RESERVED_CATEGORIES = frozenset({"policy", "macro"})
+# A reserved place goes only to a story that scores at least this: its
+# category plus one more input's worth (a second outlet, a stock on the
+# site or a ~6% move), so a lone listicle that mentions tariffs can't take
+# the place of real news.
+RESERVED_MIN_SCORE = 0.30
 
 # Two articles published within MERGE_WINDOW of each other are the same
 # story when their headlines' shared words carry at least this share of
@@ -109,6 +121,8 @@ _NOT_NEWS: dict[str, re.Pattern[str]] = {
         r"\b(?:sells|sold|buys|bought|purchases|acquires|exercises|donates|gifts|receives|unloads|cashes)\b.*"
         r"\b(?:shares|stock|options)\b"),
         rf"\b(?:sells|buys|acquires|purchases) {_AMOUNT} (?:in|of|worth of) (?:stock|shares)\b",
+        # "Nancy Pelosi Congressional Trade on Jul. 24", "Donald Trump - Salesforce Inc. Trump Trade on Jun. 18"
+        r"\b(?:congressional|trump) trade on\b",
         # analyst housekeeping: target moves and unchanged ratings
         r"\bprice target\b",
         r"\b(?:reiterates|maintains|reaffirms|keeps)\b.*\b(?:rating|overweight|underweight|outperform|buy|hold)\b",
@@ -146,9 +160,34 @@ CATEGORIES: dict[str, re.Pattern[str]] = {
         r"\b(?:acquir\w*|acquisition|mergers?|merge[sd]?|buyout|takeover|spin-?off|to buy|bid for)\b", re.IGNORECASE),
     "earnings": re.compile(
         r"\b(?:earnings|results|revenue|profit|guidance|outlook|eps|q[1-4])\b", re.IGNORECASE),
+    # Not "fed up". Not a bare "rate hike" either: that is as often a
+    # utility's or a tax rate, and a Fed story also says "Fed" or "interest rate".
     "macro": re.compile(
-        r"\b(?:fed|federal reserve|fomc|powell|interest rates?|rate (?:cut|hike)s?|inflation|cpi|pce"
+        r"\b(?:fed(?! up\b)|federal reserve|fomc|powell|interest rates?|inflation|cpi|pce"
         r"|payrolls|jobs report|unemployment|gdp|recession|tariffs?|treasury yields?)\b", re.IGNORECASE),
+    # Government action: regulators and prosecutors, Congress, the White
+    # House, sanctions and export controls. Tariffs are macro.
+    "policy": re.compile("|".join((
+        # the SEC acting, not a company's filing with it ("Apple Inc. SEC
+        # Filing (Aug 11, 2026)", "Files 10-Q with the U.S. SEC")
+        (r"(?<!files )(?<!with )(?<!with the )(?<!with u\.s\. )(?<!with the u\.s\. )"
+         r"\b(?:sec|securities and exchange commission)\b(?! (?:\d+-?[kq] )?(?:filings?|forms?|reports?)\b)"),
+        r"\b(?:ftc|federal trade commission|doj|justice department|department of justice|antitrust)\b",
+        # Congress, not a medical one ("ESC Congress 2026"), Bill Ackman or
+        # the tax bill on an executive's vested shares
+        r"\bcongress(?= (?:pass|approv|vot|clear|reject|block|weigh|debat|stall|fail|probe|investigat))",
+        r"\b(?:before|to|in) (?:the )?(?:u\.?s\.? )?congress\b(?! \d)",
+        r"\bcongressional (?:hearing|probe|investigation|committee|panel|testimony|leaders?)\b",
+        r"\b(?:senate|senators?|lawmakers?|legislation|legislators?|legislative|legislature)\b",
+        r"\bhouse (?:bill|vote|passes|panel|committee|republicans|democrats|speaker|lawmakers)\b",
+        r"\b(?:spending|funding|stopgap|appropriations|budget|house|senate) bills?\b",
+        r"\b(?:passes|passed|signs|signed|vetoes|vetoed) (?:a |the )?(?:\w+ )?bill\b",
+        # the White House, not Trump Media or his family's ventures
+        r"\b(?:white house|executive orders?|oval office)\b",
+        r"(?<!eric )\btrump\b(?!(?:'s|’s)? media|-backed|-linked| jr)",
+        r"\b(?:sanction(?:s|ed|ing)?|entity list)\b",
+        r"\bexport (?:controls?|curbs?|restrictions?|bans?|licen[cs]es?|rules?|limits?)\b",
+    )), re.IGNORECASE),
 }
 
 _STOPWORDS = frozenset(
@@ -376,6 +415,28 @@ def rank_stories(
                                           -s.lead.published_at.timestamp(), s.lead.article_id))
 
 
+def reserved_kind(story: Story) -> bool:
+    """Policy or macro news, which a day keeps places for."""
+    return not RESERVED_CATEGORIES.isdisjoint(story.categories)
+
+
+def pick_stories(ranked: list[Story], period: Period = DAILY) -> list[Story]:
+    """The period's top stories from `ranked` (best first), keeping up to
+    `period.reserved` places for policy and macro stories: when fewer make
+    the top on score, the best of the rest scoring at least
+    RESERVED_MIN_SCORE take the places of the lowest-ranked others. A
+    reserved pick scored below every story it joins, so the picks stay in
+    score order with it at the bottom."""
+    top = ranked[:period.size]
+    missing = period.reserved - sum(map(reserved_kind, top))
+    extra = [s for s in ranked[period.size:]
+             if reserved_kind(s) and s.score >= RESERVED_MIN_SCORE][:max(missing, 0)]
+    if not extra:
+        return top
+    dropped = {s.lead.article_id for s in [s for s in top if not reserved_kind(s)][-len(extra):]}
+    return [s for s in top if s.lead.article_id not in dropped] + extra
+
+
 def session_gap_minutes(published: list[datetime], session_date: date) -> int:
     """Longest stretch of the session with no article, counting from the
     open and to the close. A long one means the feed missed news: Finnhub's
@@ -476,8 +537,8 @@ def _build(
         news = [a for a in articles if not_news(a.headline) is None]
         groups = group_stories(news)
         tickers = {t for a in news for t in a.tickers}
-        stories = rank_stories(groups, moves(con, tickers), _ranked(con, ranked_before),
-                               period)[:period.size]
+        stories = pick_stories(rank_stories(groups, moves(con, tickers), _ranked(con, ranked_before),
+                                            period), period)
         published = [a.published_at for a in articles]
         summary = {
             "period": period.name,

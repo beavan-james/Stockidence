@@ -12,7 +12,12 @@ export const INPUTS: { key: DigestInput; label: string }[] = [
   { key: "on_site", label: "On the site" },
 ];
 
-export const CATEGORY_LABELS: Record<string, string> = { deal: "Deal", earnings: "Earnings", macro: "Macro" };
+export const CATEGORY_LABELS: Record<string, string> = {
+  deal: "Deal",
+  earnings: "Earnings",
+  macro: "Macro",
+  policy: "Policy",
+};
 
 /** "on the day" / "on the week": what a story's move covers. */
 export const MOVE_SPAN: Record<DigestPeriod, string> = { daily: "on the day", weekly: "on the week" };
@@ -81,7 +86,7 @@ export function inputReading(
     case "category":
       return s.categories.length
         ? s.categories.map((c) => CATEGORY_LABELS[c] ?? c).join(", ")
-        : "Not a deal, earnings or macro story";
+        : "Not a deal, earnings, macro or policy story";
     case "on_site": {
       const named = s.tickers.filter(ranked);
       return s.components.on_site > 0
