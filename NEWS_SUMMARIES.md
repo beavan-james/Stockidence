@@ -6,10 +6,10 @@ small local model from the full text of the articles, and both list their
 sources. This file is the governing spec for that pipeline: the article
 scraper, the model harness, and where the jobs run.
 
-Status (2026-11-22): the scraper (steps 2–3) and the model harness (steps
-4–7) are built and tested against a scripted model; neither has run on
-the server yet. Still to build: the selection changes (step 1) and the
-News page showing the summaries.
+Status (2026-11-23): every pipeline step is built and tested: the
+selection changes (step 1), the scraper (steps 2–3) and the model harness
+(steps 4–7, against a scripted model). None has run on the server yet.
+Still to build: the News page showing the summaries.
 
 ## What the reader gets
 
@@ -43,7 +43,7 @@ that chooses which stories get read. Its scores aren't shown on the page.
 
 | Step | Who | Writes | Notes |
 |---|---|---|---|
-| 1. Select | rules | `mart.news_digest_*` (exists) | Daily top 10, weekly top 15 |
+| 1. Select | rules | `mart.news_digest_*` (exists) | Daily top 10 (2 kept for policy and macro), weekly top 15 |
 | 2. Fetch | scraper | `raw.news_article_pages` | Picked stories only |
 | 3. Extract | trafilatura | `staging.stg_news_article_text` | Main text, capped |
 | 4. Read | model | `mart.news_story_cards` | One card per story, reused by the weekly |
@@ -63,6 +63,38 @@ that chooses which stories get read. Its scores aren't shown on the page.
   daily digests plus the weekly top 15, merged by story.
 
 Like the other digest thresholds, these are provisional.
+
+As built (`mart/news_digest.py`, 2026-11-23):
+
+- `policy` is a category like the others, so a policy story gets the
+  category input's full marks. Its keywords are the bodies above plus
+  senators, lawmakers, legislation and Trump (not Trump Media or his
+  family's ventures). They skip the lookalikes found in the feed: "X SEC
+  Filing (date)" and other filings with the SEC, Bill Ackman, the tax bill
+  on an executive's vested shares, medical congresses, "in-house".
+- Two `macro` keywords were narrowed so the slots don't promote them: "fed"
+  no longer matches "fed up", and a bare "rate hike" or "rate cut" no
+  longer counts (it was mostly utility and tax rates; a story about the
+  Fed's says "Fed" or "interest rate").
+- The places are a minimum, not a cap: when the top 10 has fewer than 2
+  `policy` or `macro` stories, the best of the rest take the places of the
+  lowest-ranked others. They scored below every story they join, so they
+  come last.
+- A reserved place needs a score of at least 0.30: the category plus one
+  more input's worth (a second outlet, a stock on the site or a ~6% move),
+  so a lone listicle that mentions tariffs doesn't take one.
+- The weekly digest keeps no places.
+- Templated disclosures "X Congressional Trade on (date)" and "Donald
+  Trump - X Trump Trade on (date)" are now dropped as routine, like the
+  other congressional trades.
+
+Effect on the test warehouse's daily digests, Aug 3 to Sep 8 (27 days):
+policy and macro picks went from 10 to 37, and 25 of the 270 picks
+changed, on 17 days. On Sep 4 the 10th pick, "AbbVie Completes
+Acquisition of Apogee Therapeutics" (3 outlets, 0.39), gives way to AEG
+and SeatGeek attacking Live Nation's DOJ settlement (1 outlet, 0.30).
+Without the 0.30 floor, a second place would have gone to Churchill
+Downs' letter to the FTC (1 outlet, 0.15), ranked 166th.
 
 ### 2–3. Article fetch (new source)
 
@@ -415,6 +447,14 @@ Agreed 2026-11-22:
 - The harness as built above (2026-11-22), pending review: the advice
   phrase list in place of banning "buy" and "sell", the 15% length
   slack, rounding to two significant figures counting as a match.
+
+Agreed 2026-11-23 (provisional values, step 1 as built above):
+
+- Headlines naming Trump count as `policy`, except Trump Media and his
+  family's ventures.
+- A reserved place needs a score of at least 0.30.
+- `macro` no longer matches "fed up" or a bare "rate hike" or "rate cut".
+- `policy` stories get the category input's full marks, like the others.
 
 Open:
 

@@ -9,8 +9,10 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from stockidence.mart.news_digest import (
+    DAILY,
     WEEKLY,
     Article,
+    Story,
     build_daily_digest,
     build_weekly_digest,
     categories_of,
@@ -20,6 +22,7 @@ from stockidence.mart.news_digest import (
     latest_digest_date,
     latest_weekly_date,
     not_news,
+    pick_stories,
     score_story,
     weekly_window,
 )
@@ -95,6 +98,8 @@ def test_latest_weekly_date(now, expected):
     "Apple to Present at Goldman Sachs Communacopia Conference",
     "Rollins Inc stock hits 52-week low at 35.31 USD By Investing.com",
     "Copart stock may move 6.2% on Sept. 10 earnings release",
+    "INTEL CORPORATION - COMMON STOCK - Nancy Pelosi Congressional Trade on Jul. 24, 2026",
+    "Donald Trump - Salesforce Inc. Trump Trade on Jun. 18, 2026",
 ])
 def test_routine_headlines_are_dropped(headline):
     assert not_news(headline) == "routine"
@@ -118,6 +123,66 @@ def test_opinion_headlines_are_dropped(headline):
 ])
 def test_news_headlines_are_kept(headline):
     assert not_news(headline) is None
+
+
+# --- categories ------------------------------------------------------------
+
+@pytest.mark.parametrize("headline", [
+    "FTC Challenges Amgen’s Bid to Shield Enbrel Patent Deal",
+    "DOJ expands beef price investigation to Kroger, Walmart, Costco and other major retailers",
+    "Deckers Wins Dismissal of Antitrust Suit Over ‘Sham’ Ugg Cases",
+    "SEC clears VerifyMe-OpenWorld merger for shareholder vote",
+    "US Senators Urge SEC Probe Into Trump Media’s Preferential Truth Social Access Plan",
+    "Goldman Sachs Exits XRP ETF as Senate Stalls CLARITY Act",
+    "House Democrats Say Rail Merger Review Must Prioritize Workers",
+    "Pacific Gas & Electric Stock Slides As California Lawmakers Block Key Wildfire Insurance Reform",
+    "Nvidia chief to testify before Congress on chip sales to China",
+    "Micron shares rise as White House pushes Apple away from Chinese memory chips",
+    "President signs executive order on AI data centers",
+    "Trump Threatens Comcast and Disney: President Says Their Licenses Could Be at Risk",
+    "UK fines Citigroup unit over Russia sanctions breaches",
+    "SMCI Clears Senior Management In Export Control Investigation",
+])
+def test_government_action_is_policy(headline):
+    assert "policy" in categories_of(headline)
+
+
+@pytest.mark.parametrize("headline", [
+    # a company's filings with the SEC, not the SEC acting
+    "Apple Inc. SEC Filing (Aug 11, 2026)",
+    "LYNX SEC Filings - Lyntris Inc. 10-K, 10-Q, 8-K Forms",
+    "Agnico Eagle Mines (NYSE: AEM) files SEC report",
+    "Gerdau Files Mid‑Year 2026 Interim Financials with U.S. SEC",
+    "Lumexa Imaging Holdings Reports Q2 2026 Financial Results in SEC 8-K Filing",
+    # bills, houses and congresses that aren't Congress
+    "Bill Ackman Exits Alphabet, Raises Bets on Microsoft & Meta",
+    "Becton Dickinson (NYSE: BDX) withholds 1,049 shares for CRO’s tax bill",
+    "Bristol Myers Squibb (BMY) Unveils Five Year Camzyos Data At ESC Congress",
+    "Avalyn Announces Multiple Presentations at the European Respiratory Society International Congress 2026",
+    "Thomson Reuters launches in-house AI model to cut Anthropic costs",
+    # Trump's businesses and family, not the White House
+    "Trump Media Posts $238 Million Quarterly Loss",
+    "Eric Trump-backed Space-Eyes to go public in $638 million SPAC deal",
+])
+def test_lookalikes_are_not_policy(headline):
+    assert "policy" not in categories_of(headline)
+
+
+@pytest.mark.parametrize("headline, macro", [
+    ("Fed holds rates steady as inflation cools", True),
+    ("UBS forecasts two US Fed rate hikes in 2026 after strong jobs report", True),
+    ("Trump Sets 50% Auto Tariffs on Canada", True),
+    ("'We're fed up': Portsmouth family wants action on overgrown cell tower property", False),
+    ("Clean energy groups call on regulators to reject We Energies rate hike", False),
+    ("Coca-Cola’s Tax Rate Cut Just Boosted 2026 Earnings Guidance", False),
+])
+def test_macro_is_the_economy_not_its_words_elsewhere(headline, macro):
+    assert ("macro" in categories_of(headline)) is macro
+
+
+def test_a_policy_story_scores_the_category_input():
+    s = score_story([_article("1", "FTC sues Zillow over home listings")], {}, set())
+    assert s.categories == ("policy",) and s.inputs["category"] == 1.0
 
 
 # --- grouping --------------------------------------------------------------
@@ -194,6 +259,64 @@ def test_score_is_the_weighted_sum():
     s = score_story(arts, {"INTU": -0.10}, {"INTU"})
     assert s.inputs == {"coverage": 1.0, "reaction": 1.0, "category": 1.0, "on_site": 1.0}
     assert s.score == pytest.approx(1.0)
+
+
+# --- reserved places -------------------------------------------------------
+
+def _story(aid, score, *categories):
+    a = _article(aid, f"Story {aid}")
+    return Story(articles=(a,), lead=a, tickers=(), categories=categories, n_outlets=1,
+                 move_ticker=None, move_return=None, inputs={}, score=score)
+
+
+def _day(n_other=12, policy_scores=()):
+    """A ranked day: other stories scoring 0.90 down to 0.35, then policy and
+    macro stories (alternating) below all of them."""
+    others = [_story(f"o{i}", 0.90 - 0.05 * i, "earnings") for i in range(n_other)]
+    kinds = ("policy", "macro")
+    below = [_story(f"p{i}", s, kinds[i % 2]) for i, s in enumerate(policy_scores)]
+    return others + below
+
+
+def _ids(stories):
+    return [s.lead.article_id for s in stories]
+
+
+@pytest.mark.parametrize("policy_scores, picked", [
+    ((), []),                           # none that day: the top 10 on score
+    ((0.32,), ["p0"]),                  # one: it takes the 10th place
+    ((0.32, 0.31, 0.30), ["p0", "p1"]), # three: the best two take the 9th and 10th
+])
+def test_a_day_keeps_up_to_two_places_for_policy_and_macro(policy_scores, picked):
+    ranked = _day(policy_scores=policy_scores)
+    picks = pick_stories(ranked, DAILY)
+    others = [f"o{i}" for i in range(10 - len(picked))]
+    assert _ids(picks) == others + picked
+
+
+def test_policy_already_in_the_top_ten_counts_toward_the_two():
+    ranked = _day(policy_scores=(0.32, 0.31))
+    ranked.insert(3, _story("top", 0.80, "earnings", "policy"))
+    picks = pick_stories(ranked, DAILY)
+    assert _ids(picks) == ["o0", "o1", "o2", "top", "o3", "o4", "o5", "o6", "o7", "p0"]
+    ranked.insert(5, _story("top2", 0.75, "macro"))
+    assert pick_stories(ranked, DAILY) == ranked[:10]
+
+
+def test_a_reserved_place_needs_more_than_the_category():
+    headline = "FTC sues Zillow over home listings"
+    one_outlet = score_story([_article("f1", headline)], {}, set())
+    two_outlets = score_story([_article("f2", headline), _article("f3", headline, source="CNBC")], {}, set())
+    others = _day(policy_scores=())
+    assert pick_stories([*others, one_outlet], DAILY) == others[:10]
+    assert pick_stories([*others, two_outlets], DAILY)[-1] is two_outlets
+
+
+def test_a_short_day_keeps_everything_and_a_week_keeps_no_places():
+    short = _day(n_other=6, policy_scores=(0.20,))
+    assert pick_stories(short, DAILY) == short
+    week = _day(n_other=16, policy_scores=(0.32, 0.31))
+    assert pick_stories(week, WEEKLY) == week[:15]
 
 
 # --- staging, build, API on a temp warehouse -------------------------------
@@ -274,6 +397,40 @@ def test_build_writes_all_three_tables_and_rebuilds_in_place(warehouse):
             "SELECT article_id FROM mart.news_digest_articles WHERE rank = 1 ORDER BY 1").fetchall()
     assert top[0] == (1, 2, 2, "INTU", pytest.approx(-0.034), 1.0)
     assert members == [("a1",), ("a2",)]
+
+
+def test_daily_build_gives_a_policy_story_the_tenth_place(tmp_path):
+    wh = Warehouse(tmp_path / "places.duckdb")
+    wh.init_schema()
+    news = {"AAPL": "Apple unveils foldable iPhone", "BA": "Boeing delivers record jets",
+            "CSCO": "Cisco opens Austin campus", "DE": "Deere recalls tractors",
+            "XOM": "Exxon discovers Guyana oilfield", "GAP": "Gap hires designer",
+            "HAS": "Hasbro launches card game", "INTC": "Intel picks Ohio partner",
+            "KR": "Kroger expands delivery", "LOW": "Lowe's renovates stores", "MAT": "Mattel films sequel"}
+    with wh.connect() as con:
+        t0 = "2026-08-25 23:00:00+00"
+        # eleven stories, two outlets each, on the site and up 2%: 0.35 each
+        for i, (ticker, headline) in enumerate(news.items()):
+            for outlet in ("Reuters", "CNBC"):
+                _land(con, f"{ticker}-{outlet}", _finnhub(headline, f"20260825T{14 + i % 6:02d}0000",
+                                                          [ticker], outlet), t0)
+            con.execute("INSERT INTO staging.stg_prices_daily VALUES (?, '2026-08-25', 1, 1, 1, 1, 1, 0.02)",
+                        [ticker])
+            con.execute("INSERT OR REPLACE INTO mart.model_rankings VALUES ('2026-06-30', ?, ?, 'Tech', 1.0)",
+                        [i + 1, ticker])
+        # a policy story from two outlets: 0.30, last on score
+        for outlet in ("Reuters", "CNBC"):
+            _land(con, f"ftc-{outlet}", _finnhub("FTC sues Zillow over home listings", "20260825T150000",
+                                                 [], outlet), t0)
+    rebuild_news_articles(wh)
+    out = build_daily_digest(wh, date(2026, 8, 26))
+    with wh.connect(read_only=True) as con:
+        rows = con.execute("SELECT rank, headline, categories, score FROM mart.news_digest_stories"
+                           " ORDER BY rank").fetchall()
+    assert out["stories"] == 12 and out["picked"] == 10
+    assert [r[0] for r in rows] == list(range(1, 11))
+    assert rows[-1][1:3] == ("FTC sues Zillow over home listings", ["policy"])
+    assert rows[-1][3] == pytest.approx(0.30) and rows[-2][3] == pytest.approx(0.35)
 
 
 def test_build_refuses_weekends(warehouse):
