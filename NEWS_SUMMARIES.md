@@ -189,7 +189,8 @@ paragraph or weekly overview, 1..n = weekly sections; together the key),
 - **Server:** the `ollama` service in `docker-compose.yml`, reached at
   `OLLAMA_URL` (`http://ollama:11434`). It publishes no port, since Ollama
   has no authentication. The host has 11 GiB of memory (9.7 GiB available
-  with the stack running) and 2 cores.
+  with the stack running) and 2 Arm cores (Neoverse-N1, one thread each),
+  so Ollama already uses both.
 - **Context:** 16k (`OLLAMA_CONTEXT_LENGTH`). The model supports 262k, but
   only 8 of its 32 layers keep per-token history (~32 KiB a token), so 16k
   costs ~0.5 GiB. The whole thing needs ~4 GB.
@@ -209,13 +210,21 @@ paragraph or weekly overview, 1..n = weekly sections; together the key),
 - **Prompts** live in code with a `PROMPT_VERSION` constant. Changing a
   prompt bumps the version.
 
-Rough timing, assuming ~20 tokens a second reading and ~7 writing (not yet
-measured on the server):
+Measured on the server (2026-11-22, `qwen3.5:4b-q4_K_M`, 2 cores):
+reading 14.7 tokens a second (a 3,772-token prompt took 4 min 16 s) and
+writing 4.1 tokens a second. A cold load takes under a minute, once per
+job. The MTP build (`qwen3.5:4b-mtp-q4_K_M`) wrote slower, 2.9 tokens a
+second, so it isn't used.
 
 | Run | Work | Time |
 |---|---|---|
-| Daily | 10 cards + 1 paragraph | ~17 min |
-| Weekly | ~5 new cards + ~7 sections + overview | ~45 min |
+| Daily | 10 cards (~1.4k tokens in, ~200 out: ~2.5 min each) + the paragraph (~2.8k in, ~270 out: ~4 min) | ~30 min; ~40 if every article is long |
+| Weekly | ~5 new cards + ~7 sections (~2.5k in, ~600 out: ~5 min each) + the overview | ~55 min |
+
+Reading is most of a card's time, so article length drives the daily run.
+A retry after a failed check costs one more call. Both runs still end long
+before the next job: the daily by about 08:10 (nothing else until 17:30),
+the weekly by about 08:45 on Saturday.
 
 To measure on the server: `--verbose` prints the reading speed ("prompt
 eval rate") and the writing speed ("eval rate"). Use a real article as
@@ -248,14 +257,14 @@ Current schedule in New York time (the UTC crons move an hour with DST):
 
 Placement:
 
-- **The daily summary chains onto `daily_digest`** (07:30 weekdays, ~20
+- **The daily summary chains onto `daily_digest`** (07:30 weekdays, ~30
   minutes). Nothing else is scheduled until `weekdays_ingest` at 17:30
   (16:30 in winter).
-- **The weekly summary chains onto `weekly_digest`** (07:30 Saturday, ~45
+- **The weekly summary chains onto `weekly_digest`** (07:30 Saturday, ~55
   minutes), 14 hours after the weekly retrain starts.
 - **The summary steps never hold a DuckDB connection while the model
   runs:** read inputs, close, call the model, open, write, close. The lock
-  is held for seconds, not for the ~20–45 minutes of model work. Keeping
+  is held for seconds, not for the ~30–55 minutes of model work. Keeping
   them apart in time also matters for speed, since the retrain and the
   model both want both cores.
 - **The model steps stay out of the pool (below):** a read op and a write
@@ -314,5 +323,4 @@ Agreed 2026-11-22:
 
 Open:
 
-- Server benchmark numbers, to replace the timing estimates.
 - Retrain run times.
