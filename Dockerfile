@@ -17,6 +17,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
+# Qwen3.5-4B's tokenizer (12.8 MB), for counting prompt tokens before each
+# call to the local model: Ollama has no endpoint for it. Pinned to a commit
+# of the model's Hugging Face repo, so the file never changes under us.
+ADD https://huggingface.co/Qwen/Qwen3.5-4B/resolve/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/tokenizer.json \
+    tokenizers/qwen3.5-4b-tokenizer.json
+
 # Install the package (deps from pyproject.toml, incl. the ML stack used by
 # the quarterly retrain) before copying source for a stable layer cache.
 COPY pyproject.toml uv.lock README.md ./

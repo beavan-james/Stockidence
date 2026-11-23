@@ -179,12 +179,105 @@ def test_scheduled_and_retrain_ops_share_the_warehouse_pool(defs):
     from stockidence.definitions import WAREHOUSE_POOL
 
     site_triggered = {"refresh_tickers", "refresh_quotes"}
+    # the model ops never open the warehouse, so they don't hold the slot
+    # through 30-55 minutes of model work
+    model_ops = {"write_story_cards_op", "write_summaries_op"}
     jobs = {j.name: j for j in defs.resolve_all_job_defs() if not j.name.startswith("__")}
     assert {s.job_name for s in defs.schedules} | {"model_retrain", "weekly_rank"} <= set(jobs)
     for name, job in jobs.items():
-        pools = {n: node.definition.pool for n, node in job.graph.node_dict.items()}
-        expected = None if name in site_triggered else WAREHOUSE_POOL
-        assert set(pools.values()) == {expected}, (name, pools)
+        for node_name, node in job.graph.node_dict.items():
+            expected = None if name in site_triggered or node_name in model_ops else WAREHOUSE_POOL
+            assert node.definition.pool == expected, (name, node_name, node.definition.pool)
+
+
+def test_digest_jobs_end_with_the_summaries(defs):
+    for name in ("daily_digest", "weekly_digest"):
+        nodes = list(defs.get_job_def(name).graph.node_dict)
+        assert nodes[-5:] == ["read_summary_inputs_op", "write_story_cards_op", "save_story_cards_op",
+                              "write_summaries_op", "save_summaries_op"]
+
+
+def _summary_job(tmp_path, llm):
+    """The five summary ops after a stand-in digest op, on a warehouse with
+    one picked story and its article text."""
+    from dagster import job, op
+
+    from stockidence.definitions import _summarize
+    from stockidence.storage import Warehouse
+
+    wh = Warehouse(tmp_path / "test.duckdb")
+    wh.init_schema()
+    with wh.connect() as con:
+        con.execute(
+            "INSERT INTO mart.news_digest_stories (period, digest_date, rank, headline, summary, url,"
+            " published_at, tickers, n_articles, n_outlets, coverage, reaction, category, on_site, score)"
+            " VALUES ('daily', '2026-11-20', 1, 'Nvidia beats', 'Nvidia topped estimates.',"
+            " 'https://a.example/1', '2026-11-19 21:00', ['NVDA'], 1, 1, 0, 0, 0, 0, 0.5)")
+        con.execute("INSERT INTO mart.news_digest_articles VALUES ('daily', '2026-11-20', 1, 'a1')")
+        con.execute("INSERT INTO staging.stg_news_articles (article_id, published_at, headline, url)"
+                    " VALUES ('a1', '2026-11-19 21:00', 'Nvidia beats', 'https://a.example/1')")
+        con.execute("INSERT INTO staging.stg_news_article_text VALUES ('https://a.example/1', ?, 200,"
+                    " false, 'x', '2026-11-20 12:00:00+00')", [" ".join(["Nvidia revenue rose."] * 70)])
+
+    class FakeEngine:
+        warehouse = wh
+
+    @op
+    def built_digest() -> dict:
+        return {"digests": [{"period": "daily", "digest_date": "2026-11-20"}]}
+
+    @job(resource_defs={"engine": ResourceDefinition.hardcoded_resource(FakeEngine()),
+                        "llm": ResourceDefinition.hardcoded_resource(llm)})
+    def summaries_only():
+        _summarize(built_digest())
+
+    return wh, summaries_only
+
+
+def test_summary_ops_run_after_a_digest(tmp_path):
+    import json
+
+    from stockidence.summaries.model import ESTIMATE, Reply
+
+    class Writer:
+        model = "fake"
+        count_tokens = ESTIMATE
+
+        def chat(self, system, user, *, max_output, temperature=None, schema=None):
+            if schema:
+                text = json.dumps({"what": "Nvidia revenue rose.", "why_it_matters": "",
+                                   "companies": [{"ticker": "NVDA", "name": "Nvidia"}],
+                                   "government": [], "figures": []})
+            else:
+                text = "Nvidia (NVDA) reported that revenue rose. " + "Traders took note. " * 55
+            return Reply(text, 10, 10, 1.0, False)
+
+    wh, summaries_only = _summary_job(tmp_path, Writer())
+    result = summaries_only.execute_in_process(instance=DagsterInstance.ephemeral())
+    assert result.success
+    out = result.output_for_node("save_summaries_op")
+    assert out["cards"] == 1 and out["summary_parts"] == 1 and "summary_inputs" not in out
+    with wh.connect(read_only=True) as con:
+        assert con.execute("SELECT status FROM mart.news_summaries").fetchall() == [("ok",)]
+
+
+def test_a_model_outage_saves_the_cards_then_fails(tmp_path):
+    from stockidence.summaries.model import ESTIMATE, ModelUnavailable
+
+    class Down:
+        model = "fake"
+        count_tokens = ESTIMATE
+
+        def chat(self, *a, **kw):
+            raise ModelUnavailable("connection refused")
+
+    wh, summaries_only = _summary_job(tmp_path, Down())
+    result = summaries_only.execute_in_process(instance=DagsterInstance.ephemeral(), raise_on_error=False)
+    assert not result.success
+    assert [e.step_key for e in result.all_events if e.event_type_value == "STEP_FAILURE"] == [
+        "save_story_cards_op"]
+    with wh.connect(read_only=True) as con:
+        assert con.execute("SELECT COUNT(*) FROM mart.news_story_cards").fetchone()[0] == 0
 
 
 def test_digest_jobs_read_the_picked_articles(defs):

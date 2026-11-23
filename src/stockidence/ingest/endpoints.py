@@ -498,6 +498,32 @@ _REGISTRY: list[EndpointSpec] = [
         notes="main text of each fetched page (trafilatura), first 1,500 words; "
         "re-extracted when the extractor version changes",
     ),
+    # --- the local model's summaries of those pages (NEWS_SUMMARIES.md) ---
+    EndpointSpec(
+        name="news_summary.card",
+        provider=Provider.DERIVED,
+        method=None,
+        trigger=Trigger.DERIVED,
+        cadence=Cadence.DERIVED,
+        watermark=("story_key",),
+        artifacts=("news_story_cards",),
+        ttl=None,
+        notes="one fact card per picked story, written by the local model (Ollama) from "
+        "its article text and checked; made once, read again only when a fallback card's "
+        "article arrives later",
+    ),
+    EndpointSpec(
+        name="news_summary.text",
+        provider=Provider.DERIVED,
+        method=None,
+        trigger=Trigger.DERIVED,
+        cadence=Cadence.DERIVED,
+        watermark=("period", "digest_date", "part"),
+        artifacts=("news_summaries",),
+        ttl=None,
+        notes="the daily paragraph and the weekly article, written by the local model from "
+        "the cards and checked; rewritten when the digest's stories change",
+    ),
 ]
 
 REGISTRY: dict[str, EndpointSpec] = {spec.name: spec for spec in _REGISTRY}

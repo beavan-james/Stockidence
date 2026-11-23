@@ -25,6 +25,7 @@ dependencies = [
     "ipykernel>=6.29",
     "jupyter_client>=8.6",
     "trafilatura>=2.0",
+    "tokenizers>=0.21",
 ]
 
 [dependency-groups]
