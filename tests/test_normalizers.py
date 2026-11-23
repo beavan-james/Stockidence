@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from stockidence.ingest.raw_mapping import (
     NORMALIZERS,
@@ -10,7 +10,7 @@ from stockidence.ingest.raw_mapping import (
     validate_rows,
 )
 
-NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 
 def test_quote():
@@ -126,26 +126,22 @@ def test_insider_sentiment():
 
 
 def test_market_news_fans_out():
-    payload = {
-        "feed": [
-            {
-                "title": "Apple beats earnings",
-                "url": "https://example.com/apple",
-                "time_published": "20260817T120000",
-                "url:Vid": [],
-                "ticker_sentiment": [
-                    {"ticker": "AAPL", "ticker_sentiment_score": 0.3},
-                    {"ticker": "MSFT", "ticker_sentiment_score": -0.1},
-                ],
-            },
-            {"title": "No url here", "ticker_sentiment": []},
-        ]
-    }
+    payload = [
+        {
+            "headline": "Apple beats earnings",
+            "url": "https://example.com/apple",
+            "datetime": 1786968000,
+            "related": "AAPL,MSFT",
+        },
+        {"headline": "No url here", "datetime": 1786968000, "related": ""},
+    ]
     rows = normalize_for("market_news", payload, "", NOW)
     articles = rows["raw_news_articles"]
     assert len(articles) == 1
     aid = articles[0]["article_id"]
-    assert aid == "c8cd08d00b0f111f" or len(aid) == 16
+    assert len(aid) == 16
+    assert articles[0]["payload"]["title"] == "Apple beats earnings"
+    assert articles[0]["payload"]["time_published"] == "20260817T120000"
     sentiment = rows["news_ticker_sentiment"]
     assert {(s["article_id"], s["ticker"]) for s in sentiment} == {(aid, "AAPL"), (aid, "MSFT")}
 
@@ -201,8 +197,6 @@ def test_earnings_calendar():
 
 def test_validate_rows_detects_missing_keys():
     import pytest
-
-    from stockidence.ingest.raw_mapping import validate_rows
 
     with pytest.raises(ValueError):
         validate_rows("quote", {"raw_quotes": [{"payload": {}}]})  # missing ticker

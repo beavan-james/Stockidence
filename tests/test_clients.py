@@ -11,7 +11,11 @@ import httpx
 import pytest
 
 from stockidence.ingest.clients.alpha_vantage import AlphaVantageClient
-from stockidence.ingest.clients.base import APIError, InvalidResponseError, RateLimitError
+from stockidence.ingest.clients.base import (
+    APIError,
+    InvalidResponseError,
+    RateLimitError,
+)
 from stockidence.ingest.clients.finnhub import FinnhubClient
 from stockidence.ingest.clients.twelve_data import TwelveDataClient
 
@@ -58,16 +62,6 @@ class TestAlphaVantage:
         client = _client(monkeypatch, AlphaVantageClient, handler)
         assert client.top_gainers_losers() == {"top_gainers": [], "top_losers": []}
 
-    def test_news_sentiment_passes_filters(self, monkeypatch):
-        def handler(request: httpx.Request) -> httpx.Response:
-            assert request.url.params.get("function") == "NEWS_SENTIMENT"
-            assert request.url.params.get("tickers") == "AAPL,MSFT"
-            assert request.url.params.get("limit") == "1000"
-            return httpx.Response(200, json={"feed": []})
-
-        client = _client(monkeypatch, AlphaVantageClient, handler)
-        assert client.market_news(tickers="AAPL,MSFT") == {"feed": []}
-
     def test_rate_limit_note_raises(self, monkeypatch):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"Note": "Thanks for using Alpha Vantage!"})
@@ -109,6 +103,34 @@ class TestFinnhub:
         with pytest.raises(InvalidResponseError):
             client.peers("AAPL")
 
+    def test_general_news_passes_category(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/api/v1/news"
+            assert request.url.params.get("category") == "general"
+            return httpx.Response(200, json=[])
+
+        client = _client(monkeypatch, FinnhubClient, handler)
+        assert client.general_news() == []
+
+    def test_company_news_passes_filters(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/api/v1/company-news"
+            assert request.url.params.get("symbol") == "AAPL"
+            assert request.url.params.get("from") == "2025-08-17"
+            assert request.url.params.get("to") == "2026-08-17"
+            return httpx.Response(200, json=[])
+
+        client = _client(monkeypatch, FinnhubClient, handler)
+        assert client.company_news("AAPL", from_date="2025-08-17", to_date="2026-08-17") == []
+
+    def test_company_news_rejects_dict(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"unexpected": "shape"})
+
+        client = _client(monkeypatch, FinnhubClient, handler)
+        with pytest.raises(InvalidResponseError):
+            client.company_news("AAPL", from_date="2025-08-17", to_date="2026-08-17")
+
     def test_http_429_raises_rate_limit(self, monkeypatch):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(429, text="rate limited")
@@ -137,8 +159,8 @@ class TestSharedPacing:
         monkeypatch.setattr(time_mod, "sleep", sleeps.append)
         monkeypatch.setattr(time_mod, "time", lambda: 1_000.0)
 
-        common = dict(base_url="https://example.test",
-                      min_interval_seconds=60.0, pace_file=str(pace_file))
+        common = {"base_url": "https://example.test",
+                  "min_interval_seconds": 60.0, "pace_file": str(pace_file)}
         first = BaseClient(api_key="k", **common)
         second = BaseClient(api_key="k", **common)
 
