@@ -183,18 +183,29 @@ paragraph or weekly overview, 1..n = weekly sections; together the key),
 
 ## Model and harness
 
-- **Model:** Qwen3.5-4B Instruct, GGUF Q4_K_M (~2.7 GB), thinking off.
-- **Context:** set to 16k on the server. The model supports 262k, but only 8
-  of its 32 layers keep per-token history (~32 KiB a token), so 16k costs
-  ~0.5 GiB. The whole thing needs ~3.5 GB.
-- **Loaded only while a summary job runs,** then unloaded, so it never holds
-  memory during a retrain.
-- **Reached over HTTP** at a URL from config (llama.cpp server or Ollama).
-  Calls go one at a time: two cores don't get faster with parallel calls.
+- **Model:** Qwen3.5-4B, Ollama tag `qwen3.5:4b-q4_K_M` (3.3 GB; the
+  weights include the image encoder, which the summaries don't use).
+  Thinking off (`think: false`).
+- **Server:** the `ollama` service in `docker-compose.yml`, reached at
+  `OLLAMA_URL` (`http://ollama:11434`). It publishes no port, since Ollama
+  has no authentication. The host has 11 GiB of memory (9.7 GiB available
+  with the stack running) and 2 cores.
+- **Context:** 16k (`OLLAMA_CONTEXT_LENGTH`). The model supports 262k, but
+  only 8 of its 32 layers keep per-token history (~32 KiB a token), so 16k
+  costs ~0.5 GiB. The whole thing needs ~4 GB.
+- **Loaded only while a summary job runs:** Ollama loads the model on the
+  first call and unloads it two minutes after the last
+  (`OLLAMA_KEEP_ALIVE`), so it never holds memory during a retrain.
+- **One call at a time** (`OLLAMA_NUM_PARALLEL=1`): two cores don't get
+  faster with parallel calls. The model uses both cores, so the site may
+  answer slower during a summary run.
+- **Sampling** (the model card's settings without thinking): temperature
+  0.7, top_p 0.8, top_k 20, presence_penalty 1.5. Story cards pass their
+  JSON schema as `format`, so the output always parses.
 - **Token budget per call:** context − system prompt − max output − 10%
-  margin, counted with the model's own tokenizer before each call. If the
-  input doesn't fit, the harness splits the work; it never cuts text off
-  silently.
+  margin, counted before each call with Qwen's own tokenizer file from
+  Hugging Face (Ollama has no endpoint for counting). If the input doesn't
+  fit, the harness splits the work; it never cuts text off silently.
 - **Prompts** live in code with a `PROMPT_VERSION` constant. Changing a
   prompt bumps the version.
 
@@ -206,10 +217,12 @@ measured on the server):
 | Daily | 10 cards + 1 paragraph | ~17 min |
 | Weekly | ~5 new cards + ~7 sections + overview | ~45 min |
 
-To measure on the server (prints `pp` reading and `tg` writing speed):
+To measure on the server: `--verbose` prints the reading speed ("prompt
+eval rate") and the writing speed ("eval rate"). Use a real article as
+the prompt for a realistic reading speed.
 
 ```bash
-llama-bench -m ~/models/Qwen3.5-4B-Q4_K_M.gguf -t 2 -p 1024,4096 -n 256
+docker compose exec ollama ollama run qwen3.5:4b-q4_K_M --think=false --verbose "<article text>"
 ```
 
 ## Orchestration
@@ -296,6 +309,7 @@ Agreed 2026-11-22:
   `staging.stg_news_article_text`, `mart.news_story_cards`,
   `mart.news_summaries`.
 - Summary jobs placed away from the retrains and other jobs.
+- Qwen3.5-4B served by Ollama, unloaded between jobs.
 - The `warehouse` concurrency pool (built; the user is reviewing it).
 
 Open:

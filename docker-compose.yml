@@ -33,6 +33,7 @@ services:
     environment:
       DAGSTER_HOME: /app/dagster_home
       STOCKIDENCE_DB: /app/data/stockidence.duckdb
+      OLLAMA_URL: http://ollama:11434
     volumes:
       - ./data:/app/data
       - ./dagster_home:/app/dagster_home
@@ -73,6 +74,23 @@ services:
       - ./dagster_home:/app/dagster_home
     restart: unless-stopped
 
+  # Local model for the news summaries (NEWS_SUMMARIES.md): Qwen3.5-4B,
+  # pulled once with `docker compose exec ollama ollama pull
+  # qwen3.5:4b-q4_K_M`. It loads on the first call and unloads two minutes
+  # after the last, so its ~4 GB is only taken while a summary job runs.
+  # No published port: Ollama has no authentication, so only the other
+  # containers can reach it.
+  ollama:
+    image: ollama/ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: "2m"
+      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
   frontend:
     build:
       context: .
@@ -89,3 +107,6 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+volumes:
+  ollama_models:
