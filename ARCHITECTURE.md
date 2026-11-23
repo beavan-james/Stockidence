@@ -15,6 +15,8 @@
 - **News digests** — `mart.news_digests` (one row per digest: window, article counts, how much was filtered out, the longest stretch of a session with no article), `mart.news_digest_stories` (the top stories with each score input) and `mart.news_digest_articles` (which articles were grouped under each story), all keyed by `(period, digest_date)`. `daily`: built at 07:30 ET on weekdays from the 24h to 07:00 ET (Monday's covers the weekend), top 10. `weekly`: dated by the week's Friday, built Saturday 07:30 ET from the seven days to 07:00 that morning, top 15. Rule-based, no model: drop routine filings, templated recaps and opinion pieces, group articles about the same event by headline overlap, then rank by coverage (outlets), how the stock it leads with moved (on the day, or over the week), story type (deal / earnings / macro) and whether the stock is in one of the site's rankings. A rebuild replaces that digest's rows.
 - **Article pages** — `raw.news_article_pages`, key `url` — the publisher page behind each story a digest picked (HTML, HTTP status, robots.txt verdict, attempts), fetched inside the digest jobs with robots.txt and AI-crawler opt-outs obeyed; a success, a refusal or a block is final, a timeout or 5xx is retried after 6 hours, at most 3 times. NEWS_SUMMARIES.md is the spec.
 - **Article text** — `staging.stg_news_article_text`, key `url` — each page's main text (forms and pop-ups removed, trafilatura), first 1,500 words kept, with the whole article's word count. Re-extracted only when the extractor changes.
+- **Story cards** — `mart.news_story_cards`, key `story_key` (the lead article's id) — one fact card per picked story (what happened, companies and tickers, government bodies, figures, why it matters), written by the local model (Qwen3.5-4B on Ollama) from the article text and checked: every number must be in what the model was given, every ticker in the story or the article. A card that fails twice, or a story with no readable article, gets the feed summary's opening instead (`fallback`). Stories that share an article (Tuesday's story picked again for the week) share their cards.
+- **News summaries** — `mart.news_summaries`, key `(period, digest_date, part)` — the daily paragraph (part 0) and the weekly article (part 0 the overview, then one row per section), written by the local model from the cards and checked for numbers, tickers, length and advice wording. A part that fails twice is stored as `sources_only`, with no text. NEWS_SUMMARIES.md is the spec.
 ---
 ## Real-Time / Ticker-Partitioned Data
 *Fetched on-demand per ticker via dynamic partitions, gated by a staleness check against `last_updated`.*
@@ -56,12 +58,13 @@ flowchart TD
     FRED(["FRED"])
     SEC(["SEC EDGAR"])
     PUB(["Publisher pages"])
+    LLM(["Local model<br/>Qwen3.5-4B on Ollama"])
 
     subgraph ORCH["Dagster orchestration"]
         SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
         WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
-        DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → stage → group + rank stories<br/>→ article pages → text"]
+        DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → stage → group + rank stories<br/>→ article pages → text → cards → summaries"]
         PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
         RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
@@ -76,6 +79,7 @@ flowchart TD
         M_RANK["model_rankings<br/>rank · ticker · sector · score<br/>quarterly snapshot"]
         M_WEEK["weekly_rankings · weekly_track_record<br/>Stocks of the Week + realized returns"]
         M_NEWS["news_digests · news_digest_stories<br/>news_digest_articles<br/>daily top 10 · weekly top 15"]
+        M_SUM["news_story_cards · news_summaries<br/>daily paragraph · weekly article"]
     end
 
     UI["FastAPI + React SPA<br/>reads mart/raw · launches jobs (no sensors)"]
@@ -88,6 +92,8 @@ flowchart TD
     DIGEST -->|"news pull"| RAW
     PUB -->|"picked stories' articles"| DIGEST
     DIGEST -->|"top stories"| M_NEWS
+    DIGEST <-->|"cards and prose, one call at a time"| LLM
+    DIGEST -->|"checked cards and summaries"| M_SUM
     UI -->|"POST /api/pipeline/refresh<br/>when no/fresh snapshot"| PUSH
     PUSH -->|"ingest + derived + score"| RUN
     RUN <--> GATE
@@ -150,9 +156,14 @@ flowchart TD
 >   tables for which stocks the site covers, then fetch the picked stories'
 >   article pages into `raw.news_article_pages` and their text into
 >   `staging.stg_news_article_text`; the only API they call is the news
->   pull. Every op of a scheduled or retrain job claims the one-slot
->   `warehouse` concurrency pool, so overlapping jobs wait for each other
->   instead of failing on DuckDB's write lock. Finnhub only serves the latest ~100 articles per pull, so the jobs
+>   pull. Then the local model turns each new story into a checked fact
+>   card (`mart.news_story_cards`) and writes the day's paragraph or the
+>   week's article from the cards (`mart.news_summaries`). Every op of a
+>   scheduled or retrain job claims the one-slot `warehouse` concurrency
+>   pool, so overlapping jobs wait for each other instead of failing on
+>   DuckDB's write lock. The two model ops are the exception: they never
+>   open the warehouse (an op before them reads, one after them writes),
+>   so 30-55 minutes of model work blocks no other job. Finnhub only serves the latest ~100 articles per pull, so the jobs
 >   log a warning when a trading session has a long stretch with no article
 >   (news likely fell between pulls).
 >

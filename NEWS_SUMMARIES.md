@@ -6,7 +6,10 @@ small local model from the full text of the articles, and both list their
 sources. This file is the governing spec for that pipeline: the article
 scraper, the model harness, and where the jobs run.
 
-Status: agreed design, not built (2026-11-22).
+Status (2026-11-22): the scraper (steps 2–3) and the model harness (steps
+4–7) are built and tested against a scripted model; neither has run on
+the server yet. Still to build: the selection changes (step 1) and the
+News page showing the summaries.
 
 ## What the reader gets
 
@@ -141,6 +144,24 @@ of the story's tickers or appears in the text. On a failure, retry once at
 temperature 0. If that fails too, build the card from the news feed's own
 summary and mark it `fallback`.
 
+As built:
+
+- The number check covers the whole card, not just `figures`: every
+  number in it must be in the prompt (the article, headline, feed summary
+  and date). Rules for numbers are under step 7.
+- A story with no readable article gets its fallback card straight away,
+  with no model call.
+- A fallback card is the feed summary's opening sentences (two at most,
+  400 characters, never less than the first), the story's tickers, and no
+  figures. Some feed summaries run a whole paragraph.
+- Stories that share an article are one event (Tuesday's story picked
+  again for the week), so they share cards: a story needs a card only when
+  no card is keyed by any of its articles or those of a story it shares an
+  article with.
+- A fallback card is read again when a readable page has arrived since it
+  was made (a fetch the weekly job retried). Otherwise a card is made once;
+  a prompt change doesn't redo old cards (`redo` in the op config does).
+
 `mart.news_story_cards`: `story_key` (the lead article's `article_id`),
 `source_url`, `card` (JSON), `status` (`ok` / `fallback`), `model`,
 `prompt_version`, `input_tokens`, `output_tokens`, `seconds`, `created_at`.
@@ -159,6 +180,17 @@ but only ~10k tokens of cards.
   "Also this week".
 - A section's cards must fit ~3k tokens; a bigger one splits in two.
 
+As built (`summaries/plan.py`):
+
+- A thread goes to the first topic of its highest-scored story, else to its
+  company's sector, else to "Also this week". Sectors come from the latest
+  weekly rankings, then the quarterly ones for stocks the weekly list
+  doesn't have.
+- Daily and weekly scores aren't on one scale, so an event picked by both
+  takes the higher.
+- A split section is headed "Earnings, part 1", "Earnings, part 2", and
+  keeps whole threads together where they fit.
+
 ### 6. Writing
 
 - **Daily:** the day's cards (~2.5k tokens) in rank order → one paragraph,
@@ -175,6 +207,28 @@ but only ~10k tokens of cards.
 - On a failure, retry once at temperature 0. If that fails too, the daily
   shows only its source list that day, and a weekly section is replaced by
   its source list.
+
+As built (`summaries/checks.py`), everything is checked against the
+prompt that call was given:
+
+- **Numbers.** A number passes when the prompt has it, written the same
+  way or as a word from one to twelve, or when it rounds one in the prompt
+  and keeps at least two significant figures (13.48 written as 13.5 or 13
+  passes; 2.4 written as 2 doesn't). Labels such as Q3 aren't checked.
+- **Tickers.** The prompts ask for tickers in parentheses after the name,
+  "Nvidia (NVDA)". Any capitalized code in parentheses or after a `$`
+  must be in the prompt, which also catches made-up acronyms.
+- **Advice.** Recommendation wording: "should", "ought to", "recommend",
+  buy/sell/hold ratings, "is a buy", "time to sell", price targets,
+  upgrades and downgrades to a rating, "investors may want". The words
+  buy and sell alone aren't banned, since deal news needs them ("agreed to
+  buy"). This narrows the list above; flagged for review.
+- **Length.** The prompts ask for the spec's counts (daily 150–200 words,
+  a section 300–600, the overview 120–180). The check allows 15% either
+  side, since a small model doesn't count words exactly.
+- **Form.** Headings and lists are rejected; bold markers are removed. The
+  daily is joined into one paragraph.
+- A reply cut off at its output limit counts as a failure.
 
 `mart.news_summaries`: `period`, `digest_date`, `part` (0 = daily
 paragraph or weekly overview, 1..n = weekly sections; together the key),
@@ -207,6 +261,18 @@ paragraph or weekly overview, 1..n = weekly sections; together the key),
   margin, counted before each call with Qwen's own tokenizer file from
   Hugging Face (Ollama has no endpoint for counting). If the input doesn't
   fit, the harness splits the work; it never cuts text off silently.
+  The Dockerfile bakes `tokenizer.json` (12.8 MB) into the image, pinned to
+  a commit of the model repo; `QWEN_TOKENIZER` points elsewhere. Without
+  the file (a local checkout) the harness logs a warning and estimates 3
+  characters a token, which overcounts. Only weekly sections are split (the
+  plan, step 5); a prompt still over budget fails that card or part and is
+  logged, never cut.
+- **When the server fails:** no connection, an HTTP error (a model not
+  pulled, out of memory) or a 20-minute timeout stops the run instead of
+  storing fallbacks. The save step after each model step keeps what was
+  finished (cards, or whole digests' summaries), then fails the run.
+- **Output caps:** 600 tokens for a card, 450 for the daily, 1,100 for a
+  section, 400 for the overview.
 - **Prompts** live in code with a `PROMPT_VERSION` constant. Changing a
   prompt bumps the version.
 
@@ -233,6 +299,23 @@ the prompt for a realistic reading speed.
 ```bash
 docker compose exec ollama ollama run qwen3.5:4b-q4_K_M --think=false --verbose "<article text>"
 ```
+
+Code: `src/stockidence/summaries/` (`model.py` the client and token
+counter, `prompts.py` with `PROMPT_VERSION`, `checks.py`, `stories.py`,
+`cards.py`, `plan.py`, `writing.py`, `store.py` for the warehouse reads and
+writes, `run.py` for the two model steps). Registry entries:
+`news_summary.card` and `news_summary.text`. Tests: `tests/test_summaries.py`
+(scripted model, fake HTTP server) and the job tests in
+`tests/test_definitions.py`.
+
+Dry run on the test warehouse (2026-11-22, no model; feed-summary cards in
+place of model cards). Sep 8 daily: 10 stories, 6 with article text, card
+prompts of ~1.2k–4.1k estimated tokens (the estimate overcounts by about a
+third), a daily prompt of ~1.4k. Week of Sep 4: 58 stories joined into 43
+events (13 picked more than once), planned as Policy and the economy (2),
+Earnings (19), Deals (4), Technology (5), Utilities (2) and Also this week
+(11), the largest section prompt ~2.8k estimated tokens and the overview's
+~4.2k.
 
 ## Orchestration
 
@@ -271,6 +354,15 @@ Placement:
   op take the slot, and the model op between them doesn't. The article
   fetch does keep its slot for the few minutes it runs at most, since passing
   the pages' HTML between ops would mean writing it to disk twice.
+  Built as five ops at the end of both digest jobs:
+  `read_summary_inputs_op` (pool) → `write_story_cards_op` (model) →
+  `save_story_cards_op` (pool) → `write_summaries_op` (model) →
+  `save_summaries_op` (pool). Saving the cards before the summaries means a
+  failure in the writing step doesn't lose ~25 minutes of cards. A
+  summary already written from the same stories is skipped; a rebuilt
+  digest with other stories is written again.
+  A backfill (`days` above 1 in the digest op's config) writes a summary
+  for every digest it builds, ~30 minutes each.
 
 Known overlaps (with the pool below, these jobs wait instead of failing):
 
@@ -320,7 +412,12 @@ Agreed 2026-11-22:
 - Summary jobs placed away from the retrains and other jobs.
 - Qwen3.5-4B served by Ollama, unloaded between jobs.
 - The `warehouse` concurrency pool (built; the user is reviewing it).
+- The harness as built above (2026-11-22), pending review: the advice
+  phrase list in place of banning "buy" and "sell", the 15% length
+  slack, rounding to two significant figures counting as a match.
 
 Open:
 
 - Retrain run times.
+- The first real run on the server: card pass rate, fallback rate, and
+  actual run times against the estimates above.

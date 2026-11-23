@@ -23,15 +23,17 @@ Exposes:
     user refresh (portfolio button) — no rebuilds, no scoring
   - daily_digest job (schedule-bound, weekdays 07:30 New York): news pull
     -> news staging -> the day's news digest -> the picked stories' article
-    pages -> their text
+    pages -> their text -> story cards -> the daily paragraph (local model)
   - weekly_digest job (schedule-bound, Saturdays 07:30 New York): the same
-    chain into the week's digest
+    chain into the week's digest and the weekly article
   - ticker_data asset with a dynamic ticker partition per lookup
     (manual materialization path)
 
 Every op in a scheduled job claims a slot in the "warehouse" concurrency
 pool (limit 1, dagster.yaml), so two scheduled jobs never write DuckDB at
-once: one waits at an op boundary instead of failing on the lock.
+once: one waits at an op boundary instead of failing on the lock. The two
+model ops of the digest jobs are the exception: they never open the
+warehouse, so they don't hold the slot while the model writes.
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -44,6 +46,7 @@ from dagster import (
     DefaultScheduleStatus,
     Definitions,
     DynamicPartitionsDefinition,
+    Failure,
     OpExecutionContext,
     asset,
     in_process_executor,
@@ -82,6 +85,10 @@ from .staging.staging import (
 )
 from .staging.staging import rebuild_fred_market as rebuild_fred_staging
 from .storage import Warehouse
+from .summaries.cards import Card
+from .summaries.model import Ollama
+from .summaries.run import CardRun, SummaryRun, make_cards, write_summaries
+from .summaries.store import read_inputs, save_cards, save_summaries
 
 ticker_partitions = DynamicPartitionsDefinition(name="ticker")
 
@@ -105,6 +112,12 @@ def engine_resource() -> IngestEngine:
     warehouse = Warehouse()
     warehouse.init_schema()
     return IngestEngine(warehouse)
+
+
+@resource
+def llm_resource() -> Ollama:
+    """The local model at OLLAMA_URL. Nothing connects until the first call."""
+    return Ollama.from_env()
 
 
 def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...] = ()):
@@ -309,11 +322,106 @@ def stage_article_text_op(context: OpExecutionContext, prev: dict) -> dict:
     return {**prev, "article_text": rows}
 
 
+# --- News summaries (NEWS_SUMMARIES.md) ---------------------------------------
+# Read, model, save, model, save. The two model ops stay out of the
+# warehouse pool and never open the warehouse, so 30-55 minutes of model
+# work never blocks another job; the read and save ops take the slot for
+# seconds.
+
+
+class RedoConfig(Config):
+    """redo: make these digests' cards (or summaries) again even where they
+    exist, after a prompt change, say."""
+
+    redo: bool = False
+
+
+def _built(prev: dict) -> list[tuple[str, date]]:
+    return [(d["period"], date.fromisoformat(str(d["digest_date"]))) for d in prev.get("digests", [])]
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def read_summary_inputs_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Read the stories, their article text and existing cards and summaries."""
+    inputs = read_inputs(context.resources.engine.warehouse,
+                         digests_to_read(prev.get("digests", [])), _built(prev))
+    readable = sum(1 for s in inputs.stories if s.texts)
+    context.log.info(
+        f"[summaries] {len(inputs.stories)} stories ({readable} with article text), "
+        f"{len(inputs.cards)} cards already made; writing {inputs.write or 'nothing'}")
+    return {**prev, "summary_inputs": inputs}
+
+
+@op(required_resource_keys={"llm"})
+def write_story_cards_op(context: OpExecutionContext, config: RedoConfig, prev: dict) -> dict:
+    """One fact card per story that has none (model; no warehouse)."""
+    def logged(card: Card) -> None:
+        note = f": {'; '.join(card.problems)}" if card.problems else ""
+        context.log.info(
+            f"[card] {card.story_key} {card.status} in {card.seconds:.0f}s "
+            f"({card.input_tokens} tokens in, {card.output_tokens} out){note}")
+
+    run = make_cards(context.resources.llm, prev["summary_inputs"], _now,
+                     redo=config.redo, on_card=logged)
+    return {**prev, "card_run": run}
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def save_story_cards_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Store the new cards in mart.news_story_cards; fail the run after
+    saving them if the model server went away."""
+    run: CardRun = prev["card_run"]
+    saved = save_cards(context.resources.engine.warehouse, list(run.made))
+    fallbacks = sum(c.status == "fallback" for c in run.made)
+    context.log.info(f"[cards] saved {saved} ({fallbacks} from the feed summary)")
+    if run.error:
+        raise Failure(f"model server unavailable after {saved} cards: {run.error}")
+    return prev
+
+
+@op(required_resource_keys={"llm"})
+def write_summaries_op(context: OpExecutionContext, config: RedoConfig, prev: dict) -> dict:
+    """The daily paragraph or the weekly article (model; no warehouse)."""
+    inputs = prev["summary_inputs"]
+    cards = {**inputs.cards, **{c.story_key: c for c in prev["card_run"].made}}
+    run = write_summaries(context.resources.llm, inputs, cards, _now, redo=config.redo)
+    for s in run.written:
+        tag = f"[summary:{s.period}:{s.digest_date}:{s.part}]"
+        note = f": {'; '.join(s.problems)}" if s.problems else ""
+        words = len(s.body.split()) if s.body else 0
+        context.log.info(f"{tag} {s.status}, {words} words{note}")
+    if run.skipped:
+        context.log.info(f"[summaries] already written from the same stories: {list(run.skipped)}")
+    if run.empty:
+        context.log.warning(f"[summaries] no stories to write about: {list(run.empty)}")
+    return {**prev, "summary_run": run}
+
+
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def save_summaries_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Store the summaries in mart.news_summaries; fail the run after saving
+    them if the model server went away."""
+    run: SummaryRun = prev["summary_run"]
+    saved = save_summaries(context.resources.engine.warehouse, list(run.written))
+    context.log.info(f"[summaries] saved {saved} parts")
+    if run.error:
+        raise Failure(f"model server unavailable after {saved} summary parts: {run.error}")
+    rest = {k: v for k, v in prev.items() if k not in ("summary_inputs", "card_run", "summary_run")}
+    return {**rest, "cards": len(prev["card_run"].made), "summary_parts": saved}
+
+
+def _summarize(prev: Any) -> Any:
+    """The five summary ops, after a digest job's article text."""
+    inputs = read_summary_inputs_op(prev)
+    return save_summaries_op(write_summaries_op(save_story_cards_op(write_story_cards_op(inputs))))
+
+
 @job(name="daily_digest")
 def daily_digest_job() -> None:
     """Weekday morning chain: news pull -> news staging -> digest -> the
-    picked stories' article pages -> their text."""
-    stage_article_text_op(fetch_articles_op(build_digest_op(stage_news_op(ingest_news_op()))))
+    picked stories' article pages -> their text -> cards -> the paragraph."""
+    text = stage_article_text_op(fetch_articles_op(build_digest_op(stage_news_op(ingest_news_op()))))
+    _summarize(text)
 
 
 @schedule(
@@ -332,8 +440,11 @@ def daily_digest_schedule() -> dict:
 @job(name="weekly_digest")
 def weekly_digest_job() -> None:
     """Saturday morning chain: news pull -> news staging -> the week's digest
-    -> article pages for its stories and the week's daily stories -> text."""
-    stage_article_text_op(fetch_articles_op(build_weekly_digest_op(stage_news_op(ingest_news_op()))))
+    -> article pages for its stories and the week's daily stories -> text
+    -> cards for stories still without one -> the weekly article."""
+    text = stage_article_text_op(
+        fetch_articles_op(build_weekly_digest_op(stage_news_op(ingest_news_op()))))
+    _summarize(text)
 
 
 @schedule(
@@ -721,7 +832,7 @@ def weekly_schedule() -> dict:  # noqa: ANN401
 
 
 defs = Definitions(
-    resources={"engine": engine_resource},
+    resources={"engine": engine_resource, "llm": llm_resource},
     assets=[ticker_data, stg_prices_daily, stg_financials_reported, m_prices_weekly,
             m_prices_monthly, m_advanced_analytics, m_technical_indicators, ticker_score],
     jobs=[monthly_job, weekdays_job, daily_job, news_job, daily_digest_job, weekly_digest_job,

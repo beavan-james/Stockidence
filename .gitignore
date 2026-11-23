@@ -25,3 +25,5 @@ Model/artifacts/weekly_ranking.meta.json
 Model/notebooks/dev_notebook.ipynb
 Model/notebooks/gradient_boosted_trees.ipynb
 Model/notebooks/ridge_regression.ipynb
+# Qwen tokenizer for the news summaries (baked into the image; see Dockerfile)
+/tokenizers/

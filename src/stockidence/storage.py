@@ -761,6 +761,47 @@ class Warehouse:
                 )
                 """
             )
+            # News summaries (stockidence.summaries, NEWS_SUMMARIES.md).
+            # news_story_cards: one fact card per story, keyed by the lead
+            # article's id; status 'ok' (model, checked) or 'fallback' (the
+            # feed's own summary). news_summaries: the daily paragraph (part
+            # 0) and the weekly article (part 0 the overview, 1..n its
+            # sections); status 'ok' or 'sources_only' (body null, the page
+            # shows that part's sources). story_keys lead back to the cards.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.news_story_cards (
+                    story_key VARCHAR NOT NULL,
+                    source_url VARCHAR,
+                    card JSON NOT NULL,
+                    status VARCHAR NOT NULL,
+                    model VARCHAR,
+                    prompt_version VARCHAR NOT NULL,
+                    input_tokens INTEGER NOT NULL,
+                    output_tokens INTEGER NOT NULL,
+                    seconds DOUBLE NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (story_key)
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.news_summaries (
+                    period VARCHAR NOT NULL,
+                    digest_date DATE NOT NULL,
+                    part INTEGER NOT NULL,
+                    heading VARCHAR,
+                    body VARCHAR,
+                    story_keys VARCHAR[] NOT NULL,
+                    status VARCHAR NOT NULL,
+                    model VARCHAR,
+                    prompt_version VARCHAR NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (period, digest_date, part)
+                )
+                """
+            )
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).
