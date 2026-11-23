@@ -116,6 +116,7 @@ flowchart TD
     M_RANK -->|"GET /api/rankings"| UI
     M_WEEK -->|"GET /api/weekly"| UI
     M_NEWS -->|"GET /api/digest/{daily,weekly}"| UI
+    M_SUM -->|"GET /api/summary/{daily,weekly}"| UI
     RAW -->|"quotes · news · commodities · macro"| UI
     M_RESH -->|"GET /api/prices"| UI
     M_TECH -->|"GET /api/technicals"| UI
