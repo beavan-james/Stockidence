@@ -4,13 +4,16 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { NewsTable } from "@/components/discover/NewsTable";
 import { PageHero, Section } from "@/components/layout/Page";
-import { BriefRow, StoryRow } from "@/components/news/StoryRows";
+import { SourceList, Summary } from "@/components/news/Summary";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDigest, useIsRanked } from "@/hooks/queries";
+import { useDigest, useSummary } from "@/hooks/queries";
 import { ApiError } from "@/lib/api";
 import { GAP_WARN_MINUTES, hoursMinutes, longDay, monthDay, plural, shortDay, weekStart } from "@/lib/digest";
 import { QUIET_LINK, cn } from "@/lib/utils";
-import type { DigestEnvelope, DigestPeriod } from "@/types/api";
+import type { DigestEnvelope, DigestPeriod, SummaryEnvelope } from "@/types/api";
+
+/** How many of a digest's stories are listed when it has no article. */
+const TOP_STORIES = 10;
 
 /** The search param that picks each digest's date. */
 const PARAM: Record<DigestPeriod, "day" | "week"> = { daily: "day", weekly: "week" };
@@ -48,19 +51,39 @@ const TEXT: Record<
   },
 };
 
+/** Shown when a session went long enough without an article that stories may be missing. */
+function GapNote({ minutes }: { minutes: number | null }) {
+  if ((minutes ?? 0) < GAP_WARN_MINUTES) return null;
+  return (
+    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-secondary">
+      <span className="text-accent">Gap in the feed.</span> A session went {hoursMinutes(minutes!)} without an
+      article, so stories from that stretch may be missing.
+    </p>
+  );
+}
+
+/**
+ * One day's or one week's news: the latest article written on or before the
+ * asked date, stepping from article to article. With no article yet, the
+ * digest's top 10 stories, stepping from digest to digest.
+ */
 function DigestSection({
   period,
   query,
+  summary,
   requested,
 }: {
   period: DigestPeriod;
   query: UseQueryResult<DigestEnvelope>;
+  summary: UseQueryResult<SummaryEnvelope>;
   requested: string | undefined;
 }) {
   const [params] = useSearchParams();
-  const ranked = useIsRanked();
   const text = TEXT[period];
   const d = query.data;
+  const written = summary.data?.digest_date && summary.data.parts.length > 0 ? summary.data : null;
+  // No answer yet on whether there is an article: hold the section rather than flash the list.
+  const deciding = !written && summary.isPending;
 
   /** This page with one digest's date swapped, the other kept. */
   const at = (date: string | null) => {
@@ -71,33 +94,54 @@ function DigestSection({
     return { search: search ? `?${search}` : "" };
   };
 
-  const missing = query.error instanceof ApiError && query.error.status === 404;
+  const missing = !written && query.error instanceof ApiError && query.error.status === 404;
   const asked = missing && requested && text.dated(requested) ? requested : null;
-  const title = d?.digest_date
-    ? text.title(d.digest_date)
+  const shown = written ?? (deciding ? undefined : d);
+  const title = shown?.digest_date
+    ? text.title(shown.digest_date)
     : asked
       ? text.title(asked)
       : period === "daily"
         ? "Today"
         : "This week";
 
-  const steps = d?.digest_date && (
+  const steps = shown?.digest_date && (
     <div className="flex gap-x-6">
-      {d.previous_date && (
-        <Link to={at(d.previous_date)} className={QUIET_LINK}>
-          ← {text.step(d.previous_date)}
+      {shown.previous_date && (
+        <Link to={at(shown.previous_date)} className={QUIET_LINK}>
+          ← {text.step(shown.previous_date)}
         </Link>
       )}
-      {d.next_date && (
-        <Link to={at(d.next_date)} className={QUIET_LINK}>
-          {text.step(d.next_date)} →
+      {shown.next_date && (
+        <Link to={at(shown.next_date)} className={QUIET_LINK}>
+          {text.step(shown.next_date)} →
         </Link>
       )}
     </div>
   );
 
+  const loading = (
+    <div className="max-w-2xl space-y-3">
+      {[0, 1, 2, 3].map((i) => (
+        <Skeleton key={i} className="h-5" />
+      ))}
+    </div>
+  );
+
   let body;
-  if (missing) {
+  if (written) {
+    body = (
+      <div className={cn("transition-opacity", summary.isPlaceholderData && "opacity-50")}>
+        {written.model && <p className="text-[13px] text-ink-muted">Written by {written.model}</p>}
+        <GapNote minutes={written.session_gap_minutes} />
+        <div className="mt-6">
+          <Summary parts={written.parts} />
+        </div>
+      </div>
+    );
+  } else if (deciding) {
+    body = loading;
+  } else if (missing) {
     body = (
       <p className="text-ink-secondary">
         {asked ? text.missing(asked) : requested ? text.misdated : text.first}{" "}
@@ -109,40 +153,24 @@ function DigestSection({
   } else if (query.isError) {
     body = <p className="text-ink-secondary">The digest is unavailable right now.</p>;
   } else if (!d) {
-    body = (
-      <div className="space-y-3">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className={period === "daily" ? "h-14" : "h-28"} />
-        ))}
-      </div>
-    );
+    body = loading;
   } else if (!d.digest_date) {
     body = <p className="text-ink-secondary">{text.first}</p>;
   } else if (d.items.length === 0) {
     body = <p className="text-ink-secondary">No stories made it through the filters.</p>;
   } else {
-    const gap = d.session_gap_minutes ?? 0;
     body = (
       <div className={cn("transition-opacity", query.isPlaceholderData && "opacity-50")}>
         <p className="num text-[13px] text-ink-muted">
           {plural(d.articles, "article")} from {plural(d.outlets, "outlet")} ·{" "}
           {(d.routine_dropped + d.commentary_dropped).toLocaleString("en-US")} dropped as routine or opinion
         </p>
-        {gap >= GAP_WARN_MINUTES && (
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-secondary">
-            <span className="text-accent">Gap in the feed.</span> A session went {hoursMinutes(gap)} without an
-            article, so stories from that stretch may be missing.
-          </p>
-        )}
-        <ol className="mt-5 divide-y divide-line border-t border-line">
-          {d.items.map((s) =>
-            period === "daily" ? (
-              <BriefRow key={s.rank} story={s} ranked={ranked} />
-            ) : (
-              <StoryRow key={s.rank} story={s} period={period} weights={d.weights} ranked={ranked} />
-            ),
-          )}
-        </ol>
+        <GapNote minutes={d.session_gap_minutes} />
+        <div className="mt-5 max-w-2xl">
+          <SourceList
+            sources={d.items.slice(0, TOP_STORIES).map((s) => ({ headline: s.headline, outlet: s.source, url: s.url }))}
+          />
+        </div>
       </div>
     );
   }
@@ -160,6 +188,8 @@ export function NewsPage() {
   const week = params.get(PARAM.weekly) ?? undefined;
   const daily = useDigest("daily", day);
   const weekly = useDigest("weekly", week);
+  const dailySummary = useSummary("daily", day);
+  const weeklySummary = useSummary("weekly", week);
 
   useEffect(() => {
     document.title = "News | Stockidence";
@@ -171,8 +201,8 @@ export function NewsPage() {
         link={{ to: "/news/method", label: "How stories are picked →" }}
         title="News Digest"
       />
-      <DigestSection period="daily" query={daily} requested={day} />
-      <DigestSection period="weekly" query={weekly} requested={week} />
+      <DigestSection period="daily" query={daily} summary={dailySummary} requested={day} />
+      <DigestSection period="weekly" query={weekly} summary={weeklySummary} requested={week} />
       <Section title="All news">
         <NewsTable />
       </Section>

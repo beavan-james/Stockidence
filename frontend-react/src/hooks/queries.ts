@@ -17,6 +17,7 @@ import type {
   Quote,
   RankingDetail,
   RankingsEnvelope,
+  SummaryEnvelope,
   WeeklyEnvelope,
 } from "@/types/api";
 
@@ -74,6 +75,17 @@ export function useDigest(period: DigestPeriod, date: string | undefined) {
     placeholderData: keepPreviousData,
     // 404 = no digest that day (a weekend, or before the first run): a real answer.
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+/** The latest model-written summary on or before a date; the latest of all when no date is given. */
+export function useSummary(period: DigestPeriod, date: string | undefined) {
+  return useQuery<SummaryEnvelope>({
+    queryKey: ["summary", period, date ?? "latest"],
+    queryFn: () => client.summary(period, date),
+    // Written ~30 minutes after the digest: refetch at most every 15 minutes.
+    staleTime: 15 * 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 

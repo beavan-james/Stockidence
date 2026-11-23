@@ -54,6 +54,11 @@ export const client = {
       date ? `/api/digest/${period}?date=${encodeURIComponent(date)}` : `/api/digest/${period}`,
     ),
 
+  summary: (period: import("@/types/api").DigestPeriod, date?: string) =>
+    api<import("@/types/api").SummaryEnvelope>(
+      date ? `/api/summary/${period}?date=${encodeURIComponent(date)}` : `/api/summary/${period}`,
+    ),
+
   modelOverview: () => api<import("@/types/api").ModelOverview>("/api/model/overview"),
 
   macro: () => api<import("@/types/api").MacroMetric[]>("/api/macro"),

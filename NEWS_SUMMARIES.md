@@ -7,9 +7,9 @@ sources. This file is the governing spec for that pipeline: the article
 scraper, the model harness, and where the jobs run.
 
 Status (2026-11-23): every pipeline step is built and tested: the
-selection changes (step 1), the scraper (steps 2–3) and the model harness
-(steps 4–7, against a scripted model). None has run on the server yet.
-Still to build: the News page showing the summaries.
+selection changes (step 1), the scraper (steps 2–3), the model harness
+(steps 4–7, against a scripted model) and the News page showing the
+summaries. None has run on the server yet.
 
 ## What the reader gets
 
@@ -26,6 +26,24 @@ Still to build: the News page showing the summaries.
 
 The digest ranking (`mart/news_digest.py`) stays in the pipeline as the step
 that chooses which stories get read. Its scores aren't shown on the page.
+
+As built: `GET /api/summary/{daily,weekly}` (`service/news_summary.py`)
+serves the latest written summary on or before `?date=` (the latest of
+all without one), each part with its sources. A summary counts as written
+when at least one part has text, so a daily whose paragraph failed its
+checks falls back to the article before it. Previous and next step through
+written summaries; from the first one, previous goes on to the digest
+before it. A source is the page its story's card was read from
+(`mart.news_story_cards.source_url`), named by that article in
+`staging.stg_news_articles`; a story with no card falls back to its own
+article. On the News page (`components/news/Summary.tsx`) each digest
+section shows that article: the daily paragraph, or the weekly overview
+and then each section under its heading, with that part's sources beside
+it on wide screens and under it on phones. The overview has no list of its
+own, since every one of its stories is listed under a section. A
+`sources_only` weekly section shows its heading and sources. A date with
+no article on or before it (every digest before the first run) shows the
+digest's top 10 stories as headline links, without scores.
 
 ## Principles
 

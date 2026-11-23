@@ -309,3 +309,34 @@ export interface DigestEnvelope {
   full_marks: { coverage_outlets: number; move: number };
   items: DigestStory[];
 }
+
+export interface SummarySource {
+  /** Null only when the article row is gone; the link still stands. */
+  headline: string | null;
+  outlet: string | null;
+  url: string;
+}
+
+export interface SummaryPart {
+  /** 0: the daily paragraph or the weekly overview; 1..n: the weekly sections. */
+  part: number;
+  heading: string | null;
+  /** Null when the text failed its checks: the part shows only its sources. */
+  body: string | null;
+  status: "ok" | "sources_only";
+  sources: SummarySource[];
+}
+
+export interface SummaryEnvelope {
+  period: DigestPeriod;
+  /** The latest written digest on or before the asked date; null when there is none. */
+  digest_date: string | null;
+  /** The written digests either side: stepping skips days whose text failed its checks. */
+  previous_date: string | null;
+  next_date: string | null;
+  session_gap_minutes: number | null;
+  model: string | null;
+  prompt_version: string | null;
+  created_at: string | null;
+  parts: SummaryPart[];
+}

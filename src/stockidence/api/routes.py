@@ -19,6 +19,7 @@ from ..service import (
     dagster_client,
     digest,
     market,
+    news_summary,
     ranking,
     rating_service,
     sub_scores,
@@ -209,6 +210,27 @@ def get_digest(
     if result is None:
         raise HTTPException(status_code=404, detail=f"no {period} digest for {date}")
     return result
+
+
+@market_router.get("/summary/{period}")
+def get_summary(
+    period: Literal["daily", "weekly"],
+    date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+) -> dict:
+    """The model-written news summary: the latest written one on or before
+    `date` (a week is dated by its Friday), or the latest of all when `date`
+    is omitted. The daily paragraph, or the weekly article as part 0 the
+    overview and parts 1..n its sections. Each part lists its sources
+    (headline, outlet, link); a part whose text failed the checks has status
+    `sources_only` and no body. `previous_date`/`next_date` step through
+    written digests. Empty `parts` when there is none."""
+    from datetime import date as _date
+
+    try:
+        day = _date.fromisoformat(date) if date else None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"not a date: {date}") from exc
+    return news_summary.get_summary(period, day)
 
 
 @meta_router.get("/model-weights")
