@@ -1014,13 +1014,15 @@ portfolio Refresh button; callers poll `GET /api/quote/{ticker}` until
 
 ### News (filtered paging)
 
-`GET /api/news?ticker=AAPL&date_from=2026-09-01&date_to=2026-09-04&page=1&page_size=25`
-— ticker substring match, publish-date bounds (YYYY-MM-DD), newest first.
+`GET /api/news?q=fed+rates&date_from=2026-09-01&date_to=2026-09-04&page=1&page_size=10`
+— headline search (every word in `q` must appear in the title,
+case-insensitive, any order), publish-date bounds (YYYY-MM-DD), newest
+first. `page_size` defaults to 10.
 Filtering, counting, and paging all happen in SQL (`WHERE` + `LIMIT/OFFSET`
 over `raw.raw_news_articles`) so only the requested page is parsed — the
 full table is never loaded.
 
 ```json
 {"items": [{"title": "…", "sentiment_tickers": "AAPL, MSFT"}],
- "total": 1423, "page": 1, "page_size": 25, "page_count": 57}
+ "total": 1423, "page": 1, "page_size": 10, "page_count": 143}
 ```
