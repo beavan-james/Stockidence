@@ -4,7 +4,7 @@ DuckDB warehouse so the SQL paths are actually covered."""
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -15,11 +15,11 @@ from stockidence.ingest.staleness import (
     check_financials_reported,
     check_insider_sentiment,
     decide,
-    latest_expected_period,
+    next_filing_due,
 )
-from stockidence.storage import Watermark, Warehouse
+from stockidence.storage import Warehouse, Watermark
 
-NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -69,10 +69,13 @@ def test_decide_returns_reason():
     assert "ttl" in decision.reason
 
 
-def test_latest_expected_period():
-    assert latest_expected_period(datetime(2026, 2, 15, tzinfo=timezone.utc)) == (2025, 3)
-    assert latest_expected_period(datetime(2026, 4, 1, tzinfo=timezone.utc)) == (2025, 4)
-    assert latest_expected_period(datetime(2026, 12, 15, tzinfo=timezone.utc)) == (2026, 3)
+def test_next_filing_due():
+    # one quarter (92 days) plus the 75-day grace after the newest period end
+    assert next_filing_due(date(2025, 6, 28), 2) == date(2025, 12, 12)
+    # fiscal Q4 is on the 10-K, so after a Q3 the next 10-Q is two quarters out
+    assert next_filing_due(date(2025, 9, 27), 3) == date(2026, 6, 13)
+    # a 10-K from an older annual fetch (quarter 0) is followed by Q1
+    assert next_filing_due(date(2025, 12, 27), 0) == date(2026, 6, 12)
 
 
 def test_gate_quote_fresh_vs_stale(warehouse):
@@ -110,24 +113,30 @@ def test_gate_conditional_insider_sentiment(warehouse):
     assert not gate.should_fetch(spec.name, "AAPL").should_fetch
 
 
+def _filing(quarter, year, access_number, end_date):
+    return {"ticker": "AAPL", "quarter": quarter, "year": year,
+            "accessNumber": access_number, "endDate": f"{end_date} 00:00:00"}
+
+
 def test_gate_conditional_financials_reported(warehouse):
-    now = datetime(2026, 4, 1, tzinfo=timezone.utc)  # FY2025 Q4 report due by mid-Mar
+    now = datetime(2026, 4, 1, tzinfo=UTC)
     gate = StalenessGate(warehouse, now=now)
     spec = get_endpoint("financials_reported")
 
     warehouse.land(
         "raw_financials_reported",
-        [{"ticker": "AAPL", "quarter": 4, "year": 2024, "accessNumber": "a"}],
-        fetched_at=now - timedelta(days=400),
+        [_filing(2, 2025, "a", "2025-06-28")],
+        fetched_at=now - timedelta(days=200),
     )
-    assert check_financials_reported(warehouse, "AAPL", now)  # behind: (2024,4) < (2025,4)
+    assert check_financials_reported(warehouse, "AAPL", now)  # Q3 10-Q was due 2025-12-12
     assert gate.should_fetch(spec.name, "AAPL").should_fetch
 
     warehouse.land(
         "raw_financials_reported",
-        [{"ticker": "AAPL", "quarter": 4, "year": 2025, "accessNumber": "b"}],
+        [_filing(3, 2025, "b", "2025-09-27")],
         fetched_at=now - timedelta(days=10),
     )
+    # the next 10-Q is fiscal Q1, not due until 2026-06-13
     assert not check_financials_reported(warehouse, "AAPL", now)
     assert not gate.should_fetch(spec.name, "AAPL").should_fetch
 

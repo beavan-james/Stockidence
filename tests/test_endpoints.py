@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import timedelta
 
 from stockidence.ingest.endpoints import (
+    REGISTRY,
     Cadence,
     Provider,
-    REGISTRY,
     Trigger,
     endpoints_for_provider,
     get_endpoint,
@@ -40,11 +40,11 @@ def test_ttl_rules_match_architecture():
     assert immutable.ttl is None
 
     ticker_news = get_endpoint("ticker_news")
-    assert ticker_news.provider == Provider.ALPHA_VANTAGE
-    assert ticker_news.method == "market_news"
+    assert ticker_news.provider == Provider.FINNHUB
+    assert ticker_news.method == "company_news"
     assert ticker_news.trigger == Trigger.ON_DEMAND_STALE
-    assert ticker_news.cadence == Cadence.IMMUTABLE
-    assert ticker_news.ttl is None
+    assert ticker_news.cadence == Cadence.MONTHLY
+    assert ticker_news.ttl == timedelta(days=30)
 
     for name in ("insider_sentiment", "financials_reported"):
         spec = get_endpoint(name)

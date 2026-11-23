@@ -4,7 +4,7 @@ landing, and watermark upkeep — no network or API keys involved."""
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -12,7 +12,7 @@ from stockidence.ingest.endpoints import Provider
 from stockidence.ingest.engine import IngestEngine
 from stockidence.storage import Warehouse
 
-NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 QUOTE = {"c": 250.1, "h": 251.0, "l": 249.0, "o": 249.5, "pc": 247.0}
 PRICES = {
@@ -40,15 +40,14 @@ TRANSCRIPT = {
     "year": 2025,
     "transcript": [{"speaker": "CEO", "title": "CEO", "content": "hi"}, {"speaker": "CFO", "title": "CFO", "content": "hey"}],
 }
-NEWS = {
-    "feed": [
-        {
-            "title": "Apple beats earnings",
-            "url": "https://example.com/a",
-            "ticker_sentiment": [{"ticker": "AAPL", "ticker_sentiment_score": 0.2}],
-        }
-    ]
-}
+NEWS = [
+    {
+        "headline": "Apple beats earnings",
+        "url": "https://example.com/a",
+        "datetime": 1786968000,
+        "related": "AAPL",
+    }
+]
 IPO_CAL = {"ipoCalendar": [{"date": "2026-08-20", "symbol": "XYZ", "status": "expected"}]}
 
 
@@ -72,6 +71,12 @@ class FakeFinnhub:
 
     def insider_sentiment(self, **kwargs):
         return self._h("insider_sentiment")(**kwargs)
+
+    def general_news(self, **kwargs):
+        return self._h("general_news")(**kwargs)
+
+    def company_news(self, **kwargs):
+        return self._h("company_news")(**kwargs)
 
     def ipo_calendar(self, **kwargs):
         self.calls.append(("ipo_calendar", kwargs))
@@ -97,10 +102,6 @@ class FakeAlphaVantage:
         self.calls.append(("inflation", kwargs))
         return MACRO
 
-    def market_news(self, **kwargs):
-        self.calls.append(("market_news", kwargs))
-        return NEWS
-
     def earnings_call_transcript(self, **kwargs):
         self.calls.append(("earnings_call_transcript", kwargs))
         return TRANSCRIPT
@@ -117,6 +118,8 @@ def engine(tmp_path):
                 "financials_reported": FINANCIALS,
                 "insider_sentiment": SENTIMENT,
                 "ipo_calendar": IPO_CAL,
+                "general_news": NEWS,
+                "company_news": NEWS,
             }
         ),
         Provider.TWELVE_DATA: FakeTwelveData(),
@@ -126,7 +129,7 @@ def engine(tmp_path):
 
 
 def test_quote_fetches_once_then_caches(engine):
-    wh, eng = engine
+    _, eng = engine
     fh = eng.clients[Provider.FINNHUB]
 
     first = eng.ingest_on_demand("quote", "AAPL", now=NOW)
@@ -141,17 +144,17 @@ def test_quote_fetches_once_then_caches(engine):
 
 
 def test_prices_daily_incremental_start_date(engine):
-    wh, eng = engine
+    _, eng = engine
     td = eng.clients[Provider.TWELVE_DATA]
 
     first = eng.ingest_on_demand("prices.daily", "AAPL", now=NOW)
     assert first.fetched and first.rows_written == 2
     assert first.high_watermark == "2026-08-17"
-    # first fetch backfills two years so SMA200 scoring/backtests have depth
+    # first fetch backfills ~15 years so SMA200 scoring/backtests have depth
     assert td.calls[0] == (
         "time_series",
         {"symbol": "AAPL",
-         "start_date": (NOW.date() - timedelta(days=730)).isoformat()},
+         "start_date": (NOW.date() - timedelta(days=5500)).isoformat()},
     )
 
     # TTL is 1 day; same-day request reuses the cache instead of re-calling
@@ -165,15 +168,15 @@ def test_prices_daily_incremental_start_date(engine):
 
 
 def test_financials_reported_on_demand(engine):
-    wh, eng = engine
+    _, eng = engine
     fh = eng.clients[Provider.FINNHUB]
     result = eng.ingest_on_demand("financials_reported", "AAPL", now=NOW)
     assert result.fetched and result.rows_written == 2
-    assert fh.calls[-1] == ("financials_reported", {"symbol": "AAPL", "freq": "annual"})
+    assert fh.calls[-1] == ("financials_reported", {"symbol": "AAPL", "freq": "quarterly"})
 
 
 def test_insider_sentiment_year_window(engine):
-    wh, eng = engine
+    _, eng = engine
     fh = eng.clients[Provider.FINNHUB]
     eng.ingest_on_demand("insider_sentiment", "AAPL", now=NOW)
     kwargs = fh.calls[-1][1]
@@ -185,7 +188,7 @@ def test_insider_sentiment_year_window(engine):
 
 
 def test_transcript_quarter_dimension(engine):
-    wh, eng = engine
+    _, eng = engine
     av = eng.clients[Provider.ALPHA_VANTAGE]
     result = eng.ingest_on_demand("earnings_call_transcript", "AAPL|4|2025", now=NOW)
     assert result.fetched and result.rows_written == 2
@@ -207,7 +210,7 @@ def test_scheduled_macro_lands_rows(engine):
 
 
 def test_scheduled_calendar_uses_default_window(engine):
-    wh, eng = engine
+    _, eng = engine
     fh = eng.clients[Provider.FINNHUB]
     result = eng.ingest_scheduled("ipo_calendar", now=NOW)
     assert result.fetched and result.rows_written == 1
@@ -228,33 +231,40 @@ def test_market_news_fanout_lands_both_tables(engine):
     assert con.execute("SELECT COUNT(*) FROM raw.news_ticker_sentiment").fetchone()[0] == 1
 
 
-def test_ticker_news_backfills_once_then_never(engine):
-    """One-time deep-history pull per ticker: fetch on first request with the
+def test_ticker_news_refreshes_monthly(engine):
+    """Per-ticker pull of the trailing year: fetch on first request with the
     ticker-scoped kwargs, land the same two-table fan-out as market_news,
-    then never spend another Alpha Vantage call — freshness flows from the
+    then reuse it for the 30-day TTL — day-to-day freshness flows from the
     daily scheduled job, not from re-fetching here."""
     wh, eng = engine
-    av = eng.clients[Provider.ALPHA_VANTAGE]
+    fh = eng.clients[Provider.FINNHUB]
     first = eng.ingest_on_demand("ticker_news", "AAPL", now=NOW)
     assert first.fetched
     assert first.rows_written == 3
-    assert ("market_news", {"tickers": "AAPL", "limit": 1000, "sort": "LATEST"}) in av.calls
+    assert fh.calls == [
+        ("company_news", {"symbol": "AAPL", "from_date": "2025-08-17", "to_date": "2026-08-17"}),
+    ]
     with wh.connect(read_only=True) as con:
         assert con.execute("SELECT COUNT(*) FROM raw.news_ticker_sentiment WHERE ticker = 'AAPL'").fetchone()[0] == 1
         assert con.execute("SELECT COUNT(*) FROM raw.ticker_news_fetches WHERE ticker = 'AAPL'").fetchone()[0] == 1
 
-    # a year later the gate still refuses: once-per-ticker by design
-    second = eng.ingest_on_demand("ticker_news", "AAPL", now=NOW + timedelta(days=365))
+    # inside the TTL the gate refuses
+    second = eng.ingest_on_demand("ticker_news", "AAPL", now=NOW + timedelta(days=29))
     assert not second.fetched
-    assert len(av.calls) == 1
+    assert len(fh.calls) == 1
 
-    # force bypasses the gate for deliberate re-backfills only
-    forced = eng.ingest_on_demand("ticker_news", "AAPL", force=True, now=NOW + timedelta(days=365))
+    # force bypasses the gate
+    forced = eng.ingest_on_demand("ticker_news", "AAPL", force=True, now=NOW + timedelta(days=29))
     assert forced.fetched
-    assert len(av.calls) == 2
+    assert len(fh.calls) == 2
+
+    # a month after the last fetch, a lookup refetches
+    third = eng.ingest_on_demand("ticker_news", "AAPL", now=NOW + timedelta(days=59))
+    assert third.fetched
+    assert len(fh.calls) == 3
 
 
 def test_unknown_endpoint_raises(engine):
-    wh, eng = engine
+    _, eng = engine
     with pytest.raises(KeyError):
         eng.ingest_on_demand("not.real", "AAPL", now=NOW)
