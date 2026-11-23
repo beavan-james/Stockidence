@@ -42,9 +42,9 @@ html {
   color-scheme: dark;
 }
 
+/* The body stays clear so the starfield, fixed behind it, shows through */
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-bg);
   -webkit-font-smoothing: antialiased;
 }
 

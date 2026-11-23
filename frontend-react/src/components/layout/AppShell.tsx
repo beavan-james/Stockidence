@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigationType } from "react-router-dom";
 
 import logoUrl from "@/assets/logo.svg";
+import { StarBackdrop } from "@/components/layout/StarBackdrop";
 import { useRankings, useWeekly } from "@/hooks/queries";
 import { dayLabel, quarterLabel, snapshotLabel } from "@/lib/tiers";
 import { CONTAINER, cn } from "@/lib/utils";
@@ -49,7 +50,10 @@ export function AppShell() {
   }, [pathname, navigationType]);
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-bg text-ink">
+    // No background of its own: the page's black is the html's, so the stars show through.
+    <div className="min-h-screen overflow-x-clip text-ink">
+      {/* The home page's disc has its own sky. */}
+      {pathname !== "/" && <StarBackdrop />}
       <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-black/70 backdrop-blur-md">
         <div className={cn(CONTAINER, "flex h-16 items-center justify-between gap-6 lg:grid lg:grid-cols-[1fr_auto_1fr]")}>
           <Link
