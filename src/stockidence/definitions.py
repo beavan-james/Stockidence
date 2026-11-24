@@ -110,9 +110,9 @@ def _now() -> datetime:
 
 @resource
 def engine_resource() -> IngestEngine:
-    warehouse = Warehouse()
-    warehouse.init_schema()
-    return IngestEngine(warehouse)
+    """Dagster starts resources before an op claims its pool slot, so this
+    must not open the warehouse: the first op to connect creates the schema."""
+    return IngestEngine(Warehouse(create_schema=True))
 
 
 @resource
@@ -191,7 +191,8 @@ def overnight_schedule() -> dict:  # noqa: ANN401
     """00:30 New York time, Tuesday to Saturday: the movers of the session
     that closed the afternoon before. Alpha Vantage's free tier publishes a
     session's list late in the evening; at 17:30 it still served the session
-    before. Clear of every other job unless a retrain is still running."""
+    before. Clear of every other job unless a retrain is still running, and
+    then it waits for the pool."""
     return {}
 
 

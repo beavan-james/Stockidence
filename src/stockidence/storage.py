@@ -290,10 +290,16 @@ def _json_default(value: Any) -> str:
 
 
 class Warehouse:
-    """DuckDB store for the pipeline. All writes funnel through here."""
+    """DuckDB store for the pipeline. All writes funnel through here.
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    With `create_schema`, the first connection bootstraps the schema. Building
+    the store never touches the file, so a Dagster resource can hold one
+    without taking the write lock before its op has the warehouse pool slot.
+    """
+
+    def __init__(self, path: str | Path | None = None, *, create_schema: bool = False) -> None:
         self.path = Path(path) if path else Path(DEFAULT_DB_PATH)
+        self._schema_pending = create_schema
 
     def connect(
         self,
@@ -311,6 +317,13 @@ class Warehouse:
         transiently hit "Could not set lock on file". Both modes retry with
         backoff until the lock frees instead of crashing the run.
         """
+        if self._schema_pending:
+            self._schema_pending = False  # init_schema connects too
+            try:
+                self.init_schema()
+            except BaseException:
+                self._schema_pending = True  # the next connection tries again
+                raise
         last_error: Exception | None = None
         for attempt in range(max_attempts):
             try:

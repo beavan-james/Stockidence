@@ -199,6 +199,49 @@ def test_scheduled_and_retrain_ops_share_the_warehouse_pool(defs):
             assert node.definition.pool == expected, (name, node_name, node.definition.pool)
 
 
+def test_the_engine_resource_never_opens_the_warehouse(tmp_path, monkeypatch):
+    """Resources start before an op claims its pool slot, so opening the
+    warehouse there fails on a retrain's lock instead of waiting for it."""
+    from stockidence import storage
+    from stockidence.definitions import engine_resource
+
+    path = tmp_path / "w.duckdb"
+    monkeypatch.setattr(storage, "DEFAULT_DB_PATH", str(path))
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("opened the warehouse while starting the resource")
+
+    with monkeypatch.context() as m:
+        m.setattr(storage.duckdb, "connect", refuse)
+        engine = engine_resource()
+    assert not path.exists()
+
+    with engine.warehouse.connect(read_only=True) as con:  # the op's first connection
+        tables = {t for (t,) in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+    assert {"raw_gainers_losers", "watermarks", "news_summaries"} <= tables
+
+
+def test_a_failed_schema_bootstrap_is_tried_again(tmp_path, monkeypatch):
+    from stockidence.storage import Warehouse
+
+    wh = Warehouse(tmp_path / "w.duckdb", create_schema=True)
+    calls = []
+    real = Warehouse.init_schema
+
+    def flaky(self):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("locked")
+        real(self)
+
+    monkeypatch.setattr(Warehouse, "init_schema", flaky)
+    with pytest.raises(RuntimeError, match="locked"):
+        wh.connect()
+    wh.connect().close()
+    wh.connect().close()
+    assert len(calls) == 2  # retried once, then never again
+
+
 def test_digest_jobs_end_with_the_summaries(defs):
     for name in ("daily_digest", "weekly_digest"):
         nodes = list(defs.get_job_def(name).graph.node_dict)

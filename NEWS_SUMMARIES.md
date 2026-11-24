@@ -427,9 +427,8 @@ Known overlaps (with the pool below, these jobs wait instead of failing):
   past them (1.5 and 3.5 hours in).
 - **Retrains into the overnight movers:** `overnight_ingest` (00:30) comes 7
   hours after the weekly retrain starts, and 1.5 hours (2.5 in winter) after
-  the quarterly one on the 1st of a quarter. If either is still holding the
-  lock, that night's movers can fail (the gap below) and the site keeps the
-  session before.
+  the quarterly one on the 1st of a quarter. If either is still running, the
+  movers wait for the pool and land late.
 - **Monthly into quarterly:** `monthly_ingest` runs one hour before the
   quarterly retrain on the last evening of Mar/Jun/Sep/Dec.
 
@@ -445,10 +444,9 @@ taken per op, so a waiting job can get in between a retrain's steps.
   retries.
 - **Cost:** on Fridays the evening news pull and `daily_ingest` now run late,
   when the weekly refresh step ends, instead of failing.
-- **Gap, not fixed:** the `engine` resource runs `init_schema` when a run
-  starts, before its first op claims the slot (checked in a throwaway
-  instance). A run that starts while another job holds the lock past the
-  ~164 seconds of retries fails there instead of waiting.
+- **Resources stay off the warehouse:** Dagster starts a run's resources
+  before its first op claims the slot, so the `engine` resource only builds
+  the store. The first op to connect creates the schema, inside its slot.
 - **Server:** pools need the instance's concurrency tables. If the daemon
   logs that the instance doesn't support them, run
   `dagster instance migrate` once.
