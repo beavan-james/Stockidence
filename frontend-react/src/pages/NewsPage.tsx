@@ -8,7 +8,7 @@ import { SourceList, Summary } from "@/components/news/Summary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDigest, useSummary } from "@/hooks/queries";
 import { ApiError } from "@/lib/api";
-import { GAP_WARN_MINUTES, hoursMinutes, longDay, monthDay, plural, shortDay, weekStart } from "@/lib/digest";
+import { GAP_WARN_MINUTES, hoursMinutes, longDay, monthDay, shortDay, weekStart } from "@/lib/digest";
 import { QUIET_LINK, cn } from "@/lib/utils";
 import type { DigestEnvelope, DigestPeriod, SummaryEnvelope } from "@/types/api";
 
@@ -161,12 +161,8 @@ function DigestSection({
   } else {
     body = (
       <div className={cn("transition-opacity", query.isPlaceholderData && "opacity-50")}>
-        <p className="num text-[13px] text-ink-muted">
-          {plural(d.articles, "article")} from {plural(d.outlets, "outlet")} ·{" "}
-          {(d.routine_dropped + d.commentary_dropped).toLocaleString("en-US")} dropped as routine or opinion
-        </p>
         <GapNote minutes={d.session_gap_minutes} />
-        <div className="mt-5 max-w-2xl">
+        <div className="mt-5 max-w-2xl first:mt-0">
           <SourceList
             sources={d.items.slice(0, TOP_STORIES).map((s) => ({ headline: s.headline, outlet: s.source, url: s.url }))}
           />
