@@ -6,7 +6,7 @@ plus the original response fragment as `payload`. One response can fan out to
 several artifact tables (e.g. market_news → articles + ticker sentiment).
 
 Design rules:
-  - No I/O, no clock: `now` is passed in when a row needs it (gainers/losers).
+  - No I/O, no clock: `now` is passed in when a row needs it.
   - Layers stay explicit: this module only shapes rows for the raw layer.
   - Unknown endpoints raise KeyError instead of silently dropping data.
 """
@@ -333,13 +333,21 @@ def normalize_stock_symbols(payload: list[dict[str, Any]], symbol: str, now: dat
 def normalize_gainers_losers(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
     """Alpha Vantage TOP_GAINERS_LOSERS: one row per mover entry.
 
-    A ticker can appear in more than one bucket the same day, so the bucket
-    is part of the key (ticker, date, bucket).
+    `date` is the session the list describes, from the response's own
+    `last_updated` ("2026-08-14 16:15:59 US/Eastern"). The fetch date would
+    be wrong: the free tier publishes a session late that evening, so a fetch
+    before then returns the session before. A ticker can appear in more than
+    one bucket the same day, so the bucket is part of the key
+    (ticker, date, bucket).
     """
-    day = now.date()
+    last_updated = str(payload.get("last_updated") or "")
+    try:
+        session = date.fromisoformat(last_updated[:10])
+    except ValueError:
+        raise ValueError(f"top_gainers_losers: no session date in last_updated={last_updated!r}") from None
     rows = [
-        {"ticker": entry["ticker"], "date": day, "bucket": bucket,
-         "payload": {**entry, "bucket": bucket}}
+        {"ticker": entry["ticker"], "date": session, "bucket": bucket,
+         "payload": {**entry, "bucket": bucket, "last_updated": last_updated}}
         for bucket in ("top_gainers", "top_losers", "most_actively_traded")
         for entry in payload.get(bucket, [])
         if entry.get("ticker")

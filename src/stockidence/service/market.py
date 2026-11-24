@@ -358,11 +358,12 @@ def _rank_movers(bucket: str, rows: list[dict]) -> list[dict]:
 def get_market_movers() -> dict:
     """Top gainers, losers, and most actively traded from the latest snapshot.
 
-    Only the newest land date is read, so earlier days' movers never leak in
-    (and a weekend or holiday shows the last trading day's snapshot). Each
+    Only the newest fetch is read, so earlier days' movers never leak in (and
+    a weekend or holiday shows the last trading day's snapshot). It is picked
+    by fetched_at, not date: rows landed before dates came from the response
+    carry the day they were fetched, which can be a session too late. Each
     list is ranked by _mover_score and capped at MOVERS_LIMIT. movers_as_of
-    is that snapshot's date so the UI can show how fresh it is; '' for the
-    demo fallback.
+    is the session the snapshot describes; '' for the demo fallback.
     """
     rows = _read(
         """
@@ -372,7 +373,7 @@ def get_market_movers() -> dict:
                json_extract_string(payload, '$.change_percentage'),
                json_extract_string(payload, '$.volume')
         FROM raw.raw_gainers_losers
-        WHERE date = (SELECT max(date) FROM raw.raw_gainers_losers)
+        WHERE fetched_at = (SELECT max(fetched_at) FROM raw.raw_gainers_losers)
         """
     )
     if not rows:

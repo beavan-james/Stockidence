@@ -6,7 +6,7 @@ key, and cache TTL. The Dagster assets that come later read this registry
 rather than hardcoding schedules/parameters.
 
 Cadence follows ARCHITECTURE.md:
-  monthly / weekdays / daily  -> scheduled jobs (persistent data)
+  monthly / weekdays / overnight / daily -> scheduled jobs (persistent data)
   hot-path                    -> behind the Finnhub quote cache (TTL ~1 min)
   on-demand-stale             -> fetched per ticker via the staleness gate
   immutable / conditional     -> variation of on-demand-stale
@@ -47,6 +47,7 @@ class Trigger(StrEnum):
 class Cadence(StrEnum):
     MONTHLY = "monthly"
     WEEKDAYS = "weekdays"
+    OVERNIGHT = "overnight"  # after midnight, for sources that publish a session late that evening
     DAILY = "daily"
     HOT_PATH = "hot_path"
     IMMUTABLE = "immutable"
@@ -181,18 +182,20 @@ _REGISTRY: list[EndpointSpec] = [
         ttl=timedelta(days=31),
         notes="Finnhub /stock/symbol full listing; keyed by mic so US + others are distinct",
     ),
-    # --- persistent: weekdays ---
+    # --- persistent: overnight ---
     EndpointSpec(
         name="top_gainers_losers",
         provider=Provider.ALPHA_VANTAGE,
         method="top_gainers_losers",
         trigger=Trigger.SCHEDULED,
-        cadence=Cadence.WEEKDAYS,
-        watermark=("ticker", "date"),
+        cadence=Cadence.OVERNIGHT,
+        watermark=("ticker", "date", "bucket"),
         artifacts=("raw_gainers_losers",),
         ttl=timedelta(days=1),
-        notes="POST-market close snapshot; one row per mover bucket",
+        notes="a session's list, published late that evening on the free tier; "
+        "date is the session (last_updated), one row per mover bucket",
     ),
+    # --- persistent: weekdays ---
     EndpointSpec(
         name="ipo_calendar",
         provider=Provider.FINNHUB,

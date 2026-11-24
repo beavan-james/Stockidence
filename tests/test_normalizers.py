@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from stockidence.ingest.raw_mapping import (
     NORMALIZERS,
@@ -175,13 +175,17 @@ def test_peers_wraps_list():
 
 def test_gainers_losers():
     payload = {
+        "last_updated": "2026-08-14 16:15:59 US/Eastern",
         "top_gainers": [{"ticker": "AAA", "price": "10.0", "change_percentage": "5"}],
         "top_losers": [{"ticker": "BBB", "price": "1.0", "change_percentage": "-9"}],
         "most_actively_traded": [{"ticker": "CCC", "price": "50.0"}],
     }
     rows = normalize_for("top_gainers_losers", payload, "top_gainers_losers", NOW)["raw_gainers_losers"]
     assert {r["ticker"] for r in rows} == {"AAA", "BBB", "CCC"}
-    assert all(r["date"] == NOW.date() for r in rows)
+    # the session the list describes, not the day it was fetched
+    assert NOW.date() != date(2026, 8, 14)
+    assert all(r["date"] == date(2026, 8, 14) for r in rows)
+    assert all(r["payload"]["last_updated"] == "2026-08-14 16:15:59 US/Eastern" for r in rows)
 
 
 def test_earnings_calendar():

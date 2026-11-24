@@ -378,6 +378,7 @@ Current schedule in New York time (the UTC crons move an hour with DST):
 
 | Job | When (ET) | Holds DuckDB |
 |---|---|---|
+| `overnight_ingest` | 00:30, Tue–Sat | Briefly |
 | `news_ingest` | 07:00 and 19:00 (06:00 and 18:00 in winter), daily | Briefly |
 | `daily_digest` | 07:30 weekdays | Briefly |
 | `weekly_digest` | 07:30 Saturday | Briefly |
@@ -424,6 +425,11 @@ Known overlaps (with the pool below, these jobs wait instead of failing):
   17:30 ET) starts the same minute as `weekly_model_refresh`. The evening
   news pull and `daily_ingest` land inside the retrain whenever it runs
   past them (1.5 and 3.5 hours in).
+- **Retrains into the overnight movers:** `overnight_ingest` (00:30) comes 7
+  hours after the weekly retrain starts, and 1.5 hours (2.5 in winter) after
+  the quarterly one on the 1st of a quarter. If either is still holding the
+  lock, that night's movers can fail (the gap below) and the site keeps the
+  session before.
 - **Monthly into quarterly:** `monthly_ingest` runs one hour before the
   quarterly retrain on the last evening of Mar/Jun/Sep/Dec.
 
@@ -439,6 +445,10 @@ taken per op, so a waiting job can get in between a retrain's steps.
   retries.
 - **Cost:** on Fridays the evening news pull and `daily_ingest` now run late,
   when the weekly refresh step ends, instead of failing.
+- **Gap, not fixed:** the `engine` resource runs `init_schema` when a run
+  starts, before its first op claims the slot (checked in a throwaway
+  instance). A run that starts while another job holds the lock past the
+  ~164 seconds of retries fails there instead of waiting.
 - **Server:** pools need the instance's concurrency tables. If the daemon
   logs that the instance doesn't support them, run
   `dagster instance migrate` once.

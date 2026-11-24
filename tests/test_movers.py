@@ -1,10 +1,12 @@
-"""Daily movers: latest snapshot only, ranked lists, bucket in the raw key."""
+"""Daily movers: dated by their session, latest snapshot only, ranked lists,
+bucket in the raw key."""
 
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
 import duckdb
+import pytest
 
 from stockidence.ingest.raw_mapping import normalize_for
 from stockidence.service import market
@@ -18,7 +20,8 @@ def _mover(ticker, price, change_amount, change_percentage, volume):
             "change_percentage": change_percentage, "volume": str(volume)}
 
 
-def _land(wh, payload, now):
+def _land(wh, payload, now, session="2026-10-02"):
+    payload = {"last_updated": f"{session} 16:15:59 US/Eastern", **payload}
     rows = normalize_for("top_gainers_losers", payload, "top_gainers_losers", now)["raw_gainers_losers"]
     wh.land("raw_gainers_losers", rows, fetched_at=now)
 
@@ -72,7 +75,7 @@ def test_movers_rank_by_dollar_move_and_dollar_volume(tmp_path, monkeypatch):
 def test_movers_use_latest_day_only_and_cap_at_limit(tmp_path, monkeypatch):
     wh = _warehouse(tmp_path, monkeypatch)
     old = datetime(2026, 9, 3, 21, 30, tzinfo=timezone.utc)
-    _land(wh, {"top_gainers": [_mover("STALE", 50.0, 20.0, "66%", 90_000_000)]}, old)
+    _land(wh, {"top_gainers": [_mover("STALE", 50.0, 20.0, "66%", 90_000_000)]}, old, "2026-09-03")
     fresh = [_mover(f"T{i:02d}", 10.0, 1.0 + i, "10%", 1_000_000) for i in range(15)]
     _land(wh, {"top_gainers": fresh}, NOW)
 
@@ -83,6 +86,55 @@ def test_movers_use_latest_day_only_and_cap_at_limit(tmp_path, monkeypatch):
     assert len(tickers) == market.MOVERS_LIMIT == 10
     assert tickers[0] == "T14"  # largest dollar change x volume
     assert m["movers_as_of"] == "Oct 02, 2026"
+
+
+def test_a_monday_fetch_of_fridays_list_is_dated_friday(tmp_path, monkeypatch):
+    wh = _warehouse(tmp_path, monkeypatch)
+    monday = datetime(2026, 11, 23, 21, 30, tzinfo=timezone.utc)
+    _land(wh, {"top_gainers": [_mover("AAA", 10.0, 1.0, "11%", 1_000_000)]}, monday, "2026-11-20")
+
+    assert market.get_market_movers()["movers_as_of"] == "Nov 20, 2026"
+
+
+def test_the_newest_fetch_wins_over_rows_dated_by_their_fetch_day(tmp_path, monkeypatch):
+    """Rows landed before dates came from the response: Friday's list, dated
+    Monday. Monday's own list then lands on the same date without mixing."""
+    wh = _warehouse(tmp_path, monkeypatch)
+    monday = datetime(2026, 11, 23, 21, 30, tzinfo=timezone.utc)
+    wh.land("raw_gainers_losers", [
+        {"ticker": t, "date": date(2026, 11, 23), "bucket": "top_gainers",
+         "payload": {**_mover(t, 10.0, 1.0, "11%", 1_000_000), "bucket": "top_gainers"}}
+        for t in ("OLD", "BOTH")
+    ], fetched_at=monday)
+    _land(wh, {"top_gainers": [_mover("BOTH", 12.0, 2.0, "20%", 2_000_000),
+                               _mover("NEW", 30.0, 5.0, "20%", 3_000_000)]},
+          datetime(2026, 11, 24, 5, 30, tzinfo=timezone.utc), "2026-11-23")
+
+    m = market.get_market_movers()
+
+    assert [(r["ticker"], r["price"]) for r in m["top_gainers"]] == [("NEW", "30.0"), ("BOTH", "12.0")]
+    assert m["movers_as_of"] == "Nov 23, 2026"
+
+
+def test_an_older_session_fetched_last_is_shown_as_itself(tmp_path, monkeypatch):
+    """The first corrected fetch can describe an earlier session than the
+    misdated rows it replaces."""
+    wh = _warehouse(tmp_path, monkeypatch)
+    _land(wh, {"top_gainers": [_mover("MISDATED", 10.0, 1.0, "11%", 1_000_000)]},
+          datetime(2026, 11, 23, 21, 30, tzinfo=timezone.utc), "2026-11-23")
+    _land(wh, {"top_gainers": [_mover("FRIDAY", 10.0, 1.0, "11%", 1_000_000)]},
+          datetime(2026, 11, 23, 23, 0, tzinfo=timezone.utc), "2026-11-20")
+
+    m = market.get_market_movers()
+
+    assert [r["ticker"] for r in m["top_gainers"]] == ["FRIDAY"]
+    assert m["movers_as_of"] == "Nov 20, 2026"
+
+
+@pytest.mark.parametrize("payload", [{}, {"last_updated": ""}, {"last_updated": "soon"}])
+def test_a_list_with_no_session_date_is_refused(payload):
+    with pytest.raises(ValueError, match="last_updated"):
+        normalize_for("top_gainers_losers", payload, "top_gainers_losers", NOW)
 
 
 def test_init_schema_migrates_old_table_keeping_rows(tmp_path):

@@ -112,7 +112,8 @@ and refresh pipeline: [`Model/README.md`](Model/README.md).
 - **Near-real-time:** Finnhub quote (cache TTL ~1 min)
 - **Daily:** VIX / S&P 500 market indexes (FRED)
 - **Twice daily + overnight:** market news (Finnhub; 7am / 7pm ET pulls, plus the 01:00 UTC daily pull; upserts on article_id, served with SQL-side date filter + paging)
-- **Weekdays:** movers, IPO/earnings calendars
+- **Overnight (00:30 ET, Tue–Sat):** movers for the session that just closed; the free tier publishes them late in the evening
+- **Weekdays:** IPO/earnings calendars
 - **Monthly:** commodities, macro indicators, stock symbol listing
 - **Quarterly/irregular:** fundamentals, earnings, transcripts
 

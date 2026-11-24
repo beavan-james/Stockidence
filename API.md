@@ -696,7 +696,9 @@ Average true range.
 
 One response per bucket: `top_gainers`, `top_losers`, and `top_most_active`
 (each a list of `{ticker, price, change_amount, change_percentage, volume}`),
-persisted to `raw_gainers_losers` keyed `(ticker, date)`.
+persisted to `raw_gainers_losers` keyed `(ticker, date, bucket)`. `date` is the
+session in `last_updated`, not the day of the fetch: the free tier publishes a
+session's list late that evening, and serves the session before until then.
 
 ```json
 {

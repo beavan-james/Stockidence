@@ -11,7 +11,8 @@ POST /api/pipeline/refresh, which launches ``refresh_tickers`` directly
 via GraphQL. Nothing polls.
 
 Exposes:
-  - monthly_ingest / weekdays_ingest / daily_ingest jobs (schedule-bound)
+  - monthly_ingest / weekdays_ingest / overnight_ingest / daily_ingest jobs
+    (schedule-bound)
   - quarterly_model_refresh job (schedule-bound): universe refresh ->
     quarterly dataset rebuild -> notebook retrain + ranking export
   - weekly_model_refresh job (schedule-bound, Fridays after the close):
@@ -161,6 +162,7 @@ def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...
 
 monthly_job = _make_cadence_job(Cadence.MONTHLY)
 weekdays_job = _make_cadence_job(Cadence.WEEKDAYS)
+overnight_job = _make_cadence_job(Cadence.OVERNIGHT)
 daily_job = _make_cadence_job(
     Cadence.DAILY,
     post_derived=(("fred_staging", rebuild_fred_staging), ("fred_mart", rebuild_fred_mart)),
@@ -177,10 +179,19 @@ def monthly_schedule() -> dict:  # noqa: ANN401
 @schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5",
           default_status=DefaultScheduleStatus.RUNNING)
 def weekdays_schedule() -> dict:  # noqa: ANN401
-    """21:30 UTC on trading days: right after the US close (20:00 UTC in
-    DST, 21:00 UTC in winter), so gainers/losers and IPO + earnings
-    calendars capture that day's session. The previous midnight-UTC cron
-    skipped Friday's session entirely and ran Monday against stale data."""
+    """21:30 UTC on weekdays, after the US close (20:00 UTC in DST, 21:00 UTC
+    in winter): the IPO and earnings calendars."""
+    return {}
+
+
+@schedule(job=overnight_job, cron_schedule="30 0 * * 2-6",
+          execution_timezone="America/New_York",
+          default_status=DefaultScheduleStatus.RUNNING)
+def overnight_schedule() -> dict:  # noqa: ANN401
+    """00:30 New York time, Tuesday to Saturday: the movers of the session
+    that closed the afternoon before. Alpha Vantage's free tier publishes a
+    session's list late in the evening; at 17:30 it still served the session
+    before. Clear of every other job unless a retrain is still running."""
     return {}
 
 
@@ -835,10 +846,10 @@ defs = Definitions(
     resources={"engine": engine_resource, "llm": llm_resource},
     assets=[ticker_data, stg_prices_daily, stg_financials_reported, m_prices_weekly,
             m_prices_monthly, m_advanced_analytics, m_technical_indicators, ticker_score],
-    jobs=[monthly_job, weekdays_job, daily_job, news_job, daily_digest_job, weekly_digest_job,
-          refresh_tickers_job, refresh_quotes_job, quarterly_model_refresh_job,
+    jobs=[monthly_job, weekdays_job, overnight_job, daily_job, news_job, daily_digest_job,
+          weekly_digest_job, refresh_tickers_job, refresh_quotes_job, quarterly_model_refresh_job,
           model_retrain_job, weekly_model_refresh_job, weekly_rank_job],
-    schedules=[monthly_schedule, weekdays_schedule, daily_schedule,
+    schedules=[monthly_schedule, weekdays_schedule, overnight_schedule, daily_schedule,
                news_morning_schedule, news_evening_schedule, daily_digest_schedule,
                weekly_digest_schedule,
                quarterly_schedule, weekly_schedule],

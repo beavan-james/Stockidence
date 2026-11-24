@@ -6,7 +6,7 @@
 - **Commodities** — one table, key `(nominal, date)` — gold/silver spot prices (monthly)
 - **Market indexes** — `raw_fred_market`, key `(series, date)` — CBOE VIX (`VIXCLS`, full history) and S&P 500 price index (`SP500`, ~10y daily per S&P licensing), landed daily from FRED; typed in `stg_fred_market`, aggregated into `m_fred_market` (levels + close-to-close momentum over 5/21/63/126/252d). Serves the ML model datasets as point-in-time market-regime features (daily)
 - **Macro indicators** — one table, key `(indicator, date)` — CPI, unemployment, fed funds, natural gas, inflation, real GDP (one row per indicator/date rather than a separate table per series) (monthly)
-- **Top Gainers/Losers** — own table, key `(ticker, date)` (weekdays)
+- **Top Gainers/Losers** — own table, key `(ticker, date, bucket)`; `date` is the session the list describes (Alpha Vantage's `last_updated`), never the fetch date (overnight: 00:30 ET Tue–Sat, since the free tier publishes a session late that evening)
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
 - **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
 - **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published (Finnhub general news; older Alpha Vantage rows also carry overall_sentiment_score) (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with headline/date filters so paging never loads the full table)
@@ -61,7 +61,7 @@ flowchart TD
     LLM(["Local model<br/>Qwen3.5-4B on Ollama"])
 
     subgraph ORCH["Dagster orchestration"]
-        SCHED["Scheduled jobs<br/>monthly · weekdays · daily<br/>market-wide persistent data"]
+        SCHED["Scheduled jobs<br/>monthly · weekdays · overnight · daily<br/>market-wide persistent data"]
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
         WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
         DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → stage → group + rank stories<br/>→ article pages → text → cards → summaries"]

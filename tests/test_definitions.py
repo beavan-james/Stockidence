@@ -21,10 +21,10 @@ def defs():
 
 def test_definitions_expose_jobs_schedules_assets(defs):
     job_names = {j.name for j in defs.resolve_all_job_defs()}
-    assert {"monthly_ingest", "weekdays_ingest", "daily_ingest"} <= job_names
+    assert {"monthly_ingest", "weekdays_ingest", "overnight_ingest", "daily_ingest"} <= job_names
 
     schedule_names = {s.name for s in defs.schedules}
-    assert {"monthly_schedule", "weekdays_schedule", "daily_schedule"} <= schedule_names
+    assert {"monthly_schedule", "weekdays_schedule", "overnight_schedule", "daily_schedule"} <= schedule_names
 
     assert any("ticker_data" in str(k) for k in defs.resolve_asset_graph().get_all_asset_keys())
 
@@ -39,16 +39,25 @@ def test_cadence_jobs_follow_registry():
         cadence = {
             "monthly_ingest": Cadence.MONTHLY,
             "weekdays_ingest": Cadence.WEEKDAYS,
+            "overnight_ingest": Cadence.OVERNIGHT,
             "daily_ingest": Cadence.DAILY,
         }[job_name]
         return {spec.name for spec in scheduled_endpoints() if spec.cadence == cadence}
 
     assert "commodities.gold" in names("monthly_ingest")
     assert "macro.cpi" in names("monthly_ingest")
-    assert "top_gainers_losers" in names("weekdays_ingest")
+    assert names("overnight_ingest") == {"top_gainers_losers"}
+    assert "top_gainers_losers" not in names("weekdays_ingest")
     assert "ipo_calendar" in names("weekdays_ingest")
     assert "market_news" in names("daily_ingest")
     assert "quote" not in names("daily_ingest")
+
+
+def test_movers_run_after_midnight_new_york(defs):
+    overnight = next(s for s in defs.schedules if s.name == "overnight_schedule")
+    assert overnight.job_name == "overnight_ingest"
+    assert overnight.cron_schedule == "30 0 * * 2-6"  # Tue-Sat, for the Mon-Fri sessions
+    assert overnight.execution_timezone == "America/New_York"
 
 
 def test_ticker_data_asset_runs_with_fake_engine(tmp_path):
