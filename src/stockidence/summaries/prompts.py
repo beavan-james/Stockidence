@@ -3,7 +3,7 @@ PROMPT_VERSION: change any prompt here, bump the version."""
 
 from __future__ import annotations
 
-PROMPT_VERSION = "news-v1"
+PROMPT_VERSION = "news-v2"
 
 # Rules every writing prompt shares, so the checks and the prompts agree.
 _FACT_RULES = """\
@@ -55,6 +55,13 @@ thread: tell it in date order. Other sections of the article cover the \
 stories listed under "Other sections"; don't repeat them.
 
 {_FACT_RULES}"""
+
+# Added to the end of the prompt for the second attempt when the first used
+# names the cards don't have. The check still reads the prompt without it,
+# so naming them here doesn't let them through.
+RETRY_NAMES = """\
+Don't use these names, which the cards don't give: {names}. Name people \
+and organizations only as the cards do."""
 
 OVERVIEW_SYSTEM = f"""\
 You write the opening of a weekly market news article: one paragraph of \

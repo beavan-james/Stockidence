@@ -35,7 +35,8 @@ const TEXT: Record<
 > = {
   daily: {
     dated: (date) => weekday(date) >= 1 && weekday(date) <= 5,
-    title: longDay,
+    // A daily digest covers the 24 hours to 7:00 ET, so it is that morning's premarket news.
+    title: (date) => `${longDay(date)} premarket`,
     step: shortDay,
     missing: (date) => `There is no digest for ${longDay(date)}.`,
     misdated: "Daily digests are built on weekdays only.",

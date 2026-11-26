@@ -6,10 +6,9 @@ small local model from the full text of the articles, and both list their
 sources. This file is the governing spec for that pipeline: the article
 scraper, the model harness, and where the jobs run.
 
-Status (2026-11-23): every pipeline step is built and tested: the
-selection changes (step 1), the scraper (steps 2–3), the model harness
-(steps 4–7, against a scripted model) and the News page showing the
-summaries. None has run on the server yet.
+Status (2026-11-26): every pipeline step is built and has run on the
+server since 2026-11-24, but no article has been readable yet, so every
+card has been a fallback (see "First runs on the server" under Open).
 
 ## What the reader gets
 
@@ -43,15 +42,18 @@ it on wide screens and under it on phones. The overview has no list of its
 own, since every one of its stories is listed under a section. A
 `sources_only` weekly section shows its heading and sources. A date with
 no article on or before it (every digest before the first run) shows the
-digest's top 10 stories as headline links, without scores.
+digest's top 10 stories as headline links, without scores. A daily is
+headed "Thursday, Nov 26 premarket", since it covers the 24 hours to 07:00
+ET: mostly the day before, read before that morning's open.
 
 ## Principles
 
 - Code chooses, fetches, plans and checks; the model only turns facts it is
   given into sentences. Same rule as AGENTS.md: the model sits on top of the
   deterministic core and never replaces it.
-- Every number and ticker the model writes must appear in what it was
-  given, or the output is rejected.
+- Every number, ticker and name the model writes must appear in what it
+  was given. A ticker in parentheses that doesn't is dropped from the text;
+  anything else rejects the output.
 - No advice. The summaries report news; they never say to buy, sell or
   hold.
 - Every model output is stored with the model name and prompt version, so
@@ -266,8 +268,26 @@ prompt that call was given:
   and keeps at least two significant figures (13.48 written as 13.5 or 13
   passes; 2.4 written as 2 doesn't). Labels such as Q3 aren't checked.
 - **Tickers.** The prompts ask for tickers in parentheses after the name,
-  "Nvidia (NVDA)". Any capitalized code in parentheses or after a `$`
-  must be in the prompt, which also catches made-up acronyms.
+  "Nvidia (NVDA)". A code in parentheses that the prompt doesn't have is
+  dropped from the text, not failed ("CrowdStrike (CRWD) fell" becomes
+  "CrowdStrike fell"), and logged: the model adds the tickers it knows,
+  and the general news feed gives none, so this rejected the Nov 24 and 25
+  paragraphs twice each. A code after a `$` is part of its sentence, so it
+  must be in the prompt.
+- **Names.** Every capitalized word that doesn't start a sentence must be
+  in the prompt, in any case, which catches names the model adds from
+  memory: "Michael Boehly" when the headline says "Boehly", "Mark Rutte"
+  for "NATO chief". Free of the check (`_FREE_NAMES`, provisional): day
+  and month names, titles written before a name, company suffixes, a few
+  acronyms (CEO, GDP, CPI, EPS, IPO, ETF, AI) and Wall Street; "United
+  States" and "America" pass when the prompt has "US", likewise UK, EU and
+  Fed. A sentence's first word isn't checked, so a made-up name opening a
+  sentence gets through.
+- **Retry.** When the first answer added names, the retry's prompt ends
+  with them: "Don't use these names, which the cards don't give: …"
+  (`prompts.RETRY_NAMES`, from `news-v2`). Without it the temperature 0
+  retry repeated the same mistake. The retry is still checked against the
+  prompt without that line.
 - **Advice.** Recommendation wording: "should", "ought to", "recommend",
   buy/sell/hold ratings, "is a buy", "time to sell", price targets,
   upgrades and downgrades to a rating, "investors may want". The words
@@ -482,8 +502,27 @@ Agreed 2026-11-23 (provisional values, step 1 as built above):
 - `macro` no longer matches "fed up" or a bare "rate hike" or "rate cut".
 - `policy` stories get the category input's full marks, like the others.
 
+Agreed 2026-11-26:
+
+- A ticker in parentheses that the prompt doesn't have is dropped from the
+  text instead of failing it.
+- The name check, with the free list above (provisional), and a retry
+  that lists the names to leave out.
+- The daily keeps its 07:30 ET run and its window; the page heads it as
+  that date's premarket news.
+
 Open:
 
 - Retrain run times.
-- The first real run on the server: card pass rate, fallback rate, and
-  actual run times against the estimates above.
+- A news feed whose stories the scraper may read (below).
+
+First runs on the server (2026-11-24 to 26, `daily_digest`): each run
+took 2–4 minutes, since no article was readable and every card was a
+fallback made without a model call. Finnhub's general news now comes from
+two outlets: Reuters, linked through `news.google.com` (disallowed by
+robots.txt; Reuters also opts out of AI crawlers), and CNBC (an AI
+opt-out). 0 of 30 picked stories were read, and Reuters' feed summary
+repeats the headline, so the daily was written from ten headlines. The Nov
+24 and 25 paragraphs failed the ticker check twice (CRWD, NVDA) and showed
+nothing; Nov 26's passed but added names and reasons the headlines don't
+give, which the name check now rejects.

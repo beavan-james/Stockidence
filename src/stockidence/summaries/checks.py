@@ -11,7 +11,13 @@ made up is caught.
   13.5 or 13 passes, 2.4 written as 2 doesn't).
 - A ticker is a capitalized code in parentheses or after a $, as the
   prompts ask: "Nvidia (NVDA)", "$NVDA". It passes when the prompt has
-  it as a word. Acronyms in parentheses, "(FTC)", pass the same way.
+  it as a word. Acronyms in parentheses, "(FTC)", pass the same way. The
+  writers drop one in parentheses that the prompt doesn't have before
+  checking (drop_unsupported_tickers), so only a $ ticker can fail.
+- A name is a capitalized word that doesn't start a sentence. It passes
+  when the prompt has it in any case, or it is a day, month, title or
+  other word in _FREE_NAMES, so "Michael Boehly" fails when the prompt
+  only says "Boehly".
 - Advice is recommendation wording, not the words "buy" and "sell" alone,
   which deal news needs ("agreed to buy").
 """
@@ -28,10 +34,10 @@ _NUMBER_WORDS = {
     "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11", "twelve": "12",
 }
 _WORD = re.compile(r"[a-z]+")
-_TICKER = re.compile(
-    r"\((?:(?:NASDAQ|NYSE|AMEX|OTC)[A-Z]*\s*:\s*)?([A-Z][A-Z0-9]{0,5}(?:\.[A-Z]{1,2})?)\)"
-    r"|\$([A-Z][A-Z0-9]{0,5}(?:\.[A-Z]{1,2})?)\b"
-)
+_CODE = r"[A-Z][A-Z0-9]{0,5}(?:\.[A-Z]{1,2})?"
+_IN_PARENS = rf"\((?:(?:NASDAQ|NYSE|AMEX|OTC)[A-Z]*\s*:\s*)?({_CODE})\)"
+_TICKER = re.compile(rf"{_IN_PARENS}|\$({_CODE})\b")
+_PAREN_TICKER = re.compile(rf"[ \t]*{_IN_PARENS}")
 _ADVICE = re.compile("|".join((
     r"\bshould\b",
     r"\bought to\b",
@@ -102,6 +108,79 @@ def unsupported_tickers(text: str, given: str) -> list[str]:
     return [t for t in dict.fromkeys(tickers_in(text)) if not has_word(given, t)]
 
 
+def drop_unsupported_tickers(text: str, given: str) -> tuple[str, list[str]]:
+    """The text without the tickers in parentheses that the prompt doesn't
+    have, and those tickers: "Nvidia (NVDA) rose" becomes "Nvidia rose".
+    The model knows most tickers but only the given ones are checked, so an
+    unchecked one is dropped rather than the whole text. A $ ticker is part
+    of its sentence, so it stays for the ticker check to reject."""
+    dropped: list[str] = []
+
+    def drop(m: re.Match) -> str:
+        if has_word(given, m.group(1)):
+            return m.group(0)
+        dropped.append(m.group(1))
+        return ""
+
+    return _PAREN_TICKER.sub(drop, text), list(dict.fromkeys(dropped))
+
+
+# Capitalized words the text may use that the prompt needn't have: day and
+# month names, titles written before a name, company suffixes and common
+# acronyms. Provisional, like the advice list.
+_FREE_NAMES = frozenset(w.lower() for w in (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    "January", "February", "March", "April", "May", "June", "July", "August",
+    "September", "October", "November", "December",
+    "President", "Vice", "Chair", "Chairman", "Chairwoman", "Governor", "Senator",
+    "Secretary", "Minister", "Prime", "Chief", "Executive", "Officer", "CEO", "CFO",
+    "Inc", "Corp", "Co", "Ltd", "LLC", "PLC",
+    "GDP", "CPI", "EPS", "IPO", "ETF", "AI",
+    "Wall", "Street",
+))
+# Long forms of names the feed writes short, free when the prompt has the
+# short form: "United States" when it says "US".
+_LONG_FORMS = {
+    "us": ("united", "states", "america"),
+    "uk": ("united", "kingdom", "britain"),
+    "eu": ("european", "union"),
+    "fed": ("federal", "reserve"),
+}
+_EDGES = "\"'“”‘’()[]{},;:!?*"
+_SENTENCE_END = re.compile(r"[.!?][\"'”’)\]]*$")
+_JOINER = re.compile(r"[-/–—]")
+
+
+def _name_parts(raw: str) -> list[str]:
+    """A word as names are compared: edge punctuation, a closing full stop,
+    a possessive and inner dots removed ("U.S." is "US", "Korea's" is
+    "Korea"), then split at hyphens and slashes ("US-backed")."""
+    word = raw.strip(_EDGES).rstrip(".")
+    word = re.sub(r"['’]s?$", "", word).replace(".", "")
+    return [p for p in _JOINER.split(word) if p]
+
+
+def unsupported_names(text: str, given: str) -> list[str]:
+    """Capitalized words the prompt doesn't have (in any case): names the
+    model added from memory, like a first name the headline didn't give or
+    an official the headline names only by title. A sentence's first word
+    isn't checked, since every sentence starts with a capital; words with
+    digits are labels, like Q3."""
+    known = {p.lower() for raw in given.split() for p in _name_parts(raw)} | _FREE_NAMES
+    for short, long_form in _LONG_FORMS.items():
+        if short in known:
+            known.update(long_form)
+    bad: list[str] = []
+    starts_sentence = True
+    for raw in text.split():
+        if not starts_sentence:
+            bad += [p for p in _name_parts(raw)
+                    if len(p) > 1 and p[0].isupper() and not any(c.isdigit() for c in p)
+                    and p.lower() not in known]
+        starts_sentence = _SENTENCE_END.search(raw) is not None
+    return list(dict.fromkeys(bad))
+
+
 def advice(text: str) -> list[str]:
     return [m.group(0) for m in _ADVICE.finditer(text)]
 
@@ -117,6 +196,8 @@ def check_prose(text: str, given: str, words: tuple[int, int]) -> list[str]:
         problems.append(f"numbers not in the input: {', '.join(bad)}")
     if bad := unsupported_tickers(text, given):
         problems.append(f"tickers not in the input: {', '.join(bad)}")
+    if bad := unsupported_names(text, given):
+        problems.append(f"names not in the input: {', '.join(bad)}")
     if found := advice(text):
         problems.append(f"advice wording: {', '.join(found)}")
     n = word_count(text)

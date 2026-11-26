@@ -136,6 +136,31 @@ def test_tickers_and_acronyms_must_be_in_the_input():
     assert checks.unsupported_tickers("Nvidia (NVDA), $AMD and Intel (NASDAQ: INTC)", given) == ["AMD", "INTC"]
 
 
+def test_tickers_the_input_lacks_are_dropped_from_the_text():
+    given = "Nvidia (NVDA) and CrowdStrike"
+    text, dropped = checks.drop_unsupported_tickers(
+        "Nvidia (NVDA) rose, CrowdStrike (CRWD) fell and Intel (NASDAQ: INTC) held; $AMD too.", given)
+    assert text == "Nvidia (NVDA) rose, CrowdStrike fell and Intel held; $AMD too."
+    assert dropped == ["CRWD", "INTC"]
+    # a $ ticker is part of its sentence, so the check still catches it
+    assert checks.unsupported_tickers(text, given) == ["AMD"]
+
+
+def test_names_must_be_in_the_input():
+    given = ("Billionaire Boehly signs US-backed deal to buy Lukoil global assets. "
+             "Trump and NATO chief urge Russia to avoid actions that widen Ukraine war.")
+    text = ("Talks went on. Billionaire Michael Boehly agreed to buy Lukoil assets, while "
+            "Trump and NATO chief Mark Rutte urged Russia to hold back.")
+    assert checks.unsupported_names(text, given) == ["Michael", "Mark", "Rutte"]
+
+
+def test_names_allow_sentence_starts_calendar_titles_and_long_forms():
+    given = "Thursday: US tariffs on Brazil. South Korea's central bank raises rates. Trump speaks."
+    text = ("Meanwhile, on Thursday, November 26, U.S. President Trump's tariffs on Brazil hit the "
+            "United States, and South Korea's central bank raised rates in its Q3 review.")
+    assert checks.unsupported_names(text, given) == []
+
+
 @pytest.mark.parametrize("text", [
     "Investors should watch the stock.",
     "Analysts raised their price target to 200.",
@@ -395,6 +420,28 @@ def test_a_daily_that_fails_twice_shows_only_its_sources():
     assert summary.status == SOURCES_ONLY and summary.body is None and summary.model is None
     assert [c["temperature"] for c in llm.calls] == [None, 0.0]
     assert any("advice" in p for p in summary.problems)
+
+
+def test_a_ticker_the_cards_lack_is_dropped_not_failed():
+    llm = FakeModel(lambda s, u, t, sc: "Nvidia (NVDA) led the news. " + _prose(u, 165))
+    card = _card("daily-2026-11-20-1", companies=[{"ticker": "", "name": "Nvidia"}])
+    summary = write_daily(llm, date(2026, 11, 20), [(_story(tickers=()), card)], NOW)
+    assert summary.status == OK and summary.body.startswith("Nvidia led the news.")
+    assert summary.problems == ("dropped tickers not in the input: NVDA",)
+    assert len(llm.calls) == 1
+
+
+def test_the_retry_names_the_names_to_leave_out():
+    # complies only once the prompt tells it which names to leave out
+    llm = FakeModel(lambda s, u, t, sc: _prose(u, 170) + ("" if "Jensen" in u else " It cited Jensen Huang."))
+    summary = write_daily(llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW)
+    assert summary.status == OK and "Jensen" not in summary.body
+    assert summary.problems == ("names not in the input: Jensen, Huang",)
+    first, second = (c["user"] for c in llm.calls)
+    assert "Jensen" not in first
+    assert second.startswith(first) and second.endswith(
+        "Don't use these names, which the cards don't give: Jensen, Huang. "
+        "Name people and organizations only as the cards do.")
 
 
 def test_headings_and_lists_are_rejected():

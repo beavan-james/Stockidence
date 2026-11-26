@@ -2,8 +2,11 @@
 (mart.news_summaries).
 
 Each call is checked against the prompt it was given (checks.check_prose):
-numbers, tickers, length and advice wording. A failure is asked for again
-at temperature 0; if that fails too, the part is stored with status
+numbers, tickers, names, length and advice wording. A ticker in parentheses
+that the prompt doesn't have is dropped from the text first, not counted as
+a failure, since the model adds the ones it knows. A failure is asked for again
+at temperature 0, with the names the first answer added listed for the model
+to leave out (prompts.RETRY_NAMES); if that fails too, the part is stored with status
 `sources_only` and no body, and the page shows that part's sources instead.
 
 Lengths: the prompts ask for the spec's word counts, and the check allows
@@ -18,10 +21,16 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from .cards import Card, render_card
-from .checks import check_prose
+from .checks import check_prose, drop_unsupported_tickers, unsupported_names
 from .model import Ollama, PromptTooLong
 from .plan import Section, names_in
-from .prompts import DAILY_SYSTEM, OVERVIEW_SYSTEM, PROMPT_VERSION, SECTION_SYSTEM
+from .prompts import (
+    DAILY_SYSTEM,
+    OVERVIEW_SYSTEM,
+    PROMPT_VERSION,
+    RETRY_NAMES,
+    SECTION_SYSTEM,
+)
 from .stories import StoryInput
 
 DAILY_WORDS = (150, 200)
@@ -73,9 +82,10 @@ def write(llm: Ollama, system: str, given: str, *, words: tuple[int, int], max_o
     is None when neither passed. Raises ModelUnavailable when the server is down."""
     problems: list[str] = []
     bounds = allowed(words)
+    prompt = given
     for temperature in (None, 0.0):
         try:
-            reply = llm.chat(system, given, max_output=max_output, temperature=temperature)
+            reply = llm.chat(system, prompt, max_output=max_output, temperature=temperature)
         except PromptTooLong as e:
             return None, [*problems, str(e)]
         if reply.cut_off:
@@ -85,10 +95,15 @@ def write(llm: Ollama, system: str, given: str, *, words: tuple[int, int], max_o
             problems.append("headings or lists")
             continue
         text = tidy_prose(reply.text, paragraphs)
+        text, dropped = drop_unsupported_tickers(text, given)
+        if dropped:
+            problems.append(f"dropped tickers not in the input: {', '.join(dropped)}")
         found = check_prose(text, given, bounds)
         if not found:
             return text, problems
         problems += found
+        if names := unsupported_names(text, given):
+            prompt = f"{given}\n\n{RETRY_NAMES.format(names=', '.join(names))}"
     return None, problems
 
 
