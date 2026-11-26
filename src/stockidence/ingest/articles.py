@@ -47,6 +47,9 @@ TRIES_PER_STORY = 3
 MAX_ATTEMPTS = 3
 RETRY_AFTER = timedelta(hours=6)
 MAX_REQUESTS = 60  # page requests per run, a cap for backfills
+# robots.txt is plain text. IIS answers the pages' HTML-only Accept with a
+# 406, which would read as "no rules".
+ROBOTS_ACCEPT = "text/plain, */*"
 
 # robots.txt verdicts, stored in raw.news_article_pages.robots
 ALLOWED = "allowed"
@@ -151,7 +154,7 @@ class ArticleFetcher:
         parser: urllib.robotparser.RobotFileParser | None = urllib.robotparser.RobotFileParser()
         self._wait(host)
         try:
-            resp = self.client.get(f"{key}/robots.txt")
+            resp = self.client.get(f"{key}/robots.txt", headers={"Accept": ROBOTS_ACCEPT})
             if resp.status_code in (401, 403):
                 parser.disallow_all = True
             elif 400 <= resp.status_code < 500:

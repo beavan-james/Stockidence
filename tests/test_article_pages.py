@@ -157,6 +157,22 @@ def test_missing_robots_txt_means_no_rules():
     assert _fetcher(net).fetch("https://a.com/story").readable
 
 
+def test_robots_txt_is_asked_for_as_text_and_pages_as_html():
+    # IIS answers a request whose Accept doesn't cover the file's type with a
+    # 406, which would read as "no rules"
+    def iis(request):
+        accept = request.headers.get("accept", "")
+        if request.url.path == "/robots.txt":
+            if "text/plain" not in accept:
+                return httpx.Response(406)
+            return _robots("User-agent: *\nDisallow: /private/\n")
+        return _page() if "text/html" in accept else httpx.Response(406)
+
+    fetcher = ArticleFetcher(articles.new_client(httpx.MockTransport(iis)), sleep=lambda s: None)
+    assert fetcher.fetch("https://a.com/private/story").robots == DISALLOWED
+    assert fetcher.fetch("https://a.com/story").readable
+
+
 def test_robots_txt_is_read_once_per_domain_and_requests_are_spaced():
     clock = Clock()
     net = Net({"https://a.com/robots.txt": _robots(), "https://a.com/1": _page(), "https://a.com/2": _page()})
