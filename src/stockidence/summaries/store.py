@@ -25,11 +25,11 @@ Digest = tuple[str, date]  # (period, digest_date)
 
 @dataclass(frozen=True)
 class SummaryInputs:
-    stories: tuple[StoryInput, ...]          # every story of the digests read
-    cards: dict[str, Card]                   # existing cards for any of their articles
-    sectors: dict[str, str]                  # ticker -> sector, for the weekly sections
+    stories: tuple[StoryInput, ...]  # every story of the digests read
+    cards: dict[str, Card]  # existing cards for any of their articles
+    sectors: dict[str, str]  # ticker -> sector, for the weekly sections
     summaries: dict[Digest, tuple[Summary, ...]]  # what the digests to write already have
-    write: tuple[Digest, ...]                # the digests to write a summary for
+    write: tuple[Digest, ...]  # the digests to write a summary for
 
 
 def _keys(digests: Iterable[Digest]) -> list[str]:
@@ -64,12 +64,39 @@ def _stories(con, digests: list[Digest]) -> list[StoryInput]:
         ).fetchall()
     }
     stories = []
-    for (period, day, rank, headline, outlet, summary, url, published, tickers, categories,
-         score, ids, story_urls) in rows:
+    for (
+        period,
+        day,
+        rank,
+        headline,
+        outlet,
+        summary,
+        url,
+        published,
+        tickers,
+        categories,
+        score,
+        ids,
+        story_urls,
+    ) in rows:
         readable = tuple(texts[u] for u in dict.fromkeys(story_urls) if u in texts)
-        stories.append(StoryInput(period, day, rank, headline, outlet, summary, url, published,
-                                  tuple(tickers or ()), tuple(categories or ()), score,
-                                  tuple(ids), readable))
+        stories.append(
+            StoryInput(
+                period,
+                day,
+                rank,
+                headline,
+                outlet,
+                summary,
+                url,
+                published,
+                tuple(tickers or ()),
+                tuple(categories or ()),
+                score,
+                tuple(ids),
+                readable,
+            )
+        )
     return stories
 
 
@@ -121,11 +148,14 @@ def _summaries(con, digests: list[Digest]) -> dict[Digest, tuple[Summary, ...]]:
     found: dict[Digest, list[Summary]] = {}
     for period, day, part, heading, body, keys, *rest in rows:
         found.setdefault((period, day), []).append(
-            Summary(period, day, part, heading, body, tuple(keys), *rest))
+            Summary(period, day, part, heading, body, tuple(keys), *rest)
+        )
     return {k: tuple(v) for k, v in found.items()}
 
 
-def read_inputs(warehouse: Warehouse, read: Iterable[Digest], write: Iterable[Digest]) -> SummaryInputs:
+def read_inputs(
+    warehouse: Warehouse, read: Iterable[Digest], write: Iterable[Digest]
+) -> SummaryInputs:
     """Everything the cards and summaries need: the stories of the digests
     `read`, with their readable pages and existing cards, and what the
     digests to `write` already have."""
@@ -148,8 +178,21 @@ def save_cards(warehouse: Warehouse, cards: list[Card]) -> int:
                 model, prompt_version, input_tokens, output_tokens, seconds, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [[c.story_key, c.source_url, json.dumps(c.card), c.status, c.model, c.prompt_version,
-              c.input_tokens, c.output_tokens, c.seconds, c.created_at] for c in cards],
+            [
+                [
+                    c.story_key,
+                    c.source_url,
+                    json.dumps(c.card),
+                    c.status,
+                    c.model,
+                    c.prompt_version,
+                    c.input_tokens,
+                    c.output_tokens,
+                    c.seconds,
+                    c.created_at,
+                ]
+                for c in cards
+            ],
         )
     return len(cards)
 
@@ -163,16 +206,31 @@ def save_summaries(warehouse: Warehouse, summaries: list[Summary]) -> int:
     with warehouse.connect() as con:
         con.execute("BEGIN TRANSACTION")
         for period, day in digests:
-            con.execute("DELETE FROM mart.news_summaries WHERE period = ? AND digest_date = ?",
-                        [period, day])
+            con.execute(
+                "DELETE FROM mart.news_summaries WHERE period = ? AND digest_date = ?",
+                [period, day],
+            )
         con.executemany(
             """
             INSERT INTO mart.news_summaries (period, digest_date, part, heading, body, story_keys,
                 status, model, prompt_version, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [[s.period, s.digest_date, s.part, s.heading, s.body, list(s.story_keys), s.status,
-              s.model, s.prompt_version, s.created_at] for s in summaries],
+            [
+                [
+                    s.period,
+                    s.digest_date,
+                    s.part,
+                    s.heading,
+                    s.body,
+                    list(s.story_keys),
+                    s.status,
+                    s.model,
+                    s.prompt_version,
+                    s.created_at,
+                ]
+                for s in summaries
+            ],
         )
         con.execute("COMMIT")
     return len(summaries)

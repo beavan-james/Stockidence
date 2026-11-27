@@ -55,9 +55,13 @@ def _article(aid, headline, *, hours=0, source="Reuters", tickers=(), feed=None,
 
 # --- window ----------------------------------------------------------------
 
+
 def test_window_runs_07_to_07_new_york_in_utc():
     # Tue Aug 25 2026 (EDT, UTC-4): Mon 07:00 ET to Tue 07:00 ET
-    assert digest_window(date(2026, 8, 25)) == (datetime(2026, 8, 24, 11), datetime(2026, 8, 25, 11))
+    assert digest_window(date(2026, 8, 25)) == (
+        datetime(2026, 8, 24, 11),
+        datetime(2026, 8, 25, 11),
+    )
 
 
 def test_monday_window_covers_the_weekend():
@@ -67,139 +71,174 @@ def test_monday_window_covers_the_weekend():
 
 def test_window_follows_standard_time():
     # Tue Nov 17 2026 (EST, UTC-5)
-    assert digest_window(date(2026, 11, 17)) == (datetime(2026, 11, 16, 12), datetime(2026, 11, 17, 12))
+    assert digest_window(date(2026, 11, 17)) == (
+        datetime(2026, 11, 16, 12),
+        datetime(2026, 11, 17, 12),
+    )
 
 
-@pytest.mark.parametrize("now, expected", [
-    (datetime(2026, 8, 25, 10, 59, tzinfo=timezone.utc), date(2026, 8, 24)),  # 06:59 ET Tue
-    (datetime(2026, 8, 25, 11, 0, tzinfo=timezone.utc), date(2026, 8, 25)),   # 07:00 ET Tue
-    (datetime(2026, 8, 29, 15, 0, tzinfo=timezone.utc), date(2026, 8, 28)),   # Saturday
-    (datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc), date(2026, 8, 28)),   # Mon before 07:00
-])
+@pytest.mark.parametrize(
+    "now, expected",
+    [
+        (datetime(2026, 8, 25, 10, 59, tzinfo=UTC), date(2026, 8, 24)),  # 06:59 ET Tue
+        (datetime(2026, 8, 25, 11, 0, tzinfo=UTC), date(2026, 8, 25)),  # 07:00 ET Tue
+        (datetime(2026, 8, 29, 15, 0, tzinfo=UTC), date(2026, 8, 28)),  # Saturday
+        (datetime(2026, 8, 31, 10, 0, tzinfo=UTC), date(2026, 8, 28)),  # Mon before 07:00
+    ],
+)
 def test_latest_digest_date(now, expected):
     assert latest_digest_date(now) == expected
 
 
 def test_weekly_window_runs_saturday_to_saturday_07_new_york():
     # dated Fri Aug 28 2026 (EDT): Sat Aug 22 07:00 ET to Sat Aug 29 07:00 ET
-    assert weekly_window(date(2026, 8, 28)) == (datetime(2026, 8, 22, 11), datetime(2026, 8, 29, 11))
+    assert weekly_window(date(2026, 8, 28)) == (
+        datetime(2026, 8, 22, 11),
+        datetime(2026, 8, 29, 11),
+    )
 
 
-@pytest.mark.parametrize("now, expected", [
-    (datetime(2026, 11, 21, 11, 59, tzinfo=timezone.utc), date(2026, 11, 13)),  # Sat 06:59 EST
-    (datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc), date(2026, 11, 20)),   # Sat 07:00 EST
-    (datetime(2026, 11, 22, 15, 0, tzinfo=timezone.utc), date(2026, 11, 20)),   # Sunday
-    (datetime(2026, 11, 20, 23, 0, tzinfo=timezone.utc), date(2026, 11, 13)),   # Friday evening
-])
+@pytest.mark.parametrize(
+    "now, expected",
+    [
+        (datetime(2026, 11, 21, 11, 59, tzinfo=UTC), date(2026, 11, 13)),  # Sat 06:59 EST
+        (datetime(2026, 11, 21, 12, 0, tzinfo=UTC), date(2026, 11, 20)),  # Sat 07:00 EST
+        (datetime(2026, 11, 22, 15, 0, tzinfo=UTC), date(2026, 11, 20)),  # Sunday
+        (datetime(2026, 11, 20, 23, 0, tzinfo=UTC), date(2026, 11, 13)),  # Friday evening
+    ],
+)
 def test_latest_weekly_date(now, expected):
     assert latest_weekly_date(now) == expected
 
 
 # --- filters ---------------------------------------------------------------
 
-@pytest.mark.parametrize("headline", [
-    "Vanguard Group Inc. Takes Position in Apple Inc. $AAPL",
-    "Acme Capital LLC Has $1.2 Million Stake in Deere & Company $DE",
-    "Intuit CFO Sells 16,524 Shares of Stock",
-    "Goldman Sachs Raises Nvidia Price Target to $250",
-    "Brown & Brown Inc. stock underperforms Tuesday when compared to competitors",
-    "Synopsys Inc. stock outperforms competitors on strong trading day",
-    "Evolve Private Wealth LLC Purchases New Position in The PNC Financial Services Group, Inc $PNC",
-    "Ieq Capital LLC Takes $9.78 Million Position in Dollar Tree, Inc. $DLTR",
-    "Maxi Investments CY Ltd Buys New Shares in Salesforce Inc. $CRM",
-    "Medtronic (MDT) Stock Dips While Market Gains: Key Facts",
-    "Bronstein, Gewirtz & Grossman LLC Urges Intuit Inc. Investors to Act: Class Action Filed",
-    "PODD Shareholder Alert: August 31, 2026 Lead Plaintiff Deadline in Insulet Class Action",
-    "Apple to Present at Goldman Sachs Communacopia Conference",
-    "Rollins Inc stock hits 52-week low at 35.31 USD By Investing.com",
-    "Copart stock may move 6.2% on Sept. 10 earnings release",
-    "INTEL CORPORATION - COMMON STOCK - Nancy Pelosi Congressional Trade on Jul. 24, 2026",
-    "Donald Trump - Salesforce Inc. Trump Trade on Jun. 18, 2026",
-])
+
+@pytest.mark.parametrize(
+    "headline",
+    [
+        "Vanguard Group Inc. Takes Position in Apple Inc. $AAPL",
+        "Acme Capital LLC Has $1.2 Million Stake in Deere & Company $DE",
+        "Intuit CFO Sells 16,524 Shares of Stock",
+        "Goldman Sachs Raises Nvidia Price Target to $250",
+        "Brown & Brown Inc. stock underperforms Tuesday when compared to competitors",
+        "Synopsys Inc. stock outperforms competitors on strong trading day",
+        "Evolve Private Wealth LLC Purchases New Position in The PNC Financial Services Group, Inc $PNC",
+        "Ieq Capital LLC Takes $9.78 Million Position in Dollar Tree, Inc. $DLTR",
+        "Maxi Investments CY Ltd Buys New Shares in Salesforce Inc. $CRM",
+        "Medtronic (MDT) Stock Dips While Market Gains: Key Facts",
+        "Bronstein, Gewirtz & Grossman LLC Urges Intuit Inc. Investors to Act: Class Action Filed",
+        "PODD Shareholder Alert: August 31, 2026 Lead Plaintiff Deadline in Insulet Class Action",
+        "Apple to Present at Goldman Sachs Communacopia Conference",
+        "Rollins Inc stock hits 52-week low at 35.31 USD By Investing.com",
+        "Copart stock may move 6.2% on Sept. 10 earnings release",
+        "INTEL CORPORATION - COMMON STOCK - Nancy Pelosi Congressional Trade on Jul. 24, 2026",
+        "Donald Trump - Salesforce Inc. Trump Trade on Jun. 18, 2026",
+    ],
+)
 def test_routine_headlines_are_dropped(headline):
     assert not_news(headline) == "routine"
 
 
-@pytest.mark.parametrize("headline", [
-    "Is Nvidia Stock a Buy Now?",
-    "3 Growth Stocks to Buy in September",
-    "Cramer says this chip stock is a winner",
-])
+@pytest.mark.parametrize(
+    "headline",
+    [
+        "Is Nvidia Stock a Buy Now?",
+        "3 Growth Stocks to Buy in September",
+        "Cramer says this chip stock is a winner",
+    ],
+)
 def test_opinion_headlines_are_dropped(headline):
     assert not_news(headline) == "commentary"
 
 
-@pytest.mark.parametrize("headline", [
-    "Intuit stock slides after Q4 earnings beat is followed up by soft guidance",
-    "Nvidia to buy Hugging Face for $13 billion in big bet on open AI models",
-    "Walmart promises price cuts after $2.9B tariff refund",
-    "Fed holds rates steady as inflation cools",
-    "JPMorgan beats estimates as trading revenue jumps",
-])
+@pytest.mark.parametrize(
+    "headline",
+    [
+        "Intuit stock slides after Q4 earnings beat is followed up by soft guidance",
+        "Nvidia to buy Hugging Face for $13 billion in big bet on open AI models",
+        "Walmart promises price cuts after $2.9B tariff refund",
+        "Fed holds rates steady as inflation cools",
+        "JPMorgan beats estimates as trading revenue jumps",
+    ],
+)
 def test_news_headlines_are_kept(headline):
     assert not_news(headline) is None
 
 
 # --- categories ------------------------------------------------------------
 
-@pytest.mark.parametrize("headline", [
-    "FTC Challenges Amgen’s Bid to Shield Enbrel Patent Deal",
-    "DOJ expands beef price investigation to Kroger, Walmart, Costco and other major retailers",
-    "Deckers Wins Dismissal of Antitrust Suit Over ‘Sham’ Ugg Cases",
-    "SEC clears VerifyMe-OpenWorld merger for shareholder vote",
-    "US Senators Urge SEC Probe Into Trump Media’s Preferential Truth Social Access Plan",
-    "Goldman Sachs Exits XRP ETF as Senate Stalls CLARITY Act",
-    "House Democrats Say Rail Merger Review Must Prioritize Workers",
-    "Pacific Gas & Electric Stock Slides As California Lawmakers Block Key Wildfire Insurance Reform",
-    "Nvidia chief to testify before Congress on chip sales to China",
-    "Micron shares rise as White House pushes Apple away from Chinese memory chips",
-    "President signs executive order on AI data centers",
-    "Trump Threatens Comcast and Disney: President Says Their Licenses Could Be at Risk",
-    "UK fines Citigroup unit over Russia sanctions breaches",
-    "SMCI Clears Senior Management In Export Control Investigation",
-])
+
+@pytest.mark.parametrize(
+    "headline",
+    [
+        "FTC Challenges Amgen’s Bid to Shield Enbrel Patent Deal",
+        "DOJ expands beef price investigation to Kroger, Walmart, Costco and other major retailers",
+        "Deckers Wins Dismissal of Antitrust Suit Over ‘Sham’ Ugg Cases",
+        "SEC clears VerifyMe-OpenWorld merger for shareholder vote",
+        "US Senators Urge SEC Probe Into Trump Media’s Preferential Truth Social Access Plan",
+        "Goldman Sachs Exits XRP ETF as Senate Stalls CLARITY Act",
+        "House Democrats Say Rail Merger Review Must Prioritize Workers",
+        "Pacific Gas & Electric Stock Slides As California Lawmakers Block Key Wildfire Insurance Reform",
+        "Nvidia chief to testify before Congress on chip sales to China",
+        "Micron shares rise as White House pushes Apple away from Chinese memory chips",
+        "President signs executive order on AI data centers",
+        "Trump Threatens Comcast and Disney: President Says Their Licenses Could Be at Risk",
+        "UK fines Citigroup unit over Russia sanctions breaches",
+        "SMCI Clears Senior Management In Export Control Investigation",
+    ],
+)
 def test_government_action_is_policy(headline):
     assert "policy" in categories_of(headline)
 
 
-@pytest.mark.parametrize("headline", [
-    # a company's filings with the SEC, not the SEC acting
-    "Apple Inc. SEC Filing (Aug 11, 2026)",
-    "LYNX SEC Filings - Lyntris Inc. 10-K, 10-Q, 8-K Forms",
-    "Agnico Eagle Mines (NYSE: AEM) files SEC report",
-    "Gerdau Files Mid‑Year 2026 Interim Financials with U.S. SEC",
-    "Lumexa Imaging Holdings Reports Q2 2026 Financial Results in SEC 8-K Filing",
-    # bills, houses and congresses that aren't Congress
-    "Bill Ackman Exits Alphabet, Raises Bets on Microsoft & Meta",
-    "Becton Dickinson (NYSE: BDX) withholds 1,049 shares for CRO’s tax bill",
-    "Bristol Myers Squibb (BMY) Unveils Five Year Camzyos Data At ESC Congress",
-    "Avalyn Announces Multiple Presentations at the European Respiratory Society International Congress 2026",
-    "Thomson Reuters launches in-house AI model to cut Anthropic costs",
-    # Trump's businesses and family, not the White House
-    "Trump Media Posts $238 Million Quarterly Loss",
-    "Eric Trump-backed Space-Eyes to go public in $638 million SPAC deal",
-])
+@pytest.mark.parametrize(
+    "headline",
+    [
+        # a company's filings with the SEC, not the SEC acting
+        "Apple Inc. SEC Filing (Aug 11, 2026)",
+        "LYNX SEC Filings - Lyntris Inc. 10-K, 10-Q, 8-K Forms",
+        "Agnico Eagle Mines (NYSE: AEM) files SEC report",
+        "Gerdau Files Mid‑Year 2026 Interim Financials with U.S. SEC",
+        "Lumexa Imaging Holdings Reports Q2 2026 Financial Results in SEC 8-K Filing",
+        # bills, houses and congresses that aren't Congress
+        "Bill Ackman Exits Alphabet, Raises Bets on Microsoft & Meta",
+        "Becton Dickinson (NYSE: BDX) withholds 1,049 shares for CRO’s tax bill",
+        "Bristol Myers Squibb (BMY) Unveils Five Year Camzyos Data At ESC Congress",
+        "Avalyn Announces Multiple Presentations at the European Respiratory Society International Congress 2026",
+        "Thomson Reuters launches in-house AI model to cut Anthropic costs",
+        # Trump's businesses and family, not the White House
+        "Trump Media Posts $238 Million Quarterly Loss",
+        "Eric Trump-backed Space-Eyes to go public in $638 million SPAC deal",
+    ],
+)
 def test_lookalikes_are_not_policy(headline):
     assert "policy" not in categories_of(headline)
 
 
-@pytest.mark.parametrize("headline, macro", [
-    ("Fed holds rates steady as inflation cools", True),
-    ("UBS forecasts two US Fed rate hikes in 2026 after strong jobs report", True),
-    ("Trump Sets 50% Auto Tariffs on Canada", True),
-    ("'We're fed up': Portsmouth family wants action on overgrown cell tower property", False),
-    ("Clean energy groups call on regulators to reject We Energies rate hike", False),
-    ("Coca-Cola’s Tax Rate Cut Just Boosted 2026 Earnings Guidance", False),
-])
+@pytest.mark.parametrize(
+    "headline, macro",
+    [
+        ("Fed holds rates steady as inflation cools", True),
+        ("UBS forecasts two US Fed rate hikes in 2026 after strong jobs report", True),
+        ("Trump Sets 50% Auto Tariffs on Canada", True),
+        ("'We're fed up': Portsmouth family wants action on overgrown cell tower property", False),
+        ("Clean energy groups call on regulators to reject We Energies rate hike", False),
+        ("Coca-Cola’s Tax Rate Cut Just Boosted 2026 Earnings Guidance", False),
+    ],
+)
 def test_macro_is_the_economy_not_its_words_elsewhere(headline, macro):
     assert ("macro" in categories_of(headline)) is macro
 
 
 # --- grouping --------------------------------------------------------------
 
+
 def test_same_stock_same_category_is_one_story_whatever_the_words():
     a = _article("1", "Broadcom Q3 revenue tops estimates on AI demand", tickers=["AVGO"])
-    b = _article("2", "Broadcom shares rise after strong quarterly results", hours=2, tickers=["AVGO"])
+    b = _article(
+        "2", "Broadcom shares rise after strong quarterly results", hours=2, tickers=["AVGO"]
+    )
     c = _article("3", "Oracle signs cloud deal with OpenAI", hours=1, tickers=["ORCL"])
     groups = group_stories([a, b, c])
     assert sorted(sorted(x.article_id for x in g) for g in groups) == [["1", "2"], ["3"]]
@@ -207,10 +246,17 @@ def test_same_stock_same_category_is_one_story_whatever_the_words():
 
 def test_shared_distinctive_words_group_across_outlets():
     a = _article("1", "Nvidia to buy Hugging Face for $13 billion", tickers=["NVDA"])
-    b = _article("2", "Nvidia agrees to acquire Hugging Face in $13 billion deal", hours=1,
-                 source="Bloomberg", tickers=["NVDA"])
-    filler = [_article(str(i), f"Unrelated company {i} opens new plant", hours=3, tickers=[f"X{i}"])
-              for i in range(3, 8)]
+    b = _article(
+        "2",
+        "Nvidia agrees to acquire Hugging Face in $13 billion deal",
+        hours=1,
+        source="Bloomberg",
+        tickers=["NVDA"],
+    )
+    filler = [
+        _article(str(i), f"Unrelated company {i} opens new plant", hours=3, tickers=[f"X{i}"])
+        for i in range(3, 8)
+    ]
     groups = group_stories([a, b, *filler])
     assert any({x.article_id for x in g} == {"1", "2"} for g in groups)
 
@@ -336,7 +382,13 @@ def test_the_release_with_the_biggest_event_leads():
 def test_reaction_is_the_lead_stocks_move_not_a_co_named_one():
     arts = [
         _article("1", "Walmart promises price cuts after tariff refund", tickers=["WMT", "TGT"]),
-        _article("2", "Walmart to cut prices with tariff refund", hours=1, source="CNBC", tickers=["WMT", "TGT"]),
+        _article(
+            "2",
+            "Walmart to cut prices with tariff refund",
+            hours=1,
+            source="CNBC",
+            tickers=["WMT", "TGT"],
+        ),
     ]
     s = score_story(arts, {"WMT": -0.001, "TGT": 0.045}, ranked=set())
     assert s.move_ticker == "WMT"
@@ -374,8 +426,10 @@ def test_a_minor_fed_release_is_not_market_wide():
 
 
 def test_same_outlet_under_two_names_counts_once():
-    arts = [_article("1", "Fed holds rates", source="Investing.com"),
-            _article("2", "Fed holds rates steady", source="Investing.com Canada")]
+    arts = [
+        _article("1", "Fed holds rates", source="Investing.com"),
+        _article("2", "Fed holds rates steady", source="Investing.com Canada"),
+    ]
     assert score_story(arts, {}, set()).n_outlets == 1
 
 
@@ -402,10 +456,20 @@ def test_context_keeps_the_most_covered_few():
 
 # --- picking ---------------------------------------------------------------
 
+
 def _story(aid, score, *categories):
     a = _article(aid, f"Story {aid}")
-    return Story(articles=(a,), lead=a, tickers=(), categories=categories, n_outlets=1,
-                 move_ticker=None, move_return=None, inputs={}, score=score)
+    return Story(
+        articles=(a,),
+        lead=a,
+        tickers=(),
+        categories=categories,
+        n_outlets=1,
+        move_ticker=None,
+        move_return=None,
+        inputs={},
+        score=score,
+    )
 
 
 def _day(n_other=12, policy_scores=()):
@@ -715,7 +779,10 @@ def test_read_api(warehouse, monkeypatch):
     assert latest["weights"] == {"event": 0.40, "reaction": 0.25, "size": 0.20, "on_site": 0.15}
     assert latest["full_marks"] == {"move": 0.1, "market_move": 0.02, "size_from": 1e10, "size_full_at": 1e12}
 
-    assert client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"] == "2026-08-26"
+    assert (
+        client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"]
+        == "2026-08-26"
+    )
     assert client.get("/api/digest/daily", params={"date": "2026-08-29"}).status_code == 404
     assert client.get("/api/digest/daily", params={"date": "2026-02-30"}).status_code == 422
 

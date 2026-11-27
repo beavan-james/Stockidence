@@ -73,6 +73,7 @@ def rebuild_fred_market(warehouse: Warehouse) -> int:
         )
         return con.execute("SELECT COUNT(*) FROM staging.stg_fred_market").fetchone()[0]
 
+
 def rebuild_financials_reported(warehouse: Warehouse, ticker: str | None = None) -> int:
     """One row per Finnhub filing, with an empty balance sheet filled from SEC.
 

@@ -131,8 +131,12 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
     also: dict[int, list[dict]] = {}
     for rank, source, headline, url, published in coverage:
         also.setdefault(int(rank), []).append(
-            {"source": source, "headline": headline, "url": url,
-             "published_at": _utc_iso(published)}
+            {
+                "source": source,
+                "headline": headline,
+                "url": url,
+                "published_at": _utc_iso(published),
+            }
         )
     return {
         "period": period,
@@ -153,11 +157,18 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
         "weights": _weights(), "full_marks": _full_marks(period),
         "items": [
             {
-                "rank": int(rank), "headline": headline, "summary": summary, "url": url,
-                "source": source, "published_at": _utc_iso(published),
-                "tickers": list(tickers or []), "categories": list(categories or []),
-                "n_articles": n_articles, "n_outlets": n_outlets,
-                "move_ticker": move_ticker, "move_return": move_return,
+                "rank": int(rank),
+                "headline": headline,
+                "summary": summary,
+                "url": url,
+                "source": source,
+                "published_at": _utc_iso(published),
+                "tickers": list(tickers or []),
+                "categories": list(categories or []),
+                "n_articles": n_articles,
+                "n_outlets": n_outlets,
+                "move_ticker": move_ticker,
+                "move_return": move_return,
                 "score": round(score, 4),
                 "components": _components(cov, rea, cat, site, event, size),
                 "also_covered": also.get(int(rank), []),

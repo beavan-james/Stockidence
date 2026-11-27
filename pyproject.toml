@@ -30,7 +30,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4",
     "pytest>=8.0",
+    "ruff==0.17.6",
 ]
 
 [build-system]
@@ -42,6 +44,30 @@ packages = ["src/stockidence"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: runs Dagster jobs or several warehouse layers end to end (CI runs these after the unit tests)",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["Model/notebooks"]
+
+[tool.ruff.lint]
+# Ruff's default rule set, minus two rules that fight deliberate patterns:
+ignore = [
+    # The API, the failure sensor and the backfill script catch everything on
+    # purpose, so a failed read degrades to an empty response instead of a 500.
+    "BLE001",
+    # Regex alternations are joined from commented pieces, which an f-string
+    # would lose.
+    "FLY002",
+]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/stockidence"]
+ignore_missing_imports = true
 
 [tool.dagster]
 module_name = "stockidence.definitions"

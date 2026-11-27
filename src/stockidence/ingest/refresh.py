@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from .endpoints import on_demand_endpoints
-from .engine import IngestEngine
 from ..mart.mart import rebuild_all_for_ticker
 from ..mart.scoring import score_ticker
 from ..storage import Warehouse
+from .endpoints import on_demand_endpoints
+from .engine import IngestEngine
 
 # ticker_news is skipped: the ML feature set doesn't use news, and the
 # scheduled market_news pulls keep the news page fresh. The hot-path quote
@@ -45,7 +45,7 @@ RETRY_BACKOFF_SECONDS = 5.0
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def refresh_tickers(
@@ -80,8 +80,10 @@ def refresh_tickers(
     emit(f"resynced {resync['watermarks']} ticker watermarks from landed rows")
     gapped = resync["gapped_tickers"]
     if gapped:
-        emit(f"{len(gapped)} tickers have holes in their price history and will re-pull "
-             f"full history: {', '.join(gapped[:30])}{' ...' if len(gapped) > 30 else ''}")
+        emit(
+            f"{len(gapped)} tickers have holes in their price history and will re-pull "
+            f"full history: {', '.join(gapped[:30])}{' ...' if len(gapped) > 30 else ''}"
+        )
 
     total_calls = total_rows = 0
     errors: list[dict[str, str]] = []
@@ -93,8 +95,7 @@ def refresh_tickers(
         if full_backfill:
             with warehouse.connect() as con:
                 con.execute(
-                    "DELETE FROM control.watermarks "
-                    "WHERE endpoint = ? AND dimension_key = ?",
+                    "DELETE FROM control.watermarks WHERE endpoint = ? AND dimension_key = ?",
                     ["raw.raw_prices_daily", ticker],
                 )
 
@@ -107,12 +108,15 @@ def refresh_tickers(
             for attempt in range(1, max_attempts + 1):
                 try:
                     result = engine.ingest_on_demand(
-                        ep.name, ticker, now=now, force=ep.name in force_endpoints)
+                        ep.name, ticker, now=now, force=ep.name in force_endpoints
+                    )
                     last_error = None
                     break
-                except Exception as exc:  # noqa: BLE001 — record and retry
+                except Exception as exc:  # record and retry
                     last_error = str(exc)
-                    emit(f"  {ep.name:30s} attempt {attempt}/{max_attempts} failed: {last_error[:100]}")
+                    emit(
+                        f"  {ep.name:30s} attempt {attempt}/{max_attempts} failed: {last_error[:100]}"
+                    )
                     if attempt < max_attempts:
                         time.sleep(RETRY_BACKOFF_SECONDS * attempt)
             if last_error is not None:

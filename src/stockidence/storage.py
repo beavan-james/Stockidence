@@ -22,7 +22,7 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +34,7 @@ _REPO_ROOT = repo_root()
 # Calendar days between consecutive daily bars that count as a history hole.
 PRICE_GAP_DAYS = 10
 
-DEFAULT_DB_PATH = os.environ.get(
-    "STOCKIDENCE_DB", str(_REPO_ROOT / "data" / "stockidence.duckdb")
-)
+DEFAULT_DB_PATH = os.environ.get("STOCKIDENCE_DB", str(_REPO_ROOT / "data" / "stockidence.duckdb"))
 
 # artifact table -> key columns (name, duckdb type). payload + fetched_at are
 # appended to every table. Keys match the registry watermark/artifact names.
@@ -63,7 +61,12 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     # /stock/metrics lands one row PER metric per period: the metric is part
     # of the natural grain, otherwise rows in the same (quarter, year) would
     # clobber each other on the PK.
-    "raw_basic_financials": [("ticker", "VARCHAR"), ("quarter", "INTEGER"), ("year", "INTEGER"), ("metric", "VARCHAR")],
+    "raw_basic_financials": [
+        ("ticker", "VARCHAR"),
+        ("quarter", "INTEGER"),
+        ("year", "INTEGER"),
+        ("metric", "VARCHAR"),
+    ],
     "raw_financials_reported": [
         ("ticker", "VARCHAR"),
         ("quarter", "INTEGER"),
@@ -173,23 +176,35 @@ def make_dimension_key(values: dict[str, Any], order: tuple[str, ...]) -> str:
 # write NULLs (first-bar returns).
 STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "stg_prices_daily": [
-        ("ticker", "VARCHAR"), ("date", "DATE"),
-        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
-        ("volume", "DOUBLE"), ("return_1d", "DOUBLE"),
+        ("ticker", "VARCHAR"),
+        ("date", "DATE"),
+        ("open", "DOUBLE"),
+        ("high", "DOUBLE"),
+        ("low", "DOUBLE"),
+        ("close", "DOUBLE"),
+        ("volume", "DOUBLE"),
+        ("return_1d", "DOUBLE"),
     ],
     # typed FRED values: raw's "value" is a string (and "." is the missing
     # sentinel); staging casts to DOUBLE and keeps only numeric observations.
     # The PK is (series, date) — market-wide, not per ticker.
     "stg_fred_market": [
-        ("series", "VARCHAR"), ("date", "DATE"), ("value", "DOUBLE"),
+        ("series", "VARCHAR"),
+        ("date", "DATE"),
+        ("value", "DOUBLE"),
     ],
     # one row per Finnhub filing, its empty balance sheet filled from SEC
     # (bs_source says which). The PK is (ticker, accession_number).
     "stg_financials_reported": [
-        ("ticker", "VARCHAR"), ("accession_number", "VARCHAR"),
-        ("year", "INTEGER"), ("quarter", "INTEGER"), ("form", "VARCHAR"),
-        ("filed_date", "DATE"), ("end_date", "DATE"),
-        ("bs_source", "VARCHAR"), ("payload", "JSON"),
+        ("ticker", "VARCHAR"),
+        ("accession_number", "VARCHAR"),
+        ("year", "INTEGER"),
+        ("quarter", "INTEGER"),
+        ("form", "VARCHAR"),
+        ("filed_date", "DATE"),
+        ("end_date", "DATE"),
+        ("bs_source", "VARCHAR"),
+        ("payload", "JSON"),
     ],
     # one row per article, every source typed into the same columns.
     # published_at is UTC; tickers are the stocks the article is about.
@@ -209,8 +224,12 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
     # `truncated` says the text was cut. `extractor` names the extraction
     # library and version, so a new version re-extracts every page.
     "stg_news_article_text": [
-        ("url", "VARCHAR"), ("text", "VARCHAR"), ("words", "INTEGER"),
-        ("truncated", "BOOLEAN"), ("extractor", "VARCHAR"), ("extracted_at", "TIMESTAMPTZ"),
+        ("url", "VARCHAR"),
+        ("text", "VARCHAR"),
+        ("words", "INTEGER"),
+        ("truncated", "BOOLEAN"),
+        ("extractor", "VARCHAR"),
+        ("extracted_at", "TIMESTAMPTZ"),
     ],
 }
 
@@ -226,42 +245,76 @@ _STAGING_PK: dict[str, tuple[str, ...]] = {
 # rebuilt per ticker, never appended.
 MART_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "m_prices_weekly": [
-        ("ticker", "VARCHAR"), ("date", "DATE"),
-        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("ticker", "VARCHAR"),
+        ("date", "DATE"),
+        ("open", "DOUBLE"),
+        ("high", "DOUBLE"),
+        ("low", "DOUBLE"),
+        ("close", "DOUBLE"),
         ("volume", "DOUBLE"),
     ],
     "m_prices_monthly": [
-        ("ticker", "VARCHAR"), ("date", "DATE"),
-        ("open", "DOUBLE"), ("high", "DOUBLE"), ("low", "DOUBLE"), ("close", "DOUBLE"),
+        ("ticker", "VARCHAR"),
+        ("date", "DATE"),
+        ("open", "DOUBLE"),
+        ("high", "DOUBLE"),
+        ("low", "DOUBLE"),
+        ("close", "DOUBLE"),
         ("volume", "DOUBLE"),
     ],
     "m_technical_indicators": [
-        ("ticker", "VARCHAR"), ("date", "DATE"),
-        ("sma_20", "DOUBLE"), ("sma_50", "DOUBLE"), ("sma_200", "DOUBLE"),
-        ("ema_12", "DOUBLE"), ("ema_26", "DOUBLE"),
-        ("macd", "DOUBLE"), ("macd_signal", "DOUBLE"), ("macd_hist", "DOUBLE"),
-        ("rsi_14", "DOUBLE"), ("atr_14", "DOUBLE"), ("adx_14", "DOUBLE"),
-        ("plus_di_14", "DOUBLE"), ("minus_di_14", "DOUBLE"),
-        ("stoch_k_14", "DOUBLE"), ("stoch_d_14", "DOUBLE"), ("cci_20", "DOUBLE"),
-        ("ad", "DOUBLE"), ("obv", "DOUBLE"),
-        ("bb_upper_20", "DOUBLE"), ("bb_mid_20", "DOUBLE"), ("bb_lower_20", "DOUBLE"),
+        ("ticker", "VARCHAR"),
+        ("date", "DATE"),
+        ("sma_20", "DOUBLE"),
+        ("sma_50", "DOUBLE"),
+        ("sma_200", "DOUBLE"),
+        ("ema_12", "DOUBLE"),
+        ("ema_26", "DOUBLE"),
+        ("macd", "DOUBLE"),
+        ("macd_signal", "DOUBLE"),
+        ("macd_hist", "DOUBLE"),
+        ("rsi_14", "DOUBLE"),
+        ("atr_14", "DOUBLE"),
+        ("adx_14", "DOUBLE"),
+        ("plus_di_14", "DOUBLE"),
+        ("minus_di_14", "DOUBLE"),
+        ("stoch_k_14", "DOUBLE"),
+        ("stoch_d_14", "DOUBLE"),
+        ("cci_20", "DOUBLE"),
+        ("ad", "DOUBLE"),
+        ("obv", "DOUBLE"),
+        ("bb_upper_20", "DOUBLE"),
+        ("bb_mid_20", "DOUBLE"),
+        ("bb_lower_20", "DOUBLE"),
     ],
     "m_advanced_analytics": [
-        ("ticker", "VARCHAR"), ("date", "DATE"),
+        ("ticker", "VARCHAR"),
+        ("date", "DATE"),
         ("close", "DOUBLE"),
-        ("min_252", "DOUBLE"), ("max_252", "DOUBLE"), ("mean_252", "DOUBLE"),
-        ("stddev_252", "DOUBLE"), ("variance_252", "DOUBLE"), ("max_drawdown_252", "DOUBLE"),
-        ("min_all", "DOUBLE"), ("max_all", "DOUBLE"), ("mean_all", "DOUBLE"),
+        ("min_252", "DOUBLE"),
+        ("max_252", "DOUBLE"),
+        ("mean_252", "DOUBLE"),
+        ("stddev_252", "DOUBLE"),
+        ("variance_252", "DOUBLE"),
+        ("max_drawdown_252", "DOUBLE"),
+        ("min_all", "DOUBLE"),
+        ("max_all", "DOUBLE"),
+        ("mean_all", "DOUBLE"),
     ],
     # market-wide regime table (no ticker): VIX + S&P500 levels with
     # close-to-close momentum over the horizons the dataset snapshots as-of.
     # NULL before the series' history (S&P500 starts ~2016 on FRED).
     "m_fred_market": [
         ("date", "DATE"),
-        ("spx", "DOUBLE"), ("vix", "DOUBLE"),
-        ("spx_ret_5d", "DOUBLE"), ("spx_ret_21d", "DOUBLE"), ("spx_ret_63d", "DOUBLE"),
-        ("spx_ret_126d", "DOUBLE"), ("spx_ret_252d", "DOUBLE"),
-        ("vix_chg_5d", "DOUBLE"), ("vix_chg_21d", "DOUBLE"),
+        ("spx", "DOUBLE"),
+        ("vix", "DOUBLE"),
+        ("spx_ret_5d", "DOUBLE"),
+        ("spx_ret_21d", "DOUBLE"),
+        ("spx_ret_63d", "DOUBLE"),
+        ("spx_ret_126d", "DOUBLE"),
+        ("spx_ret_252d", "DOUBLE"),
+        ("vix_chg_5d", "DOUBLE"),
+        ("vix_chg_21d", "DOUBLE"),
     ],
 }
 
@@ -306,9 +359,9 @@ MART_SNAPSHOT_SCHEMA: dict[str, list[tuple[str, str]]] = {
 
 
 def _json_default(value: Any) -> str:
-        if isinstance(value, (datetime, date)):
-            return value.isoformat()
-        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 class Warehouse:
@@ -528,7 +581,9 @@ class Warehouse:
             # Model category weights for the confidence blend — provisional,
             # held in the warehouse so the frontend never
             # hardcodes the scoring spec.
-            con.execute("CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)")
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS mart.model_weights (category VARCHAR PRIMARY KEY, weight DOUBLE)"
+            )
             # CONFIDENCE_WEIGHTS (mart.scoring) is the single source of truth;
             # seeded here via a lazy import because scoring imports this module.
             # Upsert on every schema init so an already-provisioned warehouse
@@ -916,7 +971,7 @@ class Warehouse:
             raise KeyError(f"unknown artifact table: {artifact}")
         keys = [name for name, _ in RAW_SCHEMA[artifact]]
         pk = ", ".join(f'"{name}"' for name in keys)
-        fetched_at = fetched_at or datetime.now(timezone.utc)
+        fetched_at = fetched_at or datetime.now(UTC)
         set_cols = ", ".join(f'"{name}" = excluded."{name}"' for name in ("payload", "fetched_at"))
         match = " AND ".join(f'"{name}" = ?' for name in keys)
 
@@ -936,8 +991,8 @@ class Warehouse:
                         payload_json = merge(payload_json, json.loads(stored[0]))
                 con.execute(
                     f"""
-                    INSERT INTO raw."{artifact}" ({', '.join(f'"{k}"' for k in keys)}, payload, fetched_at)
-                    VALUES ({', '.join('?' for _ in keys)}, CAST(? AS JSON), ?)
+                    INSERT INTO raw."{artifact}" ({", ".join(f'"{k}"' for k in keys)}, payload, fetched_at)
+                    VALUES ({", ".join("?" for _ in keys)}, CAST(? AS JSON), ?)
                     ON CONFLICT ({pk}) DO UPDATE SET {set_cols}
                     """,
                     [*values, json.dumps(payload_json, default=_json_default), fetched_at],
@@ -997,11 +1052,11 @@ class Warehouse:
                         "SELECT ?, ticker, MAX(fetched_at), CAST(MAX(date) AS VARCHAR)"
                         " FROM raw.raw_prices_daily GROUP BY ticker"
                     )
-                    update = "fetched_at = excluded.fetched_at, high_watermark = excluded.high_watermark"
-                else:
-                    select = (
-                        f'SELECT ?, ticker, MAX(fetched_at), NULL FROM raw."{artifact}" GROUP BY ticker'
+                    update = (
+                        "fetched_at = excluded.fetched_at, high_watermark = excluded.high_watermark"
                     )
+                else:
+                    select = f'SELECT ?, ticker, MAX(fetched_at), NULL FROM raw."{artifact}" GROUP BY ticker'
                     update = "fetched_at = excluded.fetched_at"
                 total += con.execute(
                     f"""
@@ -1017,15 +1072,18 @@ class Warehouse:
             # watermark of any ticker with a hole (> PRICE_GAP_DAYS between
             # bars; weekends + holidays never exceed ~5): the next refresh
             # then re-pulls its full history and the upsert fills the hole.
-            gapped: list[str] = [t for (t,) in con.execute(
-                """
+            gapped: list[str] = [
+                t
+                for (t,) in con.execute(
+                    """
                 SELECT DISTINCT ticker FROM (
                     SELECT ticker, date - LAG(date) OVER (PARTITION BY ticker ORDER BY date) AS gap
                     FROM raw.raw_prices_daily
                 ) WHERE gap > ?
                 """,
-                [PRICE_GAP_DAYS],
-            ).fetchall()]
+                    [PRICE_GAP_DAYS],
+                ).fetchall()
+            ]
             if gapped:
                 con.execute(
                     "DELETE FROM control.watermarks WHERE endpoint = 'raw.raw_prices_daily'"
@@ -1048,8 +1106,10 @@ class Warehouse:
             return None
         fetched_at = row[2]
         if fetched_at.tzinfo is None:
-            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
-        return Watermark(endpoint=row[0], dimension_key=row[1], fetched_at=fetched_at, high_watermark=row[3])
+            fetched_at = fetched_at.replace(tzinfo=UTC)
+        return Watermark(
+            endpoint=row[0], dimension_key=row[1], fetched_at=fetched_at, high_watermark=row[3]
+        )
 
     def upsert_watermark(
         self,
@@ -1059,7 +1119,7 @@ class Warehouse:
         fetched_at: datetime | None = None,
         high_watermark: str | None = None,
     ) -> None:
-        fetched_at = fetched_at or datetime.now(timezone.utc)
+        fetched_at = fetched_at or datetime.now(UTC)
         with self.connect() as con:
             con.execute(
                 """
@@ -1080,7 +1140,7 @@ class Warehouse:
         The frontend writes here (control metadata, exempt from the
         single-writer rule); the Dagster sensor consumes the queue.
         """
-        requested_at = requested_at or datetime.now(timezone.utc)
+        requested_at = requested_at or datetime.now(UTC)
         with self.connect() as con:
             con.execute(
                 """
