@@ -385,11 +385,11 @@ def _eps_growth(con: Any, ticker: str, rows: list[dict[str, Any]]) -> float | No
     return None
 
 
-def _pe_of(price: float, eps: float) -> float | None:
-    return price / (eps * 4.0) if eps and eps > 0 and price > 0 else None
+def _pe_of(price: float | None, eps: float) -> float | None:
+    return price / (eps * 4.0) if eps and eps > 0 and price is not None and price > 0 else None
 
 
-def _eps_pe_history(price: float, rows: list[dict[str, Any]]) -> list[float]:
+def _eps_pe_history(price: float | None, rows: list[dict[str, Any]]) -> list[float]:
     """P/E band from quarterly actual EPS (annualized) at today's price."""
     pes: list[float] = []
     for r in rows:
@@ -415,13 +415,15 @@ def _resolve_metric(name: str) -> str:
     return _METRIC_ALIASES.get(name, name)
 
 
-def _current_ps(price: float, basic: list[dict[str, Any]]) -> float | None:
+def _current_ps(price: float | None, basic: list[dict[str, Any]]) -> float | None:
     rps = _latest_series(basic, "salesPerShareTTM")
-    return price / rps if rps and rps > 0 and price > 0 else None
+    return price / rps if rps and rps > 0 and price is not None and price > 0 else None
 
 
-def _ps_history(price: float, basic: list[dict[str, Any]]) -> list[float]:
+def _ps_history(price: float | None, basic: list[dict[str, Any]]) -> list[float]:
     out: list[float] = []
+    if price is None:
+        return out
     metric = _resolve_metric("salesPerShareTTM")
     for r in basic:
         if r["payload"].get("freq") != "quarterly" or r["payload"].get("metric") != metric:
@@ -452,14 +454,18 @@ def _latest_metric(basic: list[dict[str, Any]], key: str) -> float | None:
 
 
 def _valuation_components(
-    con: Any, ticker: str, rows: list[dict[str, Any]], price: float, fair: float | None
+    con: Any,
+    ticker: str,
+    rows: list[dict[str, Any]],
+    price: float | None,
+    fair: float | None,
 ) -> list[Component]:
     trailing = _trailing_eps(rows)
     growth = _eps_growth(con, ticker, rows)
     components: list[Component] = []
 
     # 1. discount to fair value (40%)
-    if fair is not None and price > 0:
+    if fair is not None and price is not None and price > 0:
         score = _clamp(50.0 + (1.0 - price / fair) * 100.0, 0.0, 100.0)
         components.append(Component("valuation", "discount_to_fair_value", score, 0.40, "live"))
     else:
@@ -1108,7 +1114,10 @@ def _fair_value(
 
     # ---- DCF leg: TTM owner FCF, 5y stage-1 growth, TV ----
     reported = _reported_rows(con, ticker)
-    shares = (_num(profile["payload"].get("shareOutstanding")) * 1e6) if profile else None
+    # a profile without a share count (sparse or ETF profiles) counts as no
+    # profile: the legs that need shares are skipped
+    shares_m = _num(profile["payload"].get("shareOutstanding")) if profile else None
+    shares = shares_m * 1e6 if shares_m is not None else None
     dcf_ps: float | None = None
     ocf = _reported_ttm(reported, _CF_OCF)
     capex = _reported_ttm(reported, _CF_CAPEX)
