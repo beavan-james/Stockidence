@@ -5,6 +5,7 @@ warehouse with a fake network (httpx.MockTransport)."""
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
@@ -29,6 +30,8 @@ from stockidence.staging.article_text import cap_words, rebuild_article_text
 from stockidence.storage import Warehouse
 
 NOW = datetime(2026, 11, 20, 12, 30, tzinfo=UTC)
+# robots.txt files as three sites served them on 2026-11-26, CRLF and all
+ROBOTS_FIXTURES = Path(__file__).parent / "fixtures" / "robots"
 
 def _paragraph(i: int) -> str:
     # distinct on purpose: the extractor drops repeated paragraphs as boilerplate
@@ -142,6 +145,7 @@ def test_reads_an_allowed_page_with_an_honest_user_agent():
     (_robots("User-agent: *\nDisallow: /\n"), DISALLOWED),
     (_robots(ROBOTS_AI_OPTOUT), AI_OPTOUT),
     (_robots("User-agent: ClaudeBot\nDisallow: /news/\n"), AI_OPTOUT),
+    (_robots(status=401), DISALLOWED),
     (_robots(status=403), DISALLOWED),
     (_robots(status=503), UNREACHABLE),
 ])
@@ -181,6 +185,78 @@ def test_robots_txt_is_read_once_per_domain_and_requests_are_spaced():
     fetcher.fetch("https://a.com/2")
     assert net.paths() == ["https://a.com/robots.txt", "https://a.com/1", "https://a.com/2"]
     assert clock.slept == [2.0, 2.0]  # the clock never moves between requests here
+
+
+def _verdicts(robots_txt: str, *paths: str) -> list[str]:
+    fetcher = _fetcher(Net({"https://a.com/robots.txt": _robots(robots_txt)}))
+    return [fetcher.verdict(f"https://a.com{path}") for path in paths]
+
+
+@pytest.mark.parametrize("rules, path, verdict", [
+    # * matches any run of characters
+    ("Disallow: /*print*", "/news.release/print/cpi.htm", DISALLOWED),
+    ("Disallow: /*print*", "/news.release/cpi.htm", ALLOWED),
+    ("Disallow: /news/*/draft", "/news/2026/11/draft-2", DISALLOWED),
+    # a final $ matches the end of the path; anywhere else it is a $
+    ("Disallow: /*.pdf$", "/files/report.pdf", DISALLOWED),
+    ("Disallow: /*.pdf$", "/files/report.pdf?page=2", ALLOWED),
+    ("Disallow: /*.pdf$", "/files/report.pdfx", ALLOWED),
+    ("Disallow: /news$", "/news", DISALLOWED),
+    ("Disallow: /news$", "/news/story", ALLOWED),
+    ("Disallow: /$deals", "/$deals/today", DISALLOWED),
+    # the longest matching rule wins, in either order
+    ("Disallow: /\nAllow: /api/", "/api/data", ALLOWED),
+    ("Disallow: /\nAllow: /api/", "/news/story", DISALLOWED),
+    ("Allow: /news/\nDisallow: /news/private/", "/news/private/story", DISALLOWED),
+    ("Disallow: /*.htm\nAllow: /news/*.htm", "/news/story.htm", ALLOWED),
+    # on a tie, Allow wins, in either order
+    ("Disallow: /news/\nAllow: /news/", "/news/story", ALLOWED),
+    ("Allow: /news/\nDisallow: /news/", "/news/story", ALLOWED),
+    ("Disallow: /news/\nAllow: /ne*s/", "/news/story", ALLOWED),
+    # an empty Disallow blocks nothing; paths are case-sensitive and compared
+    # with unreserved characters unescaped and the rest escaped
+    ("Disallow:", "/news/story", ALLOWED),
+    ("Disallow: /news/", "/News/story", ALLOWED),
+    ("Disallow: /%7Euser/", "/~user/page", DISALLOWED),
+    ("Disallow: /café/", "/caf%c3%a9/menu", DISALLOWED),
+])
+def test_robots_rules_match_as_rfc_9309_says(rules, path, verdict):
+    assert _verdicts(f"User-agent: *\n{rules}\n", path) == [verdict]
+
+
+@pytest.mark.parametrize("robots_txt, paths, verdicts", [
+    # a group naming us, in any case and with a version, wins over *
+    ("User-agent: *\nAllow: /\n\nuser-agent: stockidencebot/0.1\nDisallow: /news/\n",
+     ["/news/1", "/markets/1"], [DISALLOWED, ALLOWED]),
+    # every group naming us applies, combined
+    (("User-agent: StockidenceBot\nDisallow: /a/\n\nUser-agent: GPTBot\nDisallow: /x/\n\n"
+      "User-agent: StockidenceBot\nDisallow: /b/\n"),
+     ["/a/1", "/b/1", "/c/1", "/x/1"], [DISALLOWED, DISALLOWED, ALLOWED, AI_OPTOUT]),
+    # one group can name several crawlers
+    ("User-agent: GPTBot\nUser-agent: StockidenceBot\nDisallow: /news/\n\nUser-agent: *\nAllow: /\n",
+     ["/news/1", "/markets/1"], [DISALLOWED, ALLOWED]),
+    # a name that only starts like ours is someone else's
+    ("User-agent: Stockidence\nDisallow: /\n", ["/news/1"], [ALLOWED]),
+    # the AI crawlers' groups are chosen the same way
+    ("User-agent: ccbot\nDisallow: /news/\n", ["/news/1", "/markets/1"], [AI_OPTOUT, ALLOWED]),
+])
+def test_robots_txt_groups_are_chosen_by_product_token(robots_txt, paths, verdicts):
+    assert _verdicts(robots_txt, *paths) == verdicts
+
+
+@pytest.mark.parametrize("host, path, verdict", [
+    ("www.bls.gov", "/news.release/cpi.nr0.htm", ALLOWED),
+    ("www.bls.gov", "/news.release/print/cpi.htm", DISALLOWED),  # Disallow:/*print*
+    ("apps.bea.gov", "/iTable/?reqid=19&step=2", ALLOWED),       # Allow: /iTable/ beats Disallow: /
+    ("apps.bea.gov", "/api/data", ALLOWED),
+    ("apps.bea.gov", "/news/2026/gdp", DISALLOWED),
+    ("www.rttnews.com", "/3591234/stocks-higher.aspx", AI_OPTOUT),
+    ("www.rttnews.com", "/ArticlePrint.aspx?Id=3591234", DISALLOWED),
+])
+def test_live_robots_txt_files(host, path, verdict):
+    robots_txt = (ROBOTS_FIXTURES / f"{host}.txt").read_bytes().decode()  # keep the CRLFs
+    fetcher = _fetcher(Net({f"https://{host}/robots.txt": _robots(robots_txt)}))
+    assert fetcher.verdict(f"https://{host}{path}") == verdict
 
 
 @pytest.mark.parametrize("response, outcome", [
