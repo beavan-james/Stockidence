@@ -7,7 +7,8 @@ summaries can be written from the article and not the feed's one-line
 summary. NEWS_SUMMARIES.md is the spec. The rules:
 
 - an honest user agent (SEC_USER_AGENT on sec.gov, whose fair-access
-  rules ask for a name and contact), and robots.txt is obeyed
+  rules ask for a name and contact), and robots.txt is obeyed as RFC
+  9309 reads it
 - a domain whose robots.txt shuts out the named AI crawlers is skipped
 - a 403, a paywall or a bot check is never worked around
 - one request at a time, with a gap between requests to the same domain
@@ -36,7 +37,8 @@ import httpx
 from ..staging.article_text import extract_text
 from ..storage import Warehouse
 
-USER_AGENT = "StockidenceBot/0.1 (news digest summaries)"
+PRODUCT_TOKEN = "StockidenceBot"  # the name robots.txt groups know us by
+USER_AGENT = f"{PRODUCT_TOKEN}/0.1 (news digest summaries)"
 # Hosts whose own access rules name the user agent to send: SEC asks for a
 # name and contact email (SEC_USER_AGENT), and limits requests per second.
 SEC_HOSTS = frozenset({"www.sec.gov", "sec.gov", "data.sec.gov"})

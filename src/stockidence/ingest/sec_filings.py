@@ -353,9 +353,12 @@ def discover(client: Any, p: PullPlan, now: datetime, out: Pulled) -> list[Filin
         entries = parse_feed(client.current_filings("8-K", start=page * FEED_PAGE, count=FEED_PAGE))
         out.requests += 1
         for f in entries:
-            newest = max(newest or f.accepted, f.accepted)
-            oldest = min(oldest or f.accepted, f.accepted)
-            if f.accepted <= p.since:
+            accepted = f.accepted
+            if accepted is None:  # parse_feed keeps only entries with a time
+                continue
+            newest = max(newest or accepted, accepted)
+            oldest = min(oldest or accepted, accepted)
+            if accepted <= p.since:
                 reached = True
             elif f.form in FORMS and f.cik in p.companies and f.accession not in p.known:
                 found.setdefault(f.accession, f)

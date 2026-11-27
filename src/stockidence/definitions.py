@@ -258,7 +258,7 @@ def ingest_primary_news_op(context: OpExecutionContext, prev: dict) -> dict:
         r = engine.ingest_on_demand("sec_company_tickers", "sec_company_tickers", now=now)
         context.log.info(f"[sec_company_tickers] {r.reason} ({r.rows_written} rows)")
         out["sec_company_tickers"] = r.rows_written
-    except Exception as exc:  # noqa: BLE001 -- the 8-K pull uses the list already landed
+    except Exception as exc:  # the 8-K pull uses the list already landed
         context.log.warning(f"[sec_company_tickers] failed: {exc}")
     try:
         info = pull_8k_releases(engine.warehouse, new_sec_client(), now=now)
@@ -268,13 +268,13 @@ def ingest_primary_news_op(context: OpExecutionContext, prev: dict) -> dict:
                 f"[sec_8k_releases] {len(info.get('failed', []))} filings failed, rate limited: "
                 f"{info.get('rate_limited')}, capped: {info.get('capped')}; the cursor waits for them")
         out["sec_8k_releases"] = info.get("landed", 0)
-    except Exception as exc:  # noqa: BLE001 -- the cursor is unchanged, the next run retries
+    except Exception as exc:  # the cursor is unchanged, the next run retries
         context.log.warning(f"[sec_8k_releases] failed: {exc}")
     try:
         info = pull_agency_releases(engine.warehouse, now=now)
         context.log.info(f"[agency_releases] {info}")
         out["agency_releases"] = info["landed"]
-    except Exception as exc:  # noqa: BLE001 -- releases not landed are read again next run
+    except Exception as exc:  # releases not landed are read again next run
         context.log.warning(f"[agency_releases] failed: {exc}")
     return {**prev, "primary": out}
 

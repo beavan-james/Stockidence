@@ -105,7 +105,9 @@ def write_summaries(
     try:
         for period, day in inputs.write:
             market = inputs.markets.get((period, day))
-            headline_keys = market.keys if market_block(market, period, day) else []
+            headline_keys = (
+                market.keys if market is not None and market_block(market, period, day) else []
+            )
             if period == "daily":
                 pairs = daily_cards(day, inputs, cards)
                 keys = [card.story_key for _, card in pairs]

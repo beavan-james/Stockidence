@@ -159,7 +159,7 @@ def daily_prompt(day: date, stories: list[tuple[StoryInput, Card]],
 def _with_market(keys: list[str], market: Market | None, period: str, day: date) -> list[str]:
     """Part 0's keys: the cards', then the market headlines' when the
     prompt had a Market block."""
-    if not market_block(market, period, day):
+    if market is None or not market_block(market, period, day):
         return keys
     return [*keys, *(k for k in market.keys if k not in keys)]
 

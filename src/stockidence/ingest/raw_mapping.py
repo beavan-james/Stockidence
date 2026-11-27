@@ -45,7 +45,7 @@ def primary_news_rows(articles: list[dict[str, Any]]) -> dict[str, list[dict[str
     """Articles from a primary source (an SEC filing, an agency release),
     already in the shared payload shape and carrying their `article_id`:
     fan out to raw_news_articles + their ticker links."""
-    rows = {"raw_news_articles": [], "news_ticker_sentiment": []}
+    rows: dict[str, list[dict[str, Any]]] = {"raw_news_articles": [], "news_ticker_sentiment": []}
     for a in articles:
         rows["raw_news_articles"].append({"article_id": a["article_id"], "payload": a})
         rows["news_ticker_sentiment"].extend(
@@ -484,7 +484,7 @@ def _news_rows(
                 # the general feed is market context; a per-ticker pull is company news
                 "feed": "finnhub_company" if symbol else "finnhub_general",
                 "title": item.get("headline"),
-                "time_published": datetime.fromtimestamp(published, timezone.utc).strftime("%Y%m%dT%H%M%S"),
+                "time_published": datetime.fromtimestamp(published, UTC).strftime("%Y%m%dT%H%M%S"),
                 "ticker_sentiment": [{"ticker": t} for t in tickers],
             },
         })

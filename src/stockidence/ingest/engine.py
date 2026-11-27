@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ..storage import Warehouse
 from .clients.agencies import AgencyFeedClient
 from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
