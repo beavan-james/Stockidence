@@ -1,5 +1,5 @@
 # Single-box production stack: FastAPI + Dagster + static SPA.
-# Secrets come from .env (see .env.example) — never baked into images.
+# Secrets come from .env (keys listed in README.md, Deploy) — never baked into images.
 #
 # DuckDB is single-writer by design: api, webserver and daemon all mount
 # ./data, and every reader already retries on lock contention. The api runs

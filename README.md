@@ -217,8 +217,22 @@ Docker Compose — FastAPI, Dagster (a long-lived code server, webserver and
 daemon; see `workspace.docker.yaml`) and the SPA behind nginx (HTTPS on 443,
 port 80 redirects):
 
+Create `.env` next to `docker-compose.yml` first (it's untracked; never
+commit it) with:
+
+- **Provider keys (free tiers):** `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`,
+  `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY`.
+- **`SEC_USER_AGENT`:** EDGAR needs no key, only a name and contact email,
+  e.g. `Stockidence you@example.com`.
+- **`STOCKIDENCE_ADMIN_TOKEN`:** opens the POST routes that launch pipeline
+  runs (`openssl rand -hex 32`); left unset, they stay shut.
+
+Optional: pacing overrides in seconds between provider calls
+(`FINNHUB_MIN_INTERVAL_S`, `TWELVE_DATA_MIN_INTERVAL_S`,
+`ALPHA_VANTAGE_MIN_INTERVAL_S`, `FRED_MIN_INTERVAL_S`, `SEC_MIN_INTERVAL_S`).
+Paths and service wiring already default correctly in compose.
+
 ```bash
-cp .env.example .env   # fill in provider keys
 docker compose up --build -d
 ```
 
