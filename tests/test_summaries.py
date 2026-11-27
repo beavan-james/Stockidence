@@ -23,6 +23,7 @@ from stockidence.summaries.cards import (
     make_card,
     render_card,
 )
+from stockidence.summaries.market import Headline, Market, market_block, percent
 from stockidence.summaries.model import (
     ESTIMATE,
     ModelUnavailable,
@@ -469,6 +470,76 @@ def test_weekly_article_is_an_overview_then_sections():
     assert llm.calls[-1]["system"].startswith("You write the opening")
 
 
+# --- the market ---------------------------------------------------------------
+
+SLIP = Headline("m1", "Stocks slip as yields climb",
+                "Wall Street fell on Thursday as Treasury yields rose. The Nasdaq led losses. "
+                "Oil was flat.", "Reuters", "https://news.example/m1")
+MARKET = Market(-0.0083, 15.234, (SLIP, Headline("m2", "Oil steadies", None, None, "https://news.example/m2")))
+
+
+@pytest.mark.parametrize(("r", "text"), [
+    (0.0083, "up 0.8%"), (-0.012, "down 1.2%"), (0.0004, "up 0.04%"), (-0.00001, "unchanged"),
+])
+def test_a_return_is_written_with_its_direction(r, text):
+    assert percent(r) == text
+
+
+def test_the_daily_market_block_names_the_session_and_trims_summaries():
+    assert market_block(MARKET, "daily", date(2026, 11, 20)) == (
+        "Market:\n"
+        "S&P 500 in Thursday's session: down 0.8%. VIX at the close: 15.2.\n"
+        "Most covered market headlines:\n"
+        "- Reuters: Stocks slip as yields climb — Wall Street fell on Thursday as Treasury yields "
+        "rose. The Nasdaq led losses.\n"
+        "- Oil steadies")
+
+
+def test_the_weekly_market_block_covers_the_week():
+    block = market_block(Market(0.012, None), "weekly", date(2026, 11, 20))
+    assert block == "Market:\nS&P 500 over the week: up 1.2%."
+    assert "at the week's last close: 15.2" in market_block(Market(None, 15.2), "weekly", date(2026, 11, 20))
+
+
+def test_no_market_no_block():
+    assert market_block(None, "daily", date(2026, 11, 20)) is None
+    assert market_block(Market(None, None), "daily", date(2026, 11, 20)) is None
+
+
+def test_the_daily_paragraph_gets_the_market_and_keeps_its_headlines():
+    # a sentence on the market from the block passes the checks
+    line = " Reuters reported that stocks fell 0.8% in Thursday's session as Treasury yields rose."
+    llm = FakeModel(lambda s, u, t, sc: _prose(u, 160) + line)
+    summary = write_daily(llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW, MARKET)
+    assert summary.status == OK and summary.body.endswith(line.strip())
+    assert summary.story_keys == ("daily-2026-11-20-1", "m1", "m2")
+    user, system = llm.calls[0]["user"], llm.calls[0]["system"]
+    assert user.endswith(market_block(MARKET, "daily", date(2026, 11, 20)))
+    assert "When a Market block follows the cards" in system
+
+
+def test_an_outlet_the_block_lacks_still_fails():
+    # the name check skips a sentence's first word, so this one is mid-sentence
+    line = " Stocks fell 0.8% in Thursday's session, Bloomberg reported."
+    llm = FakeModel(lambda s, u, t, sc: _prose(u, 160) + line)
+    summary = write_daily(llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW, MARKET)
+    assert summary.status == SOURCES_ONLY
+    assert any("Bloomberg" in p for p in summary.problems)
+
+
+def test_the_weekly_overview_gets_the_week_s_market_and_sections_do_not():
+    stories = [_item_story(1, ("NVDA",), ("earnings",), 0.9), _item_story(2, ("WMT",), ("earnings",), 0.6)]
+    cards = {s.key: _card(s.key) for s in stories}
+    sections = plan_week(group_stories(stories), cards, {}, ESTIMATE)
+    llm = FakeModel(_writer)
+    parts = write_weekly(llm, date(2026, 11, 20), sections, NOW, MARKET)
+    assert parts[0].story_keys == ("w1", "w2", "m1", "m2")
+    assert all("m1" not in p.story_keys for p in parts[1:])
+    *section_calls, overview = llm.calls
+    assert "S&P 500 over the week: down 0.8%." in overview["user"]
+    assert all("Market:" not in c["user"] for c in section_calls)
+
+
 def test_render_card_shows_tickers_after_names():
     text = render_card(_card("k", companies=[{"ticker": "NVDA", "name": "Nvidia"},
                                              {"ticker": "", "name": "OpenAI"},
@@ -580,3 +651,53 @@ def test_a_rebuilt_digest_is_written_again(wh):
     llm = FakeModel(_writer)
     _, summaries = _run(wh, llm, [("daily", day)], [("daily", day)])
     assert [s.story_keys for s in summaries.written] == [("a1", "b1")]
+
+
+def _seed_market(wh: Warehouse, period: str, day: str, sp500: float | None, vix: float | None,
+                 headlines: list[tuple[str, str]]) -> None:
+    """The digest's row with its market figures, and its context headlines
+    (article id, headline) with their articles."""
+    with wh.connect() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO mart.news_digests (period, digest_date, window_start, window_end,"
+            " articles, routine_dropped, commentary_dropped, stories, outlets, built_at, sp500_return,"
+            " vix) VALUES (?, ?, '2026-11-19 12:00', '2026-11-20 12:00', 3, 0, 0, 3, 1, ?, ?, ?)",
+            [period, day, NOW, sp500, vix])
+        con.execute("DELETE FROM mart.news_digest_context WHERE period = ? AND digest_date = ?", [period, day])
+        for rank, (aid, headline) in enumerate(headlines, start=1):
+            url = f"https://feed.example/{aid}"
+            con.execute(
+                "INSERT INTO mart.news_digest_context VALUES (?, ?, ?, ?, NULL, ?, 'Reuters',"
+                " '2026-11-19 20:00', 2, 2, 0.5)", [period, day, rank, headline, url])
+            con.execute(
+                "INSERT OR REPLACE INTO staging.stg_news_articles (article_id, published_at, headline, url)"
+                " VALUES (?, '2026-11-19 20:00', ?, ?)", [aid, headline, url])
+
+
+def test_the_chain_gives_the_paragraph_its_market_and_rewrites_when_it_changes(wh):
+    day = date(2026, 11, 20)
+    _seed(wh, "daily", "2026-11-20", 1, ["a1"])
+    _seed_market(wh, "daily", "2026-11-20", -0.0083, 15.2, [("m1", "Stocks slip as yields climb")])
+    llm = FakeModel(_writer)
+    _run(wh, llm, [("daily", day)], [("daily", day)])
+    assert "- Reuters: Stocks slip as yields climb" in llm.calls[-1]["user"]
+    assert _rows(wh, "SELECT story_keys FROM mart.news_summaries") == [(["a1", "m1"],)]
+
+    again = FakeModel(_writer)
+    _, summaries = _run(wh, again, [("daily", day)], [("daily", day)])
+    assert summaries.skipped == (("daily", day),) and again.calls == []
+
+    # the digest is rebuilt with other headlines: the paragraph is written again
+    _seed_market(wh, "daily", "2026-11-20", -0.0083, 15.2, [("m2", "Oil steadies")])
+    _, summaries = _run(wh, FakeModel(_writer), [("daily", day)], [("daily", day)])
+    assert [s.story_keys for s in summaries.written] == [("a1", "m2")]
+
+
+def test_a_digest_from_before_the_market_context_has_no_block(wh):
+    day = date(2026, 11, 20)
+    _seed(wh, "daily", "2026-11-20", 1, ["a1"])
+    _seed_market(wh, "daily", "2026-11-20", None, None, [])
+    llm = FakeModel(_writer)
+    _run(wh, llm, [("daily", day)], [("daily", day)])
+    assert "Market:" not in llm.calls[-1]["user"]
+    assert _rows(wh, "SELECT story_keys FROM mart.news_summaries") == [(["a1"],)]

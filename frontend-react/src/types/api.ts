@@ -332,6 +332,8 @@ export interface SummaryPart {
   body: string | null;
   status: "ok" | "sources_only";
   sources: SummarySource[];
+  /** The market headlines the daily paragraph or weekly overview was given; empty elsewhere. */
+  market_sources: SummarySource[];
 }
 
 export interface SummaryEnvelope {

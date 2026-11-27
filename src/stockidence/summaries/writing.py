@@ -9,6 +9,10 @@ at temperature 0, with the names the first answer added listed for the model
 to leave out (prompts.RETRY_NAMES); if that fails too, the part is stored with status
 `sources_only` and no body, and the page shows that part's sources instead.
 
+The daily paragraph and the weekly overview end with the digest's Market
+block when it has one (market.market_block); their story_keys then carry
+the market headlines' article ids after the cards' keys.
+
 Lengths: the prompts ask for the spec's word counts, and the check allows
 LENGTH_SLACK either side, since a small model doesn't count words exactly.
 """
@@ -22,6 +26,7 @@ from datetime import date, datetime, timedelta
 
 from .cards import Card, render_card
 from .checks import check_prose, drop_unsupported_tickers, unsupported_names
+from .market import Market, market_block
 from .model import Ollama, PromptTooLong
 from .plan import Section, names_in
 from .prompts import (
@@ -115,20 +120,31 @@ def _summary(period: str, day: date, part: int, heading: str | None, text: str |
 
 # --- daily --------------------------------------------------------------------
 
-def daily_prompt(day: date, stories: list[tuple[StoryInput, Card]]) -> str:
+def daily_prompt(day: date, stories: list[tuple[StoryInput, Card]],
+                 market: Market | None = None) -> str:
     header = (f"Daily market news summary for {day:%A %Y-%m-%d}, covering the news "
               "up to 07:00 New York time. Fact cards, most important first:")
     cards = [f"{n}. {render_card(card, story)}" for n, (story, card) in enumerate(stories, start=1)]
-    return "\n\n".join([header, *cards])
+    block = market_block(market, "daily", day)
+    return "\n\n".join([header, *cards, *([block] if block else [])])
+
+
+def _with_market(keys: list[str], market: Market | None, period: str, day: date) -> list[str]:
+    """Part 0's keys: the cards', then the market headlines' when the
+    prompt had a Market block."""
+    if not market_block(market, period, day):
+        return keys
+    return [*keys, *(k for k in market.keys if k not in keys)]
 
 
 def write_daily(llm: Ollama, day: date, stories: list[tuple[StoryInput, Card]],
-                now: datetime) -> Summary:
-    """The day's paragraph from its stories' cards, in rank order."""
-    given = daily_prompt(day, stories)
+                now: datetime, market: Market | None = None) -> Summary:
+    """The day's paragraph from its stories' cards, in rank order, and the
+    market beside them."""
+    given = daily_prompt(day, stories, market)
     text, problems = write(llm, DAILY_SYSTEM, given, words=DAILY_WORDS,
                            max_output=DAILY_OUTPUT, paragraphs=False)
-    keys = [card.story_key for _, card in stories]
+    keys = _with_market([card.story_key for _, card in stories], market, "daily", day)
     return _summary("daily", day, 0, None, text, keys, llm, now, problems)
 
 
@@ -148,16 +164,20 @@ def section_prompt(friday: date, section: Section, others: list[Section]) -> str
     return "\n".join(lines)
 
 
-def overview_prompt(friday: date, sections: list[Section]) -> str:
+def overview_prompt(friday: date, sections: list[Section], market: Market | None = None) -> str:
     lines = [f"Weekly market news article for {_week(friday)}. Its sections:"]
     for section in sections:
         lines += ["", section.heading]
         lines += [f"- {card.card['what']}" for item in section.items for card in item.cards]
+    if block := market_block(market, "weekly", friday):
+        lines += ["", block]
     return "\n".join(lines)
 
 
-def write_weekly(llm: Ollama, friday: date, sections: list[Section], now: datetime) -> list[Summary]:
-    """One call per section, then the overview; part 0 is the overview."""
+def write_weekly(llm: Ollama, friday: date, sections: list[Section], now: datetime,
+                 market: Market | None = None) -> list[Summary]:
+    """One call per section, then the overview, which also gets the week's
+    market; part 0 is the overview."""
     parts: list[Summary] = []
     for n, section in enumerate(sections, start=1):
         others = [o for o in sections if o is not section]
@@ -167,7 +187,7 @@ def write_weekly(llm: Ollama, friday: date, sections: list[Section], now: dateti
         parts.append(_summary("weekly", friday, n, section.heading, text, section.story_keys,
                               llm, now, problems))
     system = OVERVIEW_SYSTEM.format(low=OVERVIEW_WORDS[0], high=OVERVIEW_WORDS[1])
-    text, problems = write(llm, system, overview_prompt(friday, sections),
+    text, problems = write(llm, system, overview_prompt(friday, sections, market),
                            words=OVERVIEW_WORDS, max_output=OVERVIEW_OUTPUT, paragraphs=False)
-    keys = [k for s in sections for k in s.story_keys]
+    keys = _with_market([k for s in sections for k in s.story_keys], market, "weekly", friday)
     return [_summary("weekly", friday, 0, None, text, keys, llm, now, problems), *parts]

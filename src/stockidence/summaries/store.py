@@ -2,21 +2,23 @@
 calls: read everything, close, call the model, open, write, close. The
 DuckDB lock is held for seconds, never while the model runs.
 
-Reads mart.news_digest_*, staging.stg_news_articles,
-staging.stg_news_article_text and the rankings (sectors); writes
-mart.news_story_cards and mart.news_summaries.
+Reads mart.news_digest_* (the stories, and for the digests to write their
+market: the S&P 500, the VIX and the context headlines),
+staging.stg_news_articles, staging.stg_news_article_text and the rankings
+(sectors); writes mart.news_story_cards and mart.news_summaries.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from ..ingest.articles import MIN_WORDS
 from ..storage import Warehouse
 from .cards import Card
+from .market import Headline, Market
 from .stories import StoryInput, Text
 from .writing import Summary
 
@@ -30,6 +32,7 @@ class SummaryInputs:
     sectors: dict[str, str]                  # ticker -> sector, for the weekly sections
     summaries: dict[Digest, tuple[Summary, ...]]  # what the digests to write already have
     write: tuple[Digest, ...]                # the digests to write a summary for
+    markets: dict[Digest, Market] = field(default_factory=dict)  # the market beside each to write
 
 
 def _keys(digests: Iterable[Digest]) -> list[str]:
@@ -107,6 +110,35 @@ def _sectors(con, fridays: list[date]) -> dict[str, str]:
     return {ticker: sector for ticker, sector, _ in rows}  # weekly rows come last and win
 
 
+def _markets(con, digests: list[Digest]) -> dict[Digest, Market]:
+    """Each digest's S&P 500 move and VIX, and its context headlines in rank
+    order, each keyed by its lead article's id. Digests built before the
+    market context have neither."""
+    figures = con.execute(
+        """
+        SELECT period, digest_date, sp500_return, vix FROM mart.news_digests
+        WHERE list_contains(?, period || '|' || strftime(digest_date, '%Y-%m-%d'))
+        """,
+        [_keys(digests)],
+    ).fetchall()
+    headlines: dict[Digest, list[Headline]] = {}
+    for period, day, key, headline, summary, outlet, url in con.execute(
+        """
+        SELECT c.period, c.digest_date,
+               (SELECT min(a.article_id) FROM staging.stg_news_articles a WHERE a.url = c.url),
+               c.headline, c.summary, c.source, c.url
+        FROM mart.news_digest_context c
+        WHERE list_contains(?, c.period || '|' || strftime(c.digest_date, '%Y-%m-%d'))
+        ORDER BY c.period, c.digest_date, c.rank
+        """,
+        [_keys(digests)],
+    ).fetchall():
+        if key:  # the article row is what the summary's sources are read from
+            headlines.setdefault((period, day), []).append(Headline(key, headline, summary, outlet, url))
+    return {(period, day): Market(sp500, vix, tuple(headlines.get((period, day), ())))
+            for period, day, sp500, vix in figures}
+
+
 def _summaries(con, digests: list[Digest]) -> dict[Digest, tuple[Summary, ...]]:
     rows = con.execute(
         """
@@ -135,7 +167,8 @@ def read_inputs(warehouse: Warehouse, read: Iterable[Digest], write: Iterable[Di
         cards = _cards(con, sorted({a for s in stories for a in s.article_ids}))
         sectors = _sectors(con, [d for p, d in write if p == "weekly"])
         summaries = _summaries(con, write) if write else {}
-    return SummaryInputs(tuple(stories), cards, sectors, summaries, tuple(write))
+        markets = _markets(con, write) if write else {}
+    return SummaryInputs(tuple(stories), cards, sectors, summaries, tuple(write), markets)
 
 
 def save_cards(warehouse: Warehouse, cards: list[Card]) -> int:
