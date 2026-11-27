@@ -12,6 +12,8 @@ from stockidence.ingest.endpoints import Provider
 from stockidence.ingest.engine import IngestEngine
 from stockidence.storage import Warehouse
 
+pytestmark = pytest.mark.integration
+
 NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 QUOTE = {"c": 250.1, "h": 251.0, "l": 249.0, "o": 249.5, "pc": 247.0}

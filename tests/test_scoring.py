@@ -15,6 +15,8 @@ from stockidence.mart.scoring import score_ticker
 from stockidence.staging.staging import rebuild_financials_reported
 from stockidence.storage import Warehouse
 
+pytestmark = pytest.mark.integration
+
 NOW = datetime.now(UTC)
 NOW_MS = int(NOW.timestamp() * 1000)
 

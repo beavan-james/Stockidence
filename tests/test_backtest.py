@@ -17,6 +17,8 @@ from stockidence.mart.mart import rebuild_prices_daily, rebuild_technical_indica
 from stockidence.mart.scoring import score_ticker
 from stockidence.storage import Warehouse
 
+pytestmark = pytest.mark.integration
+
 DAY0 = date(2025, 1, 1)
 
 

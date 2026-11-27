@@ -65,6 +65,7 @@ def test_movers_run_after_midnight_new_york(defs):
     assert overnight.execution_timezone == "America/New_York"
 
 
+@pytest.mark.integration
 def test_ticker_data_asset_runs_with_fake_engine(tmp_path):
     from stockidence.definitions import ticker_data
     from stockidence.storage import Warehouse
@@ -129,6 +130,7 @@ def test_quarterly_job_chains_refresh_dataset_retrain(defs):
     assert "quarterly_schedule" in {s.name for s in defs.schedules}
 
 
+@pytest.mark.integration
 def test_full_ticker_run_executes_green_for_partition(tmp_path):
     """Sensor RunRequests launch the full per-ticker asset graph. Materialize
     it end-to-end against a seeded warehouse (fake engine = no network) and
@@ -323,6 +325,7 @@ def _summary_job(tmp_path, llm):
     return wh, summaries_only
 
 
+@pytest.mark.integration
 def test_summary_ops_run_after_a_digest(tmp_path):
     import json
 
@@ -356,6 +359,7 @@ def test_summary_ops_run_after_a_digest(tmp_path):
         assert con.execute("SELECT status FROM mart.news_summaries").fetchall() == [("ok",)]
 
 
+@pytest.mark.integration
 def test_a_model_outage_saves_the_cards_then_fails(tmp_path):
     from stockidence.summaries.model import ESTIMATE, ModelUnavailable
 
@@ -384,6 +388,7 @@ def test_digest_jobs_read_the_picked_articles(defs):
         assert {"fetch_articles_op", "stage_article_text_op"} <= nodes
 
 
+@pytest.mark.integration
 def test_article_ops_run_after_a_digest(tmp_path):
     """The two article ops in a job of their own: no stories to read on an
     empty warehouse, so nothing is fetched, but every log line and output
