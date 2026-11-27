@@ -17,6 +17,10 @@ class APIError(StockidenceError):
     """A provider returned an error response."""
 
 
+class NotFoundError(APIError):
+    """HTTP 404: the resource isn't there, so retrying won't help."""
+
+
 class RateLimitError(StockidenceError):
     """A provider returned a rate-limit response."""
 
@@ -107,11 +111,17 @@ class BaseClient:
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        text: bool = False,
     ) -> Any:
+        """`path` is appended to base_url unless it is a full URL. With
+        `text`, the body comes back as a string instead of parsed JSON."""
         last_error: Exception | None = None
         for attempt in range(self.retries + 1):
             try:
-                return self._request_once(method, path, params=params, json_body=json_body, headers=headers)
+                return self._request_once(method, path, params=params, json_body=json_body,
+                                          headers=headers, text=text)
+            except NotFoundError:
+                raise
             except RateLimitError as exc:
                 # burst collisions heal with patience; a genuinely exhausted
                 # daily quota will fail all attempts and surface to Dagster
@@ -133,9 +143,10 @@ class BaseClient:
         params: dict[str, Any] | None,
         json_body: dict[str, Any] | None,
         headers: dict[str, str] | None,
+        text: bool = False,
     ) -> Any:
         self._pace()
-        url = f"{self.base_url}{path}"
+        url = path if path.startswith(("https://", "http://")) else f"{self.base_url}{path}"
         final_headers = {**self._default_headers(), **(headers or {})}
         resp = httpx.request(
             method,
@@ -147,7 +158,7 @@ class BaseClient:
             follow_redirects=True,
         )
         self._raise_for_status(resp)
-        return self._parse(resp)
+        return resp.text if text else self._parse(resp)
 
     def _default_headers(self) -> dict[str, str]:
         return {"Accept": "application/json"}
@@ -169,6 +180,8 @@ class BaseClient:
     def _raise_for_status(self, resp: httpx.Response) -> None:
         if resp.status_code in (429,):
             raise RateLimitError(f"Rate limited by {self.base_url} (HTTP {resp.status_code})")
+        if resp.status_code == 404:
+            raise NotFoundError(f"HTTP 404 from {self._redact_url(resp.url)}")
         if resp.status_code >= 400:
             raise APIError(f"HTTP {resp.status_code} from {self._redact_url(resp.url)}: {resp.text[:300]}")
 

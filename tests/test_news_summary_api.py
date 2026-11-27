@@ -67,8 +67,9 @@ def client(tmp_path, monkeypatch):
         # Aug 24's digest came before the first summary run: a story list only
         for day, gap in (("2026-08-24", 20), ("2026-08-26", 150)):
             con.execute(
-                """INSERT INTO mart.news_digests VALUES ('daily', ?, '2026-08-25 11:00',
-                       '2026-08-26 11:00', 400, 30, 20, 120, 60, ?, ?)""",
+                """INSERT INTO mart.news_digests (period, digest_date, window_start, window_end, articles,
+                       routine_dropped, commentary_dropped, stories, outlets, session_gap_minutes, built_at)
+                   VALUES ('daily', ?, '2026-08-25 11:00', '2026-08-26 11:00', 400, 30, 20, 120, 60, ?, ?)""",
                 [day, gap, WRITTEN],
             )
         for period, day, part, heading, body, keys, status in SUMMARIES:

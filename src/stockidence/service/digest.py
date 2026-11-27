@@ -20,24 +20,39 @@ def _utc_iso(ts) -> str | None:
 
 
 def _weights() -> dict[str, float]:
+    """The current scoring weights (a digest built before primary sources
+    was scored on LEGACY_WEIGHTS; its stories' components say so)."""
     from ..mart.news_digest import IMPORTANCE_WEIGHTS
 
     return dict(IMPORTANCE_WEIGHTS)
 
 
 def _full_marks(period: str) -> dict[str, float]:
-    """Where coverage and reaction stop adding to a story's score."""
-    from ..mart.news_digest import PERIODS
+    """Where reaction and size stop adding to a story's score: a stock's
+    move, the S&P 500's, and the market caps size runs between."""
+    from ..mart.news_digest import PERIODS, SIZE_DECADES, SIZE_FROM
 
     spec = PERIODS[period]
-    return {"coverage_outlets": spec.coverage_full_at, "move": spec.reaction_full_at}
+    return {"move": spec.reaction_full_at, "market_move": spec.market_full_at,
+            "size_from": SIZE_FROM, "size_full_at": SIZE_FROM * 10**SIZE_DECADES}
+
+
+def _components(cov, rea, cat, site, event, size) -> dict[str, float]:
+    """A story's inputs as it was scored: event and size from primary
+    sources, or coverage and category on a digest from the news feed."""
+    if event is None:
+        return {"coverage": round(cov, 4), "reaction": round(rea, 4),
+                "category": round(cat, 4), "on_site": round(site, 4)}
+    return {"event": round(event, 4), "reaction": round(rea, 4),
+            "size": round(size or 0.0, 4), "on_site": round(site, 4)}
 
 
 def _empty(period: str) -> dict:
     return {"period": period, "digest_date": None, "previous_date": None, "next_date": None,
             "window_start": None, "window_end": None, "built_at": None, "articles": 0,
             "routine_dropped": 0, "commentary_dropped": 0, "stories": 0, "outlets": 0,
-            "session_gap_minutes": None, "weights": _weights(), "full_marks": _full_marks(period),
+            "session_gap_minutes": None, "sp500_return": None, "vix": None,
+            "weights": _weights(), "full_marks": _full_marks(period),
             "items": []}
 
 
@@ -65,7 +80,7 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
                 """
                 SELECT digest_date, window_start, window_end, built_at, articles,
                        routine_dropped, commentary_dropped, stories, outlets,
-                       session_gap_minutes
+                       session_gap_minutes, sp500_return, vix
                 FROM mart.news_digests
                 WHERE period = ? AND (CAST(? AS DATE) IS NULL OR digest_date = ?)
                 ORDER BY digest_date DESC LIMIT 1
@@ -91,7 +106,7 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
             """
             SELECT rank, headline, summary, url, source, published_at, tickers,
                    categories, n_articles, n_outlets, move_ticker, move_return,
-                   coverage, reaction, category, on_site, score
+                   coverage, reaction, category, on_site, score, event, size
             FROM mart.news_digest_stories
             WHERE period = ? AND digest_date = ?
             ORDER BY rank
@@ -133,6 +148,8 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
         "stories": head[7],
         "outlets": head[8],
         "session_gap_minutes": head[9],
+        "sp500_return": head[10],
+        "vix": head[11],
         "weights": _weights(), "full_marks": _full_marks(period),
         "items": [
             {
@@ -142,12 +159,11 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
                 "n_articles": n_articles, "n_outlets": n_outlets,
                 "move_ticker": move_ticker, "move_return": move_return,
                 "score": round(score, 4),
-                "components": {"coverage": round(cov, 4), "reaction": round(rea, 4),
-                               "category": round(cat, 4), "on_site": round(site, 4)},
+                "components": _components(cov, rea, cat, site, event, size),
                 "also_covered": also.get(int(rank), []),
             }
             for (rank, headline, summary, url, source, published, tickers, categories,
                  n_articles, n_outlets, move_ticker, move_return,
-                 cov, rea, cat, site, score) in stories
+                 cov, rea, cat, site, score, event, size) in stories
         ],
     }

@@ -4,9 +4,9 @@ import type { DigestInput, DigestPeriod, DigestStory } from "@/types/api";
 export const GAP_WARN_MINUTES = 120;
 
 export const INPUTS: { key: DigestInput; label: string }[] = [
-  { key: "coverage", label: "Coverage" },
-  { key: "reaction", label: "Stock move" },
-  { key: "category", label: "Story type" },
+  { key: "event", label: "Event" },
+  { key: "reaction", label: "Price move" },
+  { key: "size", label: "Company size" },
   { key: "on_site", label: "On the site" },
 ];
 
@@ -63,19 +63,17 @@ export function inputReading(
   ranked: (t: string) => boolean,
 ): string {
   switch (key) {
-    case "coverage":
-      return plural(s.n_outlets, "outlet");
+    case "event":
+      return s.categories.length ? s.categories.map((c) => CATEGORY_LABELS[c] ?? c).join(", ") : (s.source ?? "");
     case "reaction":
       return s.move_ticker && s.move_return != null
         ? `${s.move_ticker} ${signedPct(s.move_return)} ${MOVE_SPAN[period]}`
         : "No price for the stock it leads with";
-    case "category":
-      return s.categories.length
-        ? s.categories.map((c) => CATEGORY_LABELS[c] ?? c).join(", ")
-        : "Not a deal, earnings, macro or policy story";
+    case "size":
+      return s.tickers.length ? s.tickers[0] : "Names no stock";
     case "on_site": {
       const named = s.tickers.filter(ranked);
-      return s.components.on_site > 0
+      return (s.components.on_site ?? 0) > 0
         ? `${named.length ? named.join(", ") : "A named stock"} is in a site ranking`
         : "Names no stock the site ranks";
     }

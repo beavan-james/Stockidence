@@ -7,14 +7,15 @@ import { INPUTS, signedPct } from "@/lib/digest";
 import type { DigestEnvelope, DigestInput } from "@/types/api";
 
 const range = (v: number) => signedPct(v, 0).replace("+", "±");
+const cap = (v: number) => (v >= 1e12 ? `$${v / 1e12}tn` : `$${v / 1e9}bn`);
 
 function Inputs({ daily, weekly }: { daily: DigestEnvelope; weekly: DigestEnvelope }) {
   const day = daily.full_marks;
   const week = weekly.full_marks;
   const help: Record<DigestInput, string> = {
-    coverage: `How many outlets ran the story. One outlet scores nothing; each doubling adds the same, up to full marks at ${day.coverage_outlets} outlets in a day's digest and ${week.coverage_outlets} in a week's.`,
-    reaction: `How the stock the story leads with moved: its one-day move in a day's digest, its move over the five sessions in a week's. Full marks at ${range(day.move)} and ${range(week.move)}.`,
-    category: "Full marks for a deal, earnings, macro or policy story, nothing otherwise.",
+    event: "What happened. For a company, the kind of event its filing reports: a bankruptcy or restatement scores highest, a deal or results high, a director change low. For a government release, its kind: an FOMC statement, CPI or the jobs report scores highest.",
+    reaction: `How the stock the story leads with moved: its one-day move in a day's digest, its move over the five sessions in a week's. Full marks at ${range(day.move)} and ${range(week.move)}. For a Fed decision or BLS figure, the S&P 500's move, full marks at ${range(day.market_move)} and ${range(week.market_move)}.`,
+    size: `The company's market cap: nothing at ${cap(day.size_from)}, full marks at ${cap(day.size_full_at)}, each tenfold adding the same. A Fed decision or BLS figure gets full marks.`,
     on_site: "Full marks when the story names a stock in this week's or this quarter's ranking.",
   };
   const weights = daily.weights;
@@ -65,18 +66,18 @@ export function NewsMethodPage() {
         )}
       </Section>
 
-      <Section title="Filters and grouping">
+      <Section title="Sources">
         <div className="grid max-w-4xl gap-6 text-sm leading-relaxed text-ink-secondary md:grid-cols-2">
           <p>
-            Before scoring, routine items are dropped: fund filings reporting a stake change, insider and
-            congressional trades, price-target notes, templated price recaps, law-firm calls for shareholders, and
-            conference, dividend and results-date announcements. So are opinion pieces: headlines that ask a
-            question or pitch stocks to buy.
+            Stories come from the source, not from news articles. Company news is the 8-K filings each company in
+            the rankings makes with the SEC, read through the press release attached, or the filing itself when
+            there is none. Economic and government news is the Federal Reserve's monetary-policy releases, the
+            BLS's headline figures, and SEC and FTC press releases.
           </p>
           <p>
-            Articles become one story when their headlines share enough distinctive words within 36 hours, or lead
-            with the same stock on the same kind of news. The story shows the article that shares the most with the
-            rest.
+            Routine filings are skipped: vote results, bylaw changes, unregistered share sales, credit agreements,
+            and filings with no press release that only list exhibits or make a disclosure. Releases by the same
+            company on the same kind of news within 36 hours become one story.
           </p>
         </div>
       </Section>
@@ -85,16 +86,12 @@ export function NewsMethodPage() {
         <div className="grid max-w-4xl gap-6 text-sm leading-relaxed text-ink-secondary md:grid-cols-2">
           <p>
             A day's digest covers the 24 hours to 7:00 ET and is built at 7:30 ET on weekdays, before the open.
-            Monday's covers the weekend too. It keeps the top 10 stories, saving up to two places for government
-            and economic news that scores at least 0.30.
+            Monday's covers the weekend too. It keeps the top 10 stories scoring at least 0.20, saving up to two
+            places for government and economic news that scores at least 0.30.
           </p>
           <p>
-            A week's digest covers the seven days to 7:00 ET on Saturday, so Friday's session and the earnings
-            released after it are in, and is built at 7:30 that morning. It keeps the top 15.
-          </p>
-          <p>
-            The news feed returns only its latest ~100 articles per pull, so a busy stretch can be missed. A digest
-            says when a session went two hours or more without an article.
+            A week's digest covers the seven days to 7:00 ET on Saturday, so Friday's session and the
+            earnings released after it are in, and is built at 7:30 that morning. It keeps the top 15.
           </p>
         </div>
       </Section>

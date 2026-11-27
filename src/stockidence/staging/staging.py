@@ -135,9 +135,12 @@ NEWS_TICKER_MIN_RELEVANCE = 0.5
 def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
     """Typed articles from raw.raw_news_articles, restaged incrementally.
 
-    Both providers land in the same raw table and share three payload keys:
+    Every source lands in the same raw table and shares three payload keys:
     `title`, `time_published` (UTC 'YYYYMMDDTHHMMSS') and `ticker_sentiment`.
-    Only a Finnhub payload has `headline`, which is how `provider` is told.
+    A primary source (an SEC filing, an agency release) names its `provider`
+    and `feed`; for the news feeds, only a Finnhub payload has `headline`,
+    which is how `provider` is told, and a Finnhub article from a per-ticker
+    pull has category 'company'.
 
     The newest staged fetched_at is the high watermark: only rows landed at
     or after it are restaged (the batch at the watermark is re-read, which
@@ -147,8 +150,10 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
     rows written.
     """
     with warehouse.connect() as con:
+        # rows staged before `feed` existed are restaged in full, once
         since = None if full else con.execute(
-            "SELECT MAX(fetched_at) FROM staging.stg_news_articles"
+            "SELECT CASE WHEN bool_or(feed IS NULL) THEN NULL ELSE MAX(fetched_at) END"
+            " FROM staging.stg_news_articles"
         ).fetchone()[0]
         con.execute("BEGIN TRANSACTION")
         con.execute(
@@ -157,7 +162,9 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
             SELECT
                 article_id,
                 try_strptime(payload->>'time_published', '%Y%m%dT%H%M%S') AS published_at,
-                CASE WHEN payload->>'headline' IS NOT NULL THEN 'finnhub' ELSE 'alpha_vantage' END AS provider,
+                COALESCE(payload->>'provider',
+                         CASE WHEN payload->>'headline' IS NOT NULL THEN 'finnhub' ELSE 'alpha_vantage' END)
+                    AS provider,
                 NULLIF(trim(payload->>'source'), '') AS source,
                 trim(payload->>'title') AS headline,
                 NULLIF(trim(payload->>'summary'), '') AS summary,
@@ -166,7 +173,12 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
                 -- lines like BNY-P-K) at or above the relevance floor, most
                 -- relevant first, so tickers[1] is the stock the article is about
                 list_filter(ranked, lambda t, i: list_position(ranked, t) = i) AS tickers,
-                fetched_at
+                fetched_at,
+                COALESCE(payload->>'feed', CASE
+                    WHEN payload->>'headline' IS NULL THEN 'alpha_vantage'
+                    WHEN payload->>'category' = 'company' THEN 'finnhub_company'
+                    ELSE 'finnhub_general' END) AS feed,
+                from_json(payload->'items', '["VARCHAR"]') AS items
             FROM (
                 SELECT *, list_transform(list_reverse_sort(list_transform(list_filter(
                     COALESCE(from_json(payload->'ticker_sentiment',
@@ -193,7 +205,7 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
                 "DELETE FROM staging.stg_news_articles"
                 " WHERE article_id IN (SELECT article_id FROM news_batch)"
             )
-        con.execute("INSERT INTO staging.stg_news_articles SELECT * FROM news_batch")
+        con.execute("INSERT INTO staging.stg_news_articles BY NAME SELECT * FROM news_batch")
         written = con.execute("SELECT COUNT(*) FROM news_batch").fetchone()[0]
         con.execute("DROP TABLE news_batch")
         con.execute("COMMIT")

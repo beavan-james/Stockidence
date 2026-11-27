@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .clients.agencies import AgencyFeedClient
 from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
 from .clients.fred import FredClient
@@ -37,7 +38,12 @@ _PROVIDER_CLIENTS = {
     Provider.ALPHA_VANTAGE: AlphaVantageClient,
     Provider.FRED: FredClient,
     Provider.SEC_EDGAR: SecEdgarClient,
+    Provider.AGENCIES: AgencyFeedClient,
 }
+
+# Snapshot tables: a landing replaces the whole list, so it bumps one
+# watermark (the dimension it was fetched for) instead of one per row.
+_SNAPSHOT_ARTIFACTS = frozenset({"raw_sec_company_tickers"})
 
 # registry endpoint name -> FRED series id (the raw table key column)
 _FRED_SERIES = {"market.vix": "VIXCLS", "market.sp500": "SP500"}
@@ -116,6 +122,7 @@ class IngestEngine:
                 "from_date": f"{now.year}-01-01",
                 "to_date": now.date().isoformat(),
             },
+            "sec_company_tickers": {},
             "ticker_news": {
                 "symbol": sym,
                 "from_date": (now.date() - timedelta(days=_COMPANY_NEWS_LOOKBACK_DAYS)).isoformat(),
@@ -187,6 +194,7 @@ class IngestEngine:
         rows: dict[str, list[dict[str, Any]]],
         now: datetime,
         high_watermark: str | None = None,
+        dimension_key: str | None = None,
     ) -> int:
         written = 0
         for artifact, artifact_rows in rows.items():
@@ -194,7 +202,8 @@ class IngestEngine:
                 continue
             written += self.warehouse.land(
                 artifact, artifact_rows, fetched_at=now, high_watermark=high_watermark,
-                merge=MERGERS.get(artifact))
+                merge=MERGERS.get(artifact),
+                dimension_key=dimension_key if artifact in _SNAPSHOT_ARTIFACTS else None)
         return written
 
     def _ingest(self, spec: EndpointSpec, dimension_key: str, kwargs: dict[str, Any], now: datetime) -> IngestResult:
@@ -203,7 +212,7 @@ class IngestEngine:
         high_watermark = (
             max(r["date"].isoformat() for r in rows["raw_prices_daily"]) if spec.name == "prices.daily" else None
         )
-        written = self._land_rows(rows, now, high_watermark)
+        written = self._land_rows(rows, now, high_watermark, dimension_key)
         return IngestResult(spec.name, dimension_key, True, "fetch complete", written, high_watermark)
 
     def ingest_on_demand(

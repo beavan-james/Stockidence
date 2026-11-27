@@ -404,6 +404,62 @@ drops that list into the Finnhub filing's empty `report.bs`.
 }
 ```
 
+### Latest 8-K filings — the news digests' company stories (SEC EDGAR)
+
+`sec_8k_releases` (`ingest.sec_filings`), chained into `daily_digest` and
+`weekly_digest`. Same terms as Company Facts: free, no key,
+`SEC_USER_AGENT`; this pull keeps to 5 requests a second.
+
+- `GET https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&start=N&count=100&output=atom`
+  — the latest filings, newest first, paged back to the pull cursor
+  (watermark `(sec_8k_releases, cursor)`: the newest acceptance time read,
+  held back before any filing that failed; the first run looks back 36h).
+- `GET https://www.sec.gov/Archives/edgar/daily-index/YYYY/QTRn/form.YYYYMMDD.idx`
+  — the day's filings by form, for the days the feed no longer reaches. A
+  404 (a weekend, a holiday, a day not yet indexed) is not retried.
+- Per tracked filing (the filer is a ticker with prices): its index page
+  (items, acceptance time, documents), then the press release (EX-99.1,
+  else EX-99 / EX-99.01) or the 8-K itself. 8-K/A, filings whose items are
+  all routine (5.07 votes, 5.03 bylaws, 3.02 share sales, 9.01 exhibits
+  only, a 2.03 financing alone or with its 1.01) and a 7.01/8.01 with no release are
+  not read.
+
+Landed to `raw_news_articles` (`provider` `sec_edgar`, `feed` `sec_8k`), one
+article per accession: `title` the release's title line (or
+"{company}: {item}"), `summary` its opening paragraph, `items` the 8-K
+items, `time_published` the acceptance time, `ticker_sentiment` the filer.
+
+### Company tickers (SEC EDGAR)
+
+`GET https://www.sec.gov/files/company_tickers.json` — every listed
+company's ticker, CIK and name. `sec_company_tickers`, landed to
+`raw_sec_company_tickers` as one snapshot (one watermark), TTL 7 days,
+refreshed by the digest jobs before the 8-K pull. Maps the tracked tickers
+to the CIKs the filings carry (`BRK.B` ↔ `BRK-B`).
+
+```json
+{"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}, ...}
+```
+
+### Government release feeds — the news digests' macro and policy stories
+
+`agency_releases` (`ingest.agency_feeds`), chained into both digest jobs,
+no TTL (a release never changes). Public RSS/Atom, no key; each site's
+robots.txt is read with the article scraper's rules first, and a feed
+whose site shuts the scraper or AI crawlers out, or that fails, is skipped
+for that run.
+
+| Feed        | URL                                                         | A release is                                  |
+| ----------- | ----------------------------------------------------------- | --------------------------------------------- |
+| `fed`       | `https://www.federalreserve.gov/feeds/press_monetary.xml`   | an item: FOMC statements, minutes, other monetary releases |
+| `bls`       | `https://www.bls.gov/feed/bls_latest.rss`                   | a new figure for a new period of a headline number (indicators sharing a news release folded into one); the first run lands the figures already out undated, as a baseline |
+| `sec_press` | `https://www.sec.gov/news/pressreleases.rss`                | an item (sent with `SEC_USER_AGENT`)          |
+| `ftc`       | `https://www.ftc.gov/feeds/press-release-competition.xml`   | an item                                       |
+
+Landed to `raw_news_articles` (`provider` `agencies`, `feed` as above),
+`article_id` the hash of the release link (BLS: link and period). An SEC or
+FTC release whose title names a tracked company gets its tickers.
+
 ### Earnings Estimate (Alpha Vantage) (Not in use)
 
 ```json
@@ -577,6 +633,11 @@ Finnhub). The stored payload keeps the fields below and adds `title`
 (= `headline`), `time_published` (UTC `YYYYMMDDTHHMMSS`, from `datetime`) and
 `ticker_sentiment` (`[{"ticker": …}]` from `related`, ticker links only) so
 the news reader handles these and the older Alpha Vantage rows alike.
+
+The news digests never take their stories from here: the general feed's
+headlines are scored on coverage only, and the most covered 5 a day (10 a
+week) are kept in `mart.news_digest_context` as market context for the
+summaries.
 
 - `category` — News category.
 - `datetime` — Published time in UNIX timestamp.
