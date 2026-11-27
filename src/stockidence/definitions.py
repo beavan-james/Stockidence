@@ -57,10 +57,13 @@ from dagster import (
     schedule,
 )
 
+from .ingest.agency_feeds import pull_agency_releases
 from .ingest.articles import MAX_REQUESTS, digests_to_read, fetch_digest_articles
 from .ingest.endpoints import Cadence, on_demand_endpoints, scheduled_endpoints
 from .ingest.engine import IngestEngine
 from .ingest.refresh import refresh_tickers
+from .ingest.sec_filings import new_client as new_sec_client
+from .ingest.sec_filings import pull_8k_releases
 from .mart.mart import (
     rebuild_advanced_analytics,
     rebuild_prices_monthly,
@@ -236,8 +239,49 @@ def news_evening_schedule() -> dict:
     return {}
 
 
+@op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+def ingest_primary_news_op(context: OpExecutionContext, prev: dict) -> dict:
+    """Pull the primary sources the digests' stories come from: SEC's
+    ticker list (when older than its 7-day TTL), the tracked companies' new
+    8-Ks and the agencies' new releases (endpoints sec_company_tickers,
+    sec_8k_releases, agency_releases).
+
+    Each source fails on its own, with a warning: the digest is built from
+    whatever landed. The warehouse is open only to plan and to land, not
+    during requests; the op keeps its pool slot for the minute or two it
+    runs.
+    """
+    engine = context.resources.engine
+    now = _now()
+    out: dict[str, Any] = {}
+    try:
+        r = engine.ingest_on_demand("sec_company_tickers", "sec_company_tickers", now=now)
+        context.log.info(f"[sec_company_tickers] {r.reason} ({r.rows_written} rows)")
+        out["sec_company_tickers"] = r.rows_written
+    except Exception as exc:  # noqa: BLE001 -- the 8-K pull uses the list already landed
+        context.log.warning(f"[sec_company_tickers] failed: {exc}")
+    try:
+        info = pull_8k_releases(engine.warehouse, new_sec_client(), now=now)
+        context.log.info(f"[sec_8k_releases] {info}")
+        if info.get("failed") or info.get("rate_limited") or info.get("capped"):
+            context.log.warning(
+                f"[sec_8k_releases] {len(info.get('failed', []))} filings failed, rate limited: "
+                f"{info.get('rate_limited')}, capped: {info.get('capped')}; the cursor waits for them")
+        out["sec_8k_releases"] = info.get("landed", 0)
+    except Exception as exc:  # noqa: BLE001 -- the cursor is unchanged, the next run retries
+        context.log.warning(f"[sec_8k_releases] failed: {exc}")
+    try:
+        info = pull_agency_releases(engine.warehouse, now=now)
+        context.log.info(f"[agency_releases] {info}")
+        out["agency_releases"] = info["landed"]
+    except Exception as exc:  # noqa: BLE001 -- releases not landed are read again next run
+        context.log.warning(f"[agency_releases] failed: {exc}")
+    return {**prev, "primary": out}
+
+
 # A session with no article for this long means the general feed (latest
-# ~100 articles per pull) likely missed news between pulls.
+# ~100 articles per pull) likely missed news between pulls. Only digests
+# built from the news feed have a gap.
 _DIGEST_GAP_WARN_MINUTES = 120
 
 
@@ -450,11 +494,11 @@ def _summarize(prev: Any) -> Any:
 
 @job(name="daily_digest")
 def daily_digest_job() -> None:
-    """Weekday morning chain: news pull -> news staging -> digest -> the
-    picked stories' article pages -> their text -> cards -> the paragraph."""
-    text = stage_article_text_op(
-        fetch_articles_op(build_digest_op(stage_news_op(ingest_news_op())))
-    )
+    """Weekday morning chain: news pull -> 8-Ks and agency releases -> news
+    staging -> digest -> the picked stories' pages -> their text -> cards ->
+    the paragraph."""
+    text = stage_article_text_op(fetch_articles_op(build_digest_op(stage_news_op(
+        ingest_primary_news_op(ingest_news_op())))))
     _summarize(text)
 
 

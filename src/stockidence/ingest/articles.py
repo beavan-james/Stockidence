@@ -6,7 +6,8 @@ fetched inside the digest jobs for the stories a digest picked, so the
 summaries can be written from the article and not the feed's one-line
 summary. NEWS_SUMMARIES.md is the spec. The rules:
 
-- an honest user agent, and robots.txt is obeyed as RFC 9309 reads it
+- an honest user agent (SEC_USER_AGENT on sec.gov, whose fair-access
+  rules ask for a name and contact), and robots.txt is obeyed
 - a domain whose robots.txt shuts out the named AI crawlers is skipped
 - a 403, a paywall or a bot check is never worked around
 - one request at a time, with a gap between requests to the same domain
@@ -35,8 +36,10 @@ import httpx
 from ..staging.article_text import extract_text
 from ..storage import Warehouse
 
-PRODUCT_TOKEN = "StockidenceBot"  # the name robots.txt groups know us by
-USER_AGENT = f"{PRODUCT_TOKEN}/0.1 (news digest summaries)"
+USER_AGENT = "StockidenceBot/0.1 (news digest summaries)"
+# Hosts whose own access rules name the user agent to send: SEC asks for a
+# name and contact email (SEC_USER_AGENT), and limits requests per second.
+SEC_HOSTS = frozenset({"www.sec.gov", "sec.gov", "data.sec.gov"})
 # Crawlers that collect text for AI models. A site that disallows any of
 # them for a URL has opted out of its text being read by one.
 AI_CRAWLERS = ("ClaudeBot", "anthropic-ai", "GPTBot", "CCBot", "Google-Extended")
@@ -104,6 +107,19 @@ def retryable(robots: str, http_status: int | None, has_html: bool) -> bool:
     if robots != ALLOWED:
         return False
     return http_status is None or http_status == 429 or http_status >= 500
+
+
+def user_agent_for(host: str) -> str:
+    """The user agent to send to `host`: SEC_USER_AGENT for sec.gov when it
+    is set, the scraper's own otherwise. robots.txt is always read for
+    USER_AGENT, the name the scraper goes by."""
+    if host.lower() in SEC_HOSTS:
+        from ..config import load_settings
+
+        agent = load_settings().sec_user_agent
+        if agent:
+            return agent
+    return USER_AGENT
 
 
 def new_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
@@ -221,6 +237,11 @@ class ArticleFetcher:
     def close(self) -> None:
         self.client.close()
 
+    def _agent(self, host: str) -> dict[str, str]:
+        """The User-Agent header for `host`, when it isn't the client's own."""
+        agent = user_agent_for(host)
+        return {} if agent == USER_AGENT else {"User-Agent": agent}
+
     def _wait(self, host: str) -> None:
         last = self._last.get(host)
         if last is not None:
@@ -240,7 +261,8 @@ class ArticleFetcher:
         robots: Robots | None = None  # stays None on a 5xx or a failed request
         self._wait(host)
         try:
-            resp = self.client.get(f"{key}/robots.txt", headers={"Accept": ROBOTS_ACCEPT})
+            resp = self.client.get(f"{key}/robots.txt",
+                                   headers={"Accept": ROBOTS_ACCEPT, **self._agent(host)})
             if resp.status_code in (401, 403):
                 robots = KEEP_OUT
             elif 400 <= resp.status_code < 500:
@@ -296,7 +318,7 @@ class ArticleFetcher:
         """(status, final URL, html, error) for one page request."""
         self._wait(host)
         try:
-            with self.client.stream("GET", url) as resp:
+            with self.client.stream("GET", url, headers=self._agent(host)) as resp:
                 status, final_url = resp.status_code, str(resp.url)
                 if status != 200:
                     return status, final_url, None, f"HTTP {status}"

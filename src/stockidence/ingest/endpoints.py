@@ -30,6 +30,8 @@ class Provider(StrEnum):
     TWELVE_DATA = "twelve_data"
     FRED = "fred"
     SEC_EDGAR = "sec_edgar"
+    # government release feeds (Fed, BLS, SEC press releases, FTC): RSS
+    AGENCIES = "agencies"
     # publisher web pages, not an API: ingest.articles fetches them
     PUBLISHERS = "publishers"
     DERIVED = "derived"
@@ -474,6 +476,54 @@ _REGISTRY: list[EndpointSpec] = [
         ttl=None,
         notes="top stories of the 7 days to Saturday 07:00 New York time, dated by the "
         "week's Friday; built Saturdays 07:30 NY by the weekly_digest job",
+    ),
+    # --- the digest's stories: primary sources only (ingest.sec_filings,
+    # ingest.agency_feeds). Chained in daily_digest (weekdays 07:30 NY) and
+    # weekly_digest (Saturdays 07:30 NY), right after the news pull, landing
+    # into raw_news_articles in the shared payload shape. market_news stays
+    # as market context and is never a story.
+    EndpointSpec(
+        name="sec_8k_releases",
+        provider=Provider.SEC_EDGAR,
+        method="current_filings",
+        trigger=Trigger.CHAINED,
+        cadence=Cadence.DAILY,
+        watermark=("article_id",),
+        artifacts=("raw_news_articles", "news_ticker_sentiment"),
+        # a filing never changes once accepted
+        ttl=None,
+        notes="the tracked companies' 8-Ks since the pull cursor (the newest acceptance time "
+        "read, held back before any filing that failed); latest-filings Atom feed, the daily "
+        "form index when the cursor is older than the feed reaches; per filing the index "
+        "page and the press release (EX-99.1) or the 8-K itself; one article per accession, "
+        "article_id = hash of the document URL; routine items skipped; SEC_USER_AGENT, "
+        "at most 5 requests a second; first run looks back 36h",
+    ),
+    EndpointSpec(
+        name="sec_company_tickers",
+        provider=Provider.SEC_EDGAR,
+        method="company_tickers",
+        trigger=Trigger.CHAINED,
+        cadence=Cadence.MONTHLY,
+        watermark=("ticker",),
+        artifacts=("raw_sec_company_tickers",),
+        ttl=timedelta(days=7),
+        notes="SEC's ticker -> CIK list; refreshed by the 8-K pull when its one snapshot "
+        "watermark is older than the TTL. Tracked companies are the tickers with prices",
+    ),
+    EndpointSpec(
+        name="agency_releases",
+        provider=Provider.AGENCIES,
+        method="feed",
+        trigger=Trigger.CHAINED,
+        cadence=Cadence.DAILY,
+        watermark=("article_id",),
+        artifacts=("raw_news_articles", "news_ticker_sentiment"),
+        ttl=None,
+        notes="Federal Reserve monetary releases, BLS headline numbers (a new release is "
+        "a new figure in its latest-numbers feed), SEC press releases, FTC competition "
+        "releases; article_id = hash of the release link (BLS: link and period); "
+        "robots.txt obeyed; a feed that fails is skipped for the run",
     ),
     # --- event: the pages behind the digest's stories (NEWS_SUMMARIES.md) ---
     EndpointSpec(

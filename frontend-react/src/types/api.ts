@@ -256,7 +256,10 @@ export interface EarningsRelease {
 
 export type DigestPeriod = "daily" | "weekly";
 
-export type DigestInput = "coverage" | "reaction" | "category" | "on_site";
+export type DigestInput = "event" | "reaction" | "size" | "on_site";
+
+/** Inputs of a digest picked from the news feed, before primary sources. */
+export type LegacyDigestInput = "coverage" | "reaction" | "category" | "on_site";
 
 export interface DigestArticle {
   source: string | null;
@@ -279,12 +282,12 @@ export interface DigestStory {
   n_articles: number;
   n_outlets: number;
   /** The stock the story leads with, when it has a price move: over the day's session in a daily
-   *  digest, over the week's sessions in a weekly one. */
+   *  digest, over the week's sessions in a weekly one. "S&P 500" for a Fed or BLS release. */
   move_ticker: string | null;
   move_return: number | null;
   score: number;
-  /** Each input on a 0-1 scale, before weighting. */
-  components: Record<DigestInput, number>;
+  /** Each input on a 0-1 scale, before weighting; a story from before primary sources has the legacy inputs. */
+  components: Partial<Record<DigestInput | LegacyDigestInput, number>>;
   /** The story's other articles, earliest first. */
   also_covered: DigestArticle[];
 }
@@ -303,10 +306,14 @@ export interface DigestEnvelope {
   commentary_dropped: number;
   stories: number;
   outlets: number;
-  /** Longest stretch of a session with no article. */
+  /** Longest stretch of a session with no article; only on digests from the news feed. */
   session_gap_minutes: number | null;
+  /** The S&P 500's return over the session or the week, and the VIX's close. */
+  sp500_return: number | null;
+  vix: number | null;
   weights: Record<DigestInput, number>;
-  full_marks: { coverage_outlets: number; move: number };
+  /** Returns for a stock's and the S&P 500's move, and the market caps size runs between. */
+  full_marks: { move: number; market_move: number; size_from: number; size_full_at: number };
   items: DigestStory[];
 }
 

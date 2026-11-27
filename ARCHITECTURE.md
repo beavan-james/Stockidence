@@ -9,10 +9,13 @@
 - **Top Gainers/Losers** — own table, key `(ticker, date, bucket)`; `date` is the session the list describes (Alpha Vantage's `last_updated`), never the fetch date (overnight: 00:30 ET Tue–Sat, since the free tier publishes a session late that evening)
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
 - **Earnings Calendar** — own table, key `(symbol, quarter, year)` (weekdays)
-- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published (Finnhub general news; older Alpha Vantage rows also carry overall_sentiment_score) (pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with headline/date filters so paging never loads the full table)
-- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — from Finnhub's `related` field (older Alpha Vantage rows also carry relevance_score, ticker_sentiment_score). This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
-- **News (staged)** — `staging.stg_news_articles`, key `article_id` — one typed row per article from either provider: `published_at` as a UTC timestamp, outlet, headline, summary, url, and `tickers` (most relevant first: Finnhub's `related` order, Alpha Vantage tickers with relevance ≥ 0.5). Incremental: each run restages only articles landed since the newest staged `fetched_at`.
-- **News digests** — `mart.news_digests` (one row per digest: window, article counts, how much was filtered out, the longest stretch of a session with no article), `mart.news_digest_stories` (the top stories with each score input) and `mart.news_digest_articles` (which articles were grouped under each story), all keyed by `(period, digest_date)`. `daily`: built at 07:30 ET on weekdays from the 24h to 07:00 ET (Monday's covers the weekend), top 10. `weekly`: dated by the week's Friday, built Saturday 07:30 ET from the seven days to 07:00 that morning, top 15. Rule-based, no model: drop routine filings, templated recaps and opinion pieces, group articles about the same event by headline overlap, then rank by coverage (outlets), how the stock it leads with moved (on the day, or over the week), story type (deal / earnings / macro / policy) and whether the stock is in one of the site's rankings. A daily digest keeps up to 2 of its 10 places for policy or macro stories. A rebuild replaces that digest's rows.
+- **Market News (articles)** — `raw_news_articles`, key `article_id` (hash of URL) — title, summary, source, time_published, plus `provider` and `feed`. Finnhub general news (older Alpha Vantage rows also carry overall_sentiment_score), pulled 7am + 7pm ET plus the overnight daily run; served via SQL `WHERE` + `LIMIT/OFFSET` with headline/date filters so paging never loads the full table. The digest jobs land the primary sources here too, in the same shape: SEC 8-Ks (`provider` `sec_edgar`, `feed` `sec_8k`, with the filing's `items`) and government releases (`provider` `agencies`, `feed` `fed` / `bls` / `sec_press` / `ftc`).
+- **SEC 8-Ks** — endpoint `sec_8k_releases` (`ingest.sec_filings`), chained into both digest jobs, no TTL (a filing never changes). The tracked companies' (tickers with prices) 8-Ks since the pull cursor (watermark `(sec_8k_releases, cursor)`: the newest acceptance time read, held back before any filing that failed), from EDGAR's latest-filings feed, the daily form index when the cursor is older than the feed reaches. One article per accession: the press release (EX-99.1), else the 8-K itself; 8-K/A, routine items (vote results, bylaws, financings, exhibits only) and a 7.01/8.01 with no release are skipped. `SEC_USER_AGENT`, at most 5 requests a second; the first run looks back 36h.
+- **SEC ticker list** — `raw_sec_company_tickers`, endpoint `sec_company_tickers`, one snapshot watermark, TTL 7 days — SEC's ticker → CIK map, refreshed by the digest jobs before the 8-K pull.
+- **Government releases** — endpoint `agency_releases` (`ingest.agency_feeds`), chained into both digest jobs, no TTL. The Federal Reserve's monetary releases, BLS's headline numbers (`bls_latest.rss`: a new figure for a new period is a release; the first run lands the figures already out undated, as a baseline), SEC press releases and FTC competition releases. Each site's robots.txt is obeyed with the scraper's rules; a feed that fails is skipped for that run. An SEC or FTC release whose title names a tracked company gets its tickers.
+- **Market News (ticker links)** — `news_ticker_sentiment`, key `(article_id, ticker)` — from Finnhub's `related` field (older Alpha Vantage rows also carry relevance_score, ticker_sentiment_score), the filer of an 8-K, or the companies an agency release names. This junction table is what makes news joinable to a ticker, since one article can mention several tickers and one ticker appears in many articles.
+- **News (staged)** — `staging.stg_news_articles`, key `article_id` — one typed row per article from any provider: `published_at` as a UTC timestamp, outlet, headline, summary, url, `feed`, `items` (an 8-K's items) and `tickers` (most relevant first: Finnhub's `related` order, Alpha Vantage tickers with relevance ≥ 0.5). Incremental: each run restages the articles landed since the newest staged `fetched_at`; a table staged before `feed` existed is restaged in full.
+- **News digests** — `mart.news_digests` (one row per digest: window, release counts, how much market news was filtered out, the S&P 500's move and the VIX), `mart.news_digest_stories` (the top stories with each score input), `mart.news_digest_articles` (which releases were grouped under each story) and `mart.news_digest_context` (the most covered market headlines), all keyed by `(period, digest_date)`. `daily`: built at 07:30 ET on weekdays from the 24h to 07:00 ET (Monday's covers the weekend), top 10. `weekly`: dated by the week's Friday, built Saturday 07:30 ET from the seven days to 07:00 that morning, top 15. Rule-based, no model. Stories come from the primary sources only: group releases about the same event, then score 0.40 event (what the 8-K items or the kind of release say happened) + 0.25 reaction (how the lead stock moved on the day or over the week; the S&P 500's move for a market-wide Fed or BLS release) + 0.20 size (the lead stock's market cap, log scale from $10bn to $1tn; full for a market-wide release) + 0.15 on-site (the stock is in one of the site's rankings). A story needs 0.20 to be picked, so a quiet day has fewer; a daily digest keeps up to 2 of its 10 places for policy or macro stories scoring at least 0.30. Finnhub's general headlines are never stories: with routine items and commentary dropped and repeats grouped, the most covered 5 a day (10 a week) go to `news_digest_context` for the summaries' market paragraph. Digests built from the news feed before this keep their coverage and category inputs. A rebuild replaces that digest's rows.
 - **Article pages** — `raw.news_article_pages`, key `url` — the publisher page behind each story a digest picked (HTML, HTTP status, robots.txt verdict, attempts), fetched inside the digest jobs with robots.txt and AI-crawler opt-outs obeyed; a success, a refusal or a block is final, a timeout or 5xx is retried after 6 hours, at most 3 times. NEWS_SUMMARIES.md is the spec.
 - **Article text** — `staging.stg_news_article_text`, key `url` — each page's main text (forms and pop-ups removed, trafilatura), first 1,500 words kept, with the whole article's word count. Re-extracted only when the extractor changes.
 - **Story cards** — `mart.news_story_cards`, key `story_key` (the lead article's id) — one fact card per picked story (what happened, companies and tickers, government bodies, figures, why it matters), written by the local model (Qwen3.5-4B on Ollama) from the article text and checked: every number must be in what the model was given, every ticker in the story or the article. A card that fails twice, or a story with no readable article, gets the feed summary's opening instead (`fallback`). Stories that share an article (Tuesday's story picked again for the week) share their cards.
@@ -57,6 +60,7 @@ flowchart TD
     TD(["Twelve Data"])
     FRED(["FRED"])
     SEC(["SEC EDGAR"])
+    GOV(["Fed · BLS · SEC · FTC<br/>release feeds"])
     PUB(["Publisher pages"])
     LLM(["Local model<br/>Qwen3.5-4B on Ollama"])
 
@@ -64,7 +68,7 @@ flowchart TD
         SCHED["Scheduled jobs<br/>monthly · weekdays · overnight · daily<br/>market-wide persistent data"]
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
         WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
-        DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → stage → group + rank stories<br/>→ article pages → text → cards → summaries"]
+        DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → 8-Ks + agency releases → stage<br/>→ group + rank stories → article pages → text → cards → summaries"]
         PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
         RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
@@ -78,7 +82,7 @@ flowchart TD
         M_RATING["m_confidence_ratings<br/>rating_components · buy_plans<br/>fair value · target price"]
         M_RANK["model_rankings<br/>rank · ticker · sector · score<br/>quarterly snapshot"]
         M_WEEK["weekly_rankings · weekly_track_record<br/>Stocks of the Week + realized returns"]
-        M_NEWS["news_digests · news_digest_stories<br/>news_digest_articles<br/>daily top 10 · weekly top 15"]
+        M_NEWS["news_digests · news_digest_stories<br/>news_digest_articles · news_digest_context<br/>daily top 10 · weekly top 15"]
         M_SUM["news_story_cards · news_summaries<br/>daily paragraph · weekly article"]
     end
 
@@ -89,7 +93,9 @@ flowchart TD
     QUART -->|"ranking snapshot"| M_RANK
     WEEK -->|"incremental refresh<br/>prices forced"| RAW
     WEEK -->|"weekly list · grade last week"| M_WEEK
-    DIGEST -->|"news pull"| RAW
+    DIGEST -->|"news pull · 8-Ks · releases"| RAW
+    SEC -->|"tracked companies' 8-Ks"| DIGEST
+    GOV -->|"new releases"| DIGEST
     PUB -->|"picked stories' articles"| DIGEST
     DIGEST -->|"top stories"| M_NEWS
     DIGEST <-->|"cards and prose, one call at a time"| LLM
@@ -150,23 +156,27 @@ flowchart TD
 >   Friday `weekly_model_refresh` job does the same weekly into
 >   `mart.weekly_rankings`, and fills in `realized_return` on the previous
 >   list once its week has closed (an incremental update, not a rewrite).
->   The weekday `daily_digest` job pulls news once more, restages it into
->   `staging.stg_news_articles`, and rebuilds that morning's digest; the
->   Saturday `weekly_digest` job runs the same chain into the week's digest.
->   Both read `stg_prices_daily` for the lead stock's move and the ranking
->   tables for which stocks the site covers, then fetch the picked stories'
->   article pages into `raw.news_article_pages` and their text into
->   `staging.stg_news_article_text`; the only API they call is the news
->   pull. Then the local model turns each new story into a checked fact
+>   The weekday `daily_digest` job pulls news once more, then the
+>   primary sources (SEC's ticker list when older than 7 days, the tracked
+>   companies' new 8-Ks, the agencies' new releases; each fails on its own
+>   with a warning), restages it all into `staging.stg_news_articles`, and
+>   rebuilds that morning's digest; the Saturday `weekly_digest` job runs
+>   the same chain into the week's digest. Both read `stg_prices_daily` for
+>   the lead stock's move, `stg_fred_market` for the S&P 500 and VIX, the
+>   company profiles for size and the ranking tables for which stocks the
+>   site covers, then fetch the picked stories' pages (for an 8-K, the
+>   release on sec.gov) into `raw.news_article_pages` and their text into
+>   `staging.stg_news_article_text`; the only APIs they call are the news
+>   pull and EDGAR, beside the agencies' feeds. Then the local model turns each new story into a checked fact
 >   card (`mart.news_story_cards`) and writes the day's paragraph or the
 >   week's article from the cards (`mart.news_summaries`). Every op of a
 >   scheduled or retrain job claims the one-slot `warehouse` concurrency
 >   pool, so overlapping jobs wait for each other instead of failing on
 >   DuckDB's write lock. The two model ops are the exception: they never
 >   open the warehouse (an op before them reads, one after them writes),
->   so 30-55 minutes of model work blocks no other job. Finnhub only serves the latest ~100 articles per pull, so the jobs
->   log a warning when a trading session has a long stretch with no article
->   (news likely fell between pulls).
+>   so 30-55 minutes of model work blocks no other job. On digests built from the news feed, the jobs logged a warning
+>   when a trading session had a long stretch with no article (Finnhub
+>   serves only the latest ~100 articles per pull).
 >
 > **Serving & UI.** The service layer (`stockidence.service`) is plain Python
 > over DuckDB; FastAPI (`src/stockidence/api/`) wraps it as a mostly-read
