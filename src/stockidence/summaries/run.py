@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from .cards import Card, cards_needed, cards_of, make_card
+from .market import market_block
 from .model import ModelUnavailable, Ollama
 from .plan import plan_week
 from .store import Digest, SummaryInputs
@@ -52,7 +53,8 @@ def make_cards(llm: Ollama, inputs: SummaryInputs, clock: Clock, *, redo: bool =
 
 
 def _done(existing: tuple[Summary, ...] | None, keys: list[str]) -> bool:
-    """Already written, every part of it, from the same stories."""
+    """Already written, every part of it, from the same stories and market
+    headlines."""
     if not existing or any(s.status != OK for s in existing):
         return False
     return {k for s in existing for k in s.story_keys} == set(keys)
@@ -88,25 +90,27 @@ def write_summaries(llm: Ollama, inputs: SummaryInputs, cards: dict[str, Card], 
     empty: list[Digest] = []
     try:
         for period, day in inputs.write:
+            market = inputs.markets.get((period, day))
+            headline_keys = market.keys if market_block(market, period, day) else []
             if period == "daily":
                 pairs = daily_cards(day, inputs, cards)
                 keys = [card.story_key for _, card in pairs]
                 if not pairs:
                     empty.append((period, day))
-                elif not redo and _done(inputs.summaries.get((period, day)), keys):
+                elif not redo and _done(inputs.summaries.get((period, day)), [*keys, *headline_keys]):
                     skipped.append((period, day))
                 else:
-                    written.append(write_daily(llm, day, pairs, clock()))
+                    written.append(write_daily(llm, day, pairs, clock(), market))
             else:
                 sections = plan_week(group_stories(week_stories(day, inputs)), cards,
                                      inputs.sectors, llm.count_tokens)
                 keys = [k for s in sections for k in s.story_keys]
                 if not sections:
                     empty.append((period, day))
-                elif not redo and _done(inputs.summaries.get((period, day)), keys):
+                elif not redo and _done(inputs.summaries.get((period, day)), [*keys, *headline_keys]):
                     skipped.append((period, day))
                 else:
-                    written += write_weekly(llm, day, sections, clock())
+                    written += write_weekly(llm, day, sections, clock(), market)
     except ModelUnavailable as e:
         return SummaryRun(tuple(written), tuple(skipped), tuple(empty), str(e))
     return SummaryRun(tuple(written), tuple(skipped), tuple(empty))
