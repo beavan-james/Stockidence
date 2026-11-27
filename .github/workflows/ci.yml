@@ -50,10 +50,7 @@ jobs:
         run: uv run ruff check --output-format=github .
       - name: Ruff format
         run: uv run ruff format --check .
-      # Advisory until the existing type errors are fixed: failures show on
-      # the run but don't fail it.
-      - name: Mypy (advisory)
-        continue-on-error: true
+      - name: Mypy
         run: uv run mypy
 
   lint-frontend:
