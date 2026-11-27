@@ -314,12 +314,17 @@ class WeeklyDigestConfig(Config):
 def _log_digests(context: OpExecutionContext, built: list[dict]) -> None:
     for d in built:
         tag = f"[digest:{d['period']}:{d['digest_date']}]"
-        context.log.info(
-            f"{tag} {d['picked']} of {d['stories']} stories from "
-            f"{d['articles']} articles ({d['routine_dropped']} routine, "
-            f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets"
-        )
-        if d["session_gap_minutes"] >= _DIGEST_GAP_WARN_MINUTES:
+        if "context" in d:
+            context.log.info(
+                f"{tag} {d['picked']} of {d['stories']} stories from {d['articles']} releases; "
+                f"{d['context']} market headlines ({d['routine_dropped']} routine, "
+                f"{d['commentary_dropped']} commentary dropped)")
+        else:
+            context.log.info(
+                f"{tag} {d['picked']} of {d['stories']} stories from "
+                f"{d['articles']} articles ({d['routine_dropped']} routine, "
+                f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets")
+        if (d.get("session_gap_minutes") or 0) >= _DIGEST_GAP_WARN_MINUTES:
             context.log.warning(
                 f"{tag} no article for {d['session_gap_minutes']} minutes of a session: "
                 "the news feed likely missed stories between pulls"
@@ -517,12 +522,12 @@ def daily_digest_schedule() -> dict:
 
 @job(name="weekly_digest")
 def weekly_digest_job() -> None:
-    """Saturday morning chain: news pull -> news staging -> the week's digest
-    -> article pages for its stories and the week's daily stories -> text
-    -> cards for stories still without one -> the weekly article."""
-    text = stage_article_text_op(
-        fetch_articles_op(build_weekly_digest_op(stage_news_op(ingest_news_op())))
-    )
+    """Saturday morning chain: news pull -> 8-Ks and agency releases -> news
+    staging -> the week's digest -> pages for its stories and the week's
+    daily stories -> text -> cards for stories still without one -> the
+    weekly article."""
+    text = stage_article_text_op(fetch_articles_op(build_weekly_digest_op(stage_news_op(
+        ingest_primary_news_op(ingest_news_op())))))
     _summarize(text)
 
 

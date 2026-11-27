@@ -15,36 +15,43 @@ card has been a fallback (see "First runs on the server" under Open).
 - **Daily summary** (weekdays, by ~07:50 ET): one paragraph of 150–200
   words. Concise but specific: which companies and government bodies, what
   happened, and the exact figures (revenue, EPS, guidance, deal value, tariff
-  rate, rate decision).
+  rate, rate decision). It may give the market a sentence or two: the
+  S&P 500's move and the VIX, with any reason credited to the outlet that
+  reported it.
 - **Weekly article** (Saturdays, by ~08:15 ET): 2,500–4,000 words in
   sections (policy and the economy, earnings, deals, then sectors), opening
-  with a short overview of the week.
+  with a short overview of the week, which may do the same for the week's
+  market.
 - **Sources** under every summary and every weekly section: headline,
-  outlet, link. Article text is never shown on the site, only what the
-  model wrote and the links.
+  outlet, link. The daily paragraph and the weekly overview also list the
+  market headlines they were given, under "Market". Article text is never
+  shown on the site, only what the model wrote and the links.
 
 The digest ranking (`mart/news_digest.py`) stays in the pipeline as the step
 that chooses which stories get read. Its scores aren't shown on the page.
 
 As built: `GET /api/summary/{daily,weekly}` (`service/news_summary.py`)
-serves the latest written summary on or before `?date=` (the latest of
-all without one), each part with its sources. A summary counts as written
-when at least one part has text, so a daily whose paragraph failed its
-checks falls back to the article before it. Previous and next step through
-written summaries; from the first one, previous goes on to the digest
-before it. A source is the page its story's card was read from
+serves the latest written summary on or before `?date=` (the latest of all
+without one), each part with its sources. A summary counts as written when
+at least one part has text, so a daily whose paragraph failed its checks
+falls back to the article before it. Previous and next step through written
+summaries; from the first one, previous goes on to the digest before it. A
+source is the page its story's card was read from
 (`mart.news_story_cards.source_url`), named by that article in
 `staging.stg_news_articles`; a story with no card falls back to its own
-article. On the News page (`components/news/Summary.tsx`) each digest
-section shows that article: the daily paragraph, or the weekly overview
-and then each section under its heading, with that part's sources beside
-it on wide screens and under it on phones. The overview has no list of its
-own, since every one of its stories is listed under a section. A
-`sources_only` weekly section shows its heading and sources. A date with
-no article on or before it (every digest before the first run) shows the
-digest's top 10 stories as headline links, without scores. A daily is
-headed "Thursday, Nov 26 premarket", since it covers the 24 hours to 07:00
-ET: mostly the day before, read before that morning's open.
+article. The daily paragraph's and the overview's keys also carry the market
+headlines they were given (`mart.news_digest_context`, by their articles'
+ids), served apart as `market_sources`. On the News page
+(`components/news/Summary.tsx`) each digest section shows that article: the
+daily paragraph, or the weekly overview and then each section under its
+heading, with that part's sources beside it on wide screens and under it on
+phones, then its market headlines under "Market". The overview lists only
+its market headlines, since every one of its stories is listed under a
+section. A `sources_only` weekly section shows its heading and sources. A
+date with no article on or before it (every digest before the first run)
+shows the digest's top 10 stories as headline links, without scores. A daily
+is headed "Thursday, Nov 26 premarket", since it covers the 24 hours to
+07:00 ET: mostly the day before, read before that morning's open.
 
 ## Principles
 
@@ -245,15 +252,23 @@ As built (`summaries/plan.py`):
 
 ### 6. Writing
 
-- **Daily:** the day's cards (~2.5k tokens) in rank order → one paragraph,
-  leading with the biggest company and government news.
+- **Daily:** the day's cards (~2.5k tokens) in rank order, then a Market
+  block (`summaries/market.py`): the S&P 500's move in the session before,
+  the VIX's close and the news feed's 5 most covered market headlines with
+  the opening of their summaries → one paragraph, leading with the biggest
+  company and government news. At most one or two sentences on the market,
+  after the news; a reason for a move only from a headline, credited to its
+  outlet. A digest built before the market context has no block.
 - **Weekly:** one call per section: that section's cards plus one line on
   what each other section covers, so they don't repeat each other → 300–600
-  words. Then one call for a ~150-word overview from the section plan.
+  words. Then one call for a ~150-word overview from the section plan and
+  the week's Market block (the S&P 500 over the week, the VIX's last close,
+  10 headlines).
 
 ### 7. Checks on written text
 
-- Every number and ticker appears in the cards that call was given.
+- Every number and ticker appears in what that call was given: the cards,
+  and for the daily paragraph and the overview the Market block.
 - Length within bounds.
 - No advice wording ("buy", "sell", "should", price targets).
 - On a failure, retry once at temperature 0. If that fails too, the daily

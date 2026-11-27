@@ -3,7 +3,7 @@ PROMPT_VERSION: change any prompt here, bump the version."""
 
 from __future__ import annotations
 
-PROMPT_VERSION = "news-v2"
+PROMPT_VERSION = "news-v3"
 
 # Rules every writing prompt shares, so the checks and the prompts agree.
 _FACT_RULES = """\
@@ -37,6 +37,15 @@ article explains it.
 
 Never give advice: don't say anyone should buy, sell or hold anything."""
 
+# For the prompts that end with a Market block (writing.market_block).
+_MARKET_RULES = """\
+When a Market block follows the {after}, it gives the S&P 500's move, the \
+VIX and the news feed's most covered market headlines, and its facts count \
+as given, like the cards'. Give the market at most one or two sentences, after the \
+company and government news. Give a reason for a move only when a headline \
+gives one, and say which outlet reported it, for example "Reuters \
+reported". Don't report the headlines as stories of their own."""
+
 DAILY_SYSTEM = f"""\
 You write the daily market news summary: one paragraph of 150 to 200 \
 words from the fact cards given, most important news first. Lead with the \
@@ -44,6 +53,8 @@ biggest company and government news. Be specific: name the companies and \
 government bodies, say what happened, and give the exact figures (revenue, \
 earnings per share, guidance, deal value, tariff rate, rate decision). Skip \
 a card rather than go past 200 words.
+
+{_MARKET_RULES.format(after="cards")}
 
 {_FACT_RULES}"""
 
@@ -68,5 +79,7 @@ You write the opening of a weekly market news article: one paragraph of \
 {{low}} to {{high}} words on the week as a whole, from the plan of its \
 sections. Name the biggest stories and say what tied the week together, \
 if anything did. Don't go through every section.
+
+{_MARKET_RULES.format(after="plan")}
 
 {_FACT_RULES}"""

@@ -40,6 +40,8 @@ ARTICLES = [
         "2026-08-25 18:05",
     ),
     ("pfe1", "Benzinga", "Pfizer agrees to buy Metsera", "https://news/pfe1", "2026-08-25 13:00"),
+    # a market headline from the news feed, beside Aug 26's stories
+    ("mk1", "Reuters", "Stocks slip as yields climb", "https://news/mk1", "2026-08-25 21:00"),
 ]
 
 # story_key, source_url, status: the Fed card was read from CNBC's page, since
@@ -54,7 +56,7 @@ DAILY = "Nvidia (NVDA) said data-center revenue rose. The Federal Reserve held i
 # period, digest_date, part, heading, body, story_keys, status
 SUMMARIES = [
     ("daily", date(2026, 8, 25), 0, None, "An older paragraph.", ["nv1"], "ok"),
-    ("daily", date(2026, 8, 26), 0, None, DAILY, ["nv1", "fed1", "pfe1", "gone"], "ok"),
+    ("daily", date(2026, 8, 26), 0, None, DAILY, ["nv1", "fed1", "pfe1", "gone", "mk1"], "ok"),
     # the paragraph failed its checks: no article that day
     ("daily", date(2026, 8, 27), 0, None, None, ["nv1"], "sources_only"),
     ("weekly", date(2026, 8, 28), 0, None, "The week in brief.", ["fed1", "nv1", "pfe1"], "ok"),
@@ -97,6 +99,10 @@ def client(tmp_path, monkeypatch):
                    VALUES ('daily', ?, '2026-08-25 11:00', '2026-08-26 11:00', 400, 30, 20, 120, 60, ?, ?)""",
                 [day, gap, WRITTEN],
             )
+        con.execute(
+            """INSERT INTO mart.news_digest_context VALUES ('daily', '2026-08-26', 1,
+                   'Stocks slip as yields climb', NULL, 'https://news/mk1', 'Reuters',
+                   '2026-08-25 21:00', 3, 2, 0.5)""")
         for period, day, part, heading, body, keys, status in SUMMARIES:
             con.execute(
                 "INSERT INTO mart.news_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'v1', ?)",
@@ -146,6 +152,9 @@ def test_latest_daily_paragraph_with_its_sources(client):
         },
         # a key with neither a card nor an article is left out
     ]
+    # the market headline it was given is listed apart
+    assert part["market_sources"] == [
+        {"headline": "Stocks slip as yields climb", "outlet": "Reuters", "url": "https://news/mk1"}]
 
 
 def test_weekly_article_is_the_overview_then_its_sections(client):
@@ -158,6 +167,7 @@ def test_weekly_article_is_the_overview_then_its_sections(client):
         (2, "Earnings", "ok"),
     ]
     assert parts[2]["body"] == "First paragraph.\n\nSecond paragraph."
+    assert all(p["market_sources"] == [] for p in parts)  # that week has no market context
     assert [s["url"] for s in parts[2]["sources"]] == ["https://news/nv1", "https://news/nv2"]
 
 

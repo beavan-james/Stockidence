@@ -48,21 +48,41 @@ export function SourceList({ sources }: { sources: SummarySource[] }) {
   );
 }
 
-function Sources({ sources }: { sources: SummarySource[] }) {
+function Sources({ sources, market = [] }: { sources: SummarySource[]; market?: SummarySource[] }) {
   return (
-    <div className="min-w-0 lg:pt-1.5">
-      <p className="mb-2 text-xs text-ink-muted">Sources</p>
-      <SourceList sources={sources} />
+    <div className="min-w-0 space-y-6 lg:pt-1.5">
+      {sources.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs text-ink-muted">Sources</p>
+          <SourceList sources={sources} />
+        </div>
+      )}
+      {market.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs text-ink-muted">Market</p>
+          <SourceList sources={market} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** The text on the left and its sources beside it on wide screens; stacked on narrow ones. */
-function Row({ sources, className, children }: { sources: SummarySource[]; className?: string; children: ReactNode }) {
+function Row({
+  sources,
+  market = [],
+  className,
+  children,
+}: {
+  sources: SummarySource[];
+  market?: SummarySource[];
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <div className={cn("grid gap-y-7 lg:grid-cols-[minmax(0,42rem)_minmax(0,1fr)] lg:gap-x-16", className)}>
       <div className="min-w-0">{children}</div>
-      {sources.length > 0 && <Sources sources={sources} />}
+      {(sources.length > 0 || market.length > 0) && <Sources sources={sources} market={market} />}
     </div>
   );
 }
@@ -77,16 +97,16 @@ export function Summary({ parts }: { parts: SummaryPart[] }) {
   const sections = parts.filter((p) => p.part > 0);
   return (
     <article>
-      {/* The overview's sources are its sections' sources, listed under each. */}
+      {/* The overview's story sources are its sections' sources, listed under each. */}
       {lead?.body ? (
-        <Row sources={sections.length === 0 ? lead.sources : []}>
+        <Row sources={sections.length === 0 ? lead.sources : []} market={lead.market_sources ?? []}>
           <Prose body={lead.body} lead />
         </Row>
       ) : (
         lead &&
         sections.length === 0 && (
           <div className="max-w-2xl">
-            <Sources sources={lead.sources} />
+            <Sources sources={lead.sources} market={lead.market_sources ?? []} />
           </div>
         )
       )}

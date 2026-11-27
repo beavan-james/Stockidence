@@ -456,7 +456,6 @@ def test_context_keeps_the_most_covered_few():
 
 # --- picking ---------------------------------------------------------------
 
-
 def _story(aid, score, *categories):
     a = _article(aid, f"Story {aid}")
     return Story(
@@ -779,10 +778,7 @@ def test_read_api(warehouse, monkeypatch):
     assert latest["weights"] == {"event": 0.40, "reaction": 0.25, "size": 0.20, "on_site": 0.15}
     assert latest["full_marks"] == {"move": 0.1, "market_move": 0.02, "size_from": 1e10, "size_full_at": 1e12}
 
-    assert (
-        client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"]
-        == "2026-08-26"
-    )
+    assert client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"] == "2026-08-26"
     assert client.get("/api/digest/daily", params={"date": "2026-08-29"}).status_code == 404
     assert client.get("/api/digest/daily", params={"date": "2026-02-30"}).status_code == 422
 

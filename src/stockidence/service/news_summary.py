@@ -10,7 +10,10 @@ story list.
 
 A part's story_keys are card keys (article ids). Its sources are the pages
 those cards were read from (mart.news_story_cards.source_url), named by
-their articles in staging.stg_news_articles: headline, outlet, link.
+their articles in staging.stg_news_articles: headline, outlet, link. The
+daily paragraph's and the weekly overview's keys also carry the market
+headlines they were given (mart.news_digest_context, by their articles'
+ids), listed apart as market_sources.
 """
 
 from __future__ import annotations
@@ -80,6 +83,16 @@ LEFT JOIN pages g USING (url)
 """
 
 
+# The digest's market headlines, by their articles' ids: the keys of a
+# part's sources that are market context, not stories.
+_MARKET_KEYS = """
+SELECT a.article_id
+FROM mart.news_digest_context c
+JOIN staging.stg_news_articles a USING (url)
+WHERE c.period = ? AND c.digest_date = ?
+"""
+
+
 @_resilient
 def _fetch(period: str, digest_date: date | None) -> dict:
     """Load the envelope; raises on failure (retried by decorator)."""
@@ -121,18 +134,19 @@ def _fetch(period: str, digest_date: date | None) -> dict:
                 [period, head[0]],
             ).fetchall()
             keys = list(dict.fromkeys(k for row in rows for k in row[4]))
-            found = {
-                key: (headline, outlet, url)
-                for key, headline, outlet, url in con.execute(_SOURCES, [keys]).fetchall()
-            }
+            found = {key: (headline, outlet, url)
+                     for key, headline, outlet, url in con.execute(_SOURCES, [keys]).fetchall()}
+            market = {key for (key,) in con.execute(_MARKET_KEYS, [period, head[0]]).fetchall()}
         except Exception as exc:
             if not _missing_table(exc):
                 raise
             return _empty(period)
 
-    def sources(story_keys) -> list[dict]:
+    def sources(story_keys, *, of_market: bool = False) -> list[dict]:
         seen, out = set(), []
         for key in story_keys:
+            if (key in market) != of_market:
+                continue
             headline, outlet, url = found.get(key, (None, None, None))
             if url and url not in seen:
                 seen.add(url)
@@ -150,13 +164,9 @@ def _fetch(period: str, digest_date: date | None) -> dict:
         "prompt_version": rows[0][7],
         "created_at": max(r[8] for r in rows).isoformat(),
         "parts": [
-            {
-                "part": part,
-                "heading": heading,
-                "body": body,
-                "status": status,
-                "sources": sources(keys or []),
-            }
+            {"part": part, "heading": heading, "body": body, "status": status,
+             "sources": sources(keys or []),
+             "market_sources": sources(keys or [], of_market=True)}
             for _, part, heading, body, keys, status, *_ in rows
         ],
     }
