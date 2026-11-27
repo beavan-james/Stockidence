@@ -679,3 +679,26 @@ def test_the_ticker_list_lands_as_one_snapshot(tmp_path):
         ).fetchall()
     assert tickers == [("ACME",), ("WIDG",)]
     assert marks == [("sec_company_tickers",)]  # one for the list, not one per ticker
+
+
+def test_a_new_ticker_list_drops_tickers_sec_no_longer_lists(tmp_path):
+    wh = Warehouse(tmp_path / "tickers.duckdb")
+    wh.init_schema()
+
+    def rows(*tickers):
+        return [
+            {"ticker": t, "payload": {"cik_str": i, "ticker": t}} for i, t in enumerate(tickers)
+        ]
+
+    wh.land("raw_sec_company_tickers", rows("ACME", "GONE"), fetched_at=NOW, dimension_key="k")
+    wh.land(
+        "raw_sec_company_tickers",
+        rows("ACME", "NEWCO", "NEWCO"),  # a repeated key keeps its last row
+        fetched_at=NOW + timedelta(days=8),
+        dimension_key="k",
+    )
+    with wh.connect(read_only=True) as con:
+        tickers = con.execute(
+            "SELECT ticker, payload->>'cik_str' FROM raw.raw_sec_company_tickers ORDER BY 1"
+        ).fetchall()
+    assert tickers == [("ACME", "0"), ("NEWCO", "2")]

@@ -997,14 +997,24 @@ class Warehouse:
         (raw is minimally transformed by design). With `merge`, a key that is
         already stored gets merge(incoming, stored) instead of the incoming
         payload (see raw_mapping.MERGERS). With `dimension_key` (a snapshot
-        such as the SEC ticker list), one watermark for that dimension is
-        bumped instead of one per leading key. Returns rows written.
+        such as the SEC ticker list), the rows replace the whole table and
+        one watermark for that dimension is bumped instead of one per leading
+        key. Returns rows written.
         """
         if artifact not in RAW_SCHEMA:
             raise KeyError(f"unknown artifact table: {artifact}")
         keys = [name for name, _ in RAW_SCHEMA[artifact]]
         pk = ", ".join(f'"{name}"' for name in keys)
         fetched_at = fetched_at or datetime.now(UTC)
+        if dimension_key is not None and merge is None:
+            written = self._replace_snapshot(artifact, keys, rows, fetched_at)
+            self.upsert_watermark(
+                f"raw.{artifact}",
+                dimension_key,
+                fetched_at=fetched_at,
+                high_watermark=high_watermark,
+            )
+            return written
         set_cols = ", ".join(f'"{name}" = excluded."{name}"' for name in ("payload", "fetched_at"))
         match = " AND ".join(f'"{name}" = ?' for name in keys)
 
@@ -1042,6 +1052,51 @@ class Warehouse:
         else:
             self._touch_watermarks_for(artifact, keys, rows, high_watermark, fetched_at)
         return written
+
+    _SNAPSHOT_CHUNK = 1000  # rows per multi-row INSERT
+
+    def _replace_snapshot(
+        self,
+        artifact: str,
+        keys: list[str],
+        rows: list[dict[str, Any]],
+        fetched_at: datetime,
+    ) -> int:
+        """Swap a snapshot table's contents for `rows` in one transaction.
+
+        A key dropped from the source (a delisted ticker) disappears instead
+        of lingering with stale data. Rows go in as multi-row INSERTs, so a
+        ~10k-row list is a handful of statements, not one per row, and the
+        write lock is held briefly. A repeated key keeps its last row, as the
+        per-row upsert would.
+        """
+        by_key: dict[tuple[Any, ...], list[Any]] = {}
+        for row in rows:
+            missing = [k for k in keys if k not in row]
+            if missing:
+                raise KeyError(f"{artifact}: rows missing key columns {missing}")
+            values = [row[k] for k in keys]
+            payload_json = json.dumps(row.get("payload", row), default=_json_default)
+            by_key[tuple(values)] = [*values, payload_json, fetched_at]
+        records = list(by_key.values())
+        columns = ", ".join(f'"{k}"' for k in [*keys, "payload", "fetched_at"])
+        placeholder = "(" + ", ".join(["?"] * len(keys) + ["CAST(? AS JSON)", "?"]) + ")"
+        with self.connect() as con:
+            con.execute("BEGIN TRANSACTION")
+            try:
+                con.execute(f'DELETE FROM raw."{artifact}"')
+                for start in range(0, len(records), self._SNAPSHOT_CHUNK):
+                    chunk = records[start : start + self._SNAPSHOT_CHUNK]
+                    con.execute(
+                        f'INSERT INTO raw."{artifact}" ({columns}) VALUES '
+                        + ", ".join([placeholder] * len(chunk)),
+                        [value for record in chunk for value in record],
+                    )
+                con.execute("COMMIT")
+            except BaseException:
+                con.execute("ROLLBACK")
+                raise
+        return len(records)
 
     def _touch_watermarks_for(
         self,
