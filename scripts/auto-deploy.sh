@@ -18,6 +18,8 @@ REPO_DIR="$HOME/Stockidence"
 LOG="$REPO_DIR/auto-deploy.log"
 # Last commit whose CI failure was logged, so it's logged once, not every run.
 CI_LOGGED=/tmp/stockidence-deploy.ci-logged
+# Same, for a deploy held back by a Dagster run in progress.
+BUSY_LOGGED=/tmp/stockidence-deploy.busy-logged
 DOCKER=/usr/bin/docker
 
 log() { echo "[$(date -u +%FT%TZ)] $*" >> "$LOG"; }
@@ -57,6 +59,21 @@ if [ -z "${DEPLOY_REMOTE:-}" ]; then
         *)
             REASON=${CI#error }
             log "not deploying $REMOTE: couldn't get its CI result: ${REASON:-no output}"
+            exit 0
+            ;;
+    esac
+
+    # A deploy recreates the Dagster containers and kills any run in flight,
+    # so hold it while one is queued or running; the next cron pass retries.
+    # Logged once per commit, like the CI failure above.
+    BUSY=$(python3 "$REPO_DIR/scripts/dagster_busy.py" 2>&1 | tail -n 1) || true
+    case "$BUSY" in
+        "idle "*) ;;
+        *)
+            if [ "$(cat "$BUSY_LOGGED" 2>/dev/null)" != "$REMOTE" ]; then
+                log "holding deploy of $REMOTE: ${BUSY:-no output from dagster_busy.py}"
+                echo "$REMOTE" > "$BUSY_LOGGED"
+            fi
             exit 0
             ;;
     esac
