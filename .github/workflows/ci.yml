@@ -1,0 +1,178 @@
+# CI only: the server is not reachable from GitHub's runners, so nothing here
+# deploys. The box pulls origin/master itself (scripts/auto-deploy.sh).
+#
+#   lint-python ──┬──> unit-tests ──────────┐
+#                 └──┐                      ├──> integration
+#   lint-frontend ───┴──> build ────────────┘
+#
+# Unit tests start as soon as the Python lint passes, since they don't use the
+# images, so their result comes back before the Docker builds finish. The
+# integration stage runs the slower pytest suite plus smoke checks against the
+# exact backend image the build stage made.
+#
+# No step needs API keys or calls a data provider: the tests use fake clients
+# and temporary DuckDB files.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12" # matches the backend Dockerfile
+  NODE_VERSION: "20" # matches frontend-react/Dockerfile
+  BACKEND_IMAGE: stockidence-backend:ci
+  FRONTEND_IMAGE: stockidence-frontend:ci
+
+jobs:
+  lint-python:
+    name: Lint & type check (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+      - name: Ruff format
+        run: uv run ruff format --check .
+      # Advisory until the existing type errors are fixed: failures show on
+      # the run but don't fail it.
+      - name: Mypy (advisory)
+        continue-on-error: true
+        run: uv run mypy
+
+  lint-frontend:
+    name: Lint & type check (frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Oxlint
+        run: npm run lint
+      - name: TypeScript
+        run: npx tsc -b
+
+  build:
+    name: Build images
+    needs: [lint-python, lint-frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: ${{ env.BACKEND_IMAGE }}
+          outputs: type=docker,dest=${{ runner.temp }}/backend.tar
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+      # The SPA build (tsc + vite) runs inside this image build.
+      - name: Build frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: frontend-react/Dockerfile
+          tags: ${{ env.FRONTEND_IMAGE }}
+          load: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+      # nginx can't start here (its config needs the server's TLS certs), so
+      # check the bundle landed instead.
+      - name: Check the SPA bundle is in the frontend image
+        run: >-
+          docker run --rm --entrypoint sh "$FRONTEND_IMAGE"
+          -c 'test -s /usr/share/nginx/html/index.html'
+      - name: Upload backend image
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-image
+          path: ${{ runner.temp }}/backend.tar
+          retention-days: 1
+
+  unit-tests:
+    name: Unit tests
+    needs: lint-python
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Pytest (unit)
+        run: uv run pytest -m "not integration"
+
+  integration:
+    name: Integration & end-to-end
+    needs: [unit-tests, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Pytest (integration)
+        run: uv run pytest -m integration
+
+      - name: Download backend image
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-image
+          path: ${{ runner.temp }}
+      - name: Load backend image
+        run: docker load --input "$RUNNER_TEMP/backend.tar"
+
+      # Same module the dagster-code service serves in docker-compose.yml.
+      - name: Dagster definitions load in the image
+        run: >-
+          docker run --rm -e DAGSTER_HOME=/tmp "$BACKEND_IMAGE"
+          dagster definitions validate -m stockidence.definitions
+
+      - name: API answers from the image
+        run: |
+          docker run -d --name api -p 8000:8000 \
+            -e STOCKIDENCE_DB=/tmp/ci.duckdb "$BACKEND_IMAGE"
+          for _ in $(seq 30); do
+            if curl -fsS http://localhost:8000/api/health; then
+              curl -fsS -o /dev/null http://localhost:8000/openapi.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not answer /api/health within 30s"
+          exit 1
+      - name: API logs
+        if: always()
+        run: docker logs api || true

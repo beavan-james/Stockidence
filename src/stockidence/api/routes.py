@@ -97,9 +97,7 @@ def trigger_quotes_refresh(body: RefreshRequest) -> dict:
 
 
 @market_router.get("/prices/{ticker}")
-def get_price_history(
-    ticker: str, months: int = Query(default=12, ge=1, le=120)
-) -> list[dict]:
+def get_price_history(ticker: str, months: int = Query(default=12, ge=1, le=120)) -> list[dict]:
     """Weekly closes, ascending — feeds portfolio holding graphs."""
     return market.get_price_history(ticker, months=months)
 
@@ -130,7 +128,9 @@ def get_ranking_detail(ticker: str) -> dict:
     """
     detail = ranking.get_ranking_detail(ticker)
     if detail is None:
-        raise HTTPException(status_code=404, detail=f"{ticker.upper()} is not in the latest ranking")
+        raise HTTPException(
+            status_code=404, detail=f"{ticker.upper()} is not in the latest ranking"
+        )
     return detail
 
 
@@ -186,9 +186,7 @@ def get_news(
     """
     start = (date_from or "").replace("-", "") or None
     end = (date_to or "").replace("-", "") or None
-    return market.get_news_page(
-        q=q, date_from=start, date_to=end, page=page, page_size=page_size
-    )
+    return market.get_news_page(q=q, date_from=start, date_to=end, page=page, page_size=page_size)
 
 
 @market_router.get("/digest/{period}")

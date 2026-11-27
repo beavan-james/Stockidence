@@ -17,10 +17,28 @@ WRITTEN = datetime(2026, 8, 26, 11, 52, tzinfo=UTC)
 
 # article_id, outlet, headline, url, published_at
 ARTICLES = [
-    ("nv1", "Reuters", "Nvidia data-center revenue tops estimates", "https://news/nv1", "2026-08-25 20:25"),
+    (
+        "nv1",
+        "Reuters",
+        "Nvidia data-center revenue tops estimates",
+        "https://news/nv1",
+        "2026-08-25 20:25",
+    ),
     ("nv2", "CNBC", "Nvidia shares slip despite beat", "https://news/nv2", "2026-08-25 20:40"),
-    ("fed1", "Yahoo Finance", "Fed holds rates steady", "https://finance.yahoo/fed1", "2026-08-25 18:00"),
-    ("fed2", "CNBC", "Fed keeps its rate at 4.25% to 4.5%", "https://news/fed2", "2026-08-25 18:05"),
+    (
+        "fed1",
+        "Yahoo Finance",
+        "Fed holds rates steady",
+        "https://finance.yahoo/fed1",
+        "2026-08-25 18:00",
+    ),
+    (
+        "fed2",
+        "CNBC",
+        "Fed keeps its rate at 4.25% to 4.5%",
+        "https://news/fed2",
+        "2026-08-25 18:05",
+    ),
     ("pfe1", "Benzinga", "Pfizer agrees to buy Metsera", "https://news/pfe1", "2026-08-25 13:00"),
 ]
 
@@ -41,8 +59,15 @@ SUMMARIES = [
     ("daily", date(2026, 8, 27), 0, None, None, ["nv1"], "sources_only"),
     ("weekly", date(2026, 8, 28), 0, None, "The week in brief.", ["fed1", "nv1", "pfe1"], "ok"),
     ("weekly", date(2026, 8, 28), 1, "Policy and the economy", None, ["fed1"], "sources_only"),
-    ("weekly", date(2026, 8, 28), 2, "Earnings", "First paragraph.\n\nSecond paragraph.",
-     ["nv1", "nv2"], "ok"),
+    (
+        "weekly",
+        date(2026, 8, 28),
+        2,
+        "Earnings",
+        "First paragraph.\n\nSecond paragraph.",
+        ["nv1", "nv2"],
+        "ok",
+    ),
 ]
 
 
@@ -74,8 +99,17 @@ def client(tmp_path, monkeypatch):
         for period, day, part, heading, body, keys, status in SUMMARIES:
             con.execute(
                 "INSERT INTO mart.news_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'v1', ?)",
-                [period, day, part, heading, body, keys, status,
-                 "qwen3.5:4b-q4_K_M" if body else None, WRITTEN],
+                [
+                    period,
+                    day,
+                    part,
+                    heading,
+                    body,
+                    keys,
+                    status,
+                    "qwen3.5:4b-q4_K_M" if body else None,
+                    WRITTEN,
+                ],
             )
     monkeypatch.setenv("STOCKIDENCE_DB", str(wh.path))
     return TestClient(app)
@@ -92,14 +126,23 @@ def test_latest_daily_paragraph_with_its_sources(client):
     assert part["part"] == 0 and part["heading"] is None
     assert part["status"] == "ok" and part["body"] == DAILY
     assert part["sources"] == [
-        {"headline": "Nvidia data-center revenue tops estimates", "outlet": "Reuters",
-         "url": "https://news/nv1"},
+        {
+            "headline": "Nvidia data-center revenue tops estimates",
+            "outlet": "Reuters",
+            "url": "https://news/nv1",
+        },
         # the page the card was read from, not the skipped lead
-        {"headline": "Fed keeps its rate at 4.25% to 4.5%", "outlet": "CNBC",
-         "url": "https://news/fed2"},
+        {
+            "headline": "Fed keeps its rate at 4.25% to 4.5%",
+            "outlet": "CNBC",
+            "url": "https://news/fed2",
+        },
         # no card: the key's own article
-        {"headline": "Pfizer agrees to buy Metsera", "outlet": "Benzinga",
-         "url": "https://news/pfe1"},
+        {
+            "headline": "Pfizer agrees to buy Metsera",
+            "outlet": "Benzinga",
+            "url": "https://news/pfe1",
+        },
         # a key with neither a card nor an article is left out
     ]
 
@@ -120,8 +163,13 @@ def test_weekly_article_is_the_overview_then_its_sections(client):
 def test_a_sources_only_part_has_no_body_but_keeps_its_sources(client):
     part = client.get("/api/summary/weekly").json()["parts"][1]
     assert part["body"] is None
-    assert part["sources"] == [{"headline": "Fed keeps its rate at 4.25% to 4.5%", "outlet": "CNBC",
-                                "url": "https://news/fed2"}]
+    assert part["sources"] == [
+        {
+            "headline": "Fed keeps its rate at 4.25% to 4.5%",
+            "outlet": "CNBC",
+            "url": "https://news/fed2",
+        }
+    ]
 
 
 def test_a_date_picks_that_digests_summary(client):
@@ -158,9 +206,16 @@ def test_empty_before_the_first_summary_run(tmp_path, monkeypatch):
     client = TestClient(app)
     for period in ("daily", "weekly"):
         assert client.get(f"/api/summary/{period}").json() == {
-            "period": period, "digest_date": None, "previous_date": None, "next_date": None,
-            "session_gap_minutes": None, "model": None, "prompt_version": None,
-            "created_at": None, "parts": []}
+            "period": period,
+            "digest_date": None,
+            "previous_date": None,
+            "next_date": None,
+            "session_gap_minutes": None,
+            "model": None,
+            "prompt_version": None,
+            "created_at": None,
+            "parts": [],
+        }
 
 
 def test_empty_without_a_warehouse(tmp_path, monkeypatch):

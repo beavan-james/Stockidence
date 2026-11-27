@@ -51,9 +51,7 @@ def quarterly_universe(warehouse: Warehouse | None = None) -> list[str]:
     plus anything users have looked up since) with ALL_TICKERS from
     Model/scripts/run_backfill.py, so a fresh warehouse still gets seeded.
     """
-    spec = importlib.util.spec_from_file_location(
-        "run_backfill", SCRIPTS_DIR / "run_backfill.py"
-    )
+    spec = importlib.util.spec_from_file_location("run_backfill", SCRIPTS_DIR / "run_backfill.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -83,9 +81,7 @@ def rebuild_quarterly_dataset() -> dict:
     cohort for the website instead of the last (already realized) training
     quarter.
     """
-    spec = importlib.util.spec_from_file_location(
-        "build_dataset", SCRIPTS_DIR / "build_dataset.py"
-    )
+    spec = importlib.util.spec_from_file_location("build_dataset", SCRIPTS_DIR / "build_dataset.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -98,9 +94,11 @@ def rebuild_quarterly_dataset() -> dict:
     from .storage import Warehouse
 
     with Warehouse().connect(read_only=True) as con:
-        last_trade = dict(con.execute(
-            "SELECT ticker, MAX(date) FROM staging.stg_prices_daily GROUP BY ticker"
-        ).fetchall())
+        last_trade = dict(
+            con.execute(
+                "SELECT ticker, MAX(date) FROM staging.stg_prices_daily GROUP BY ticker"
+            ).fetchall()
+        )
     newest = max(last_trade.values())
     fresh = {t for t, d in last_trade.items() if (newest - d).days <= 7}
 
@@ -148,7 +146,7 @@ def rebuild_quarterly_dataset() -> dict:
     # the end of the following quarter, which the scored snapshot then ranks.
     return {
         "parquet": str(QUARTERLY_PARQUET),
-        "rows": int(len(dataset)),
+        "rows": len(dataset),
         "tickers": int(dataset["ticker"].nunique()),
         "first_training_snapshot": snapshot_date(dataset["date"].min()),
         "last_training_snapshot": snapshot_date(dataset["date"].max()),
@@ -172,9 +170,8 @@ def retrain_ranking_model() -> dict:
     and with src/ on PYTHONPATH so `import stockidence` resolves.
     """
     import nbformat
-    from nbclient import NotebookClient
-
     from ipykernel.kernelspec import install as install_kernel
+    from nbclient import NotebookClient
 
     install_kernel(user=True, kernel_name=KERNEL_NAME, display_name="Stockidence")
 

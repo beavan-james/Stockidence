@@ -73,6 +73,7 @@ def rebuild_fred_market(warehouse: Warehouse) -> int:
         )
         return con.execute("SELECT COUNT(*) FROM staging.stg_fred_market").fetchone()[0]
 
+
 def rebuild_financials_reported(warehouse: Warehouse, ticker: str | None = None) -> int:
     """One row per Finnhub filing, with an empty balance sheet filled from SEC.
 
@@ -147,9 +148,11 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
     rows written.
     """
     with warehouse.connect() as con:
-        since = None if full else con.execute(
-            "SELECT MAX(fetched_at) FROM staging.stg_news_articles"
-        ).fetchone()[0]
+        since = (
+            None
+            if full
+            else con.execute("SELECT MAX(fetched_at) FROM staging.stg_news_articles").fetchone()[0]
+        )
         con.execute("BEGIN TRANSACTION")
         con.execute(
             """

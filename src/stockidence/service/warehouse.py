@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import (
@@ -69,6 +69,7 @@ def _resilient(fn=None, *, attempts: int = 3):
     everything into their documented fallbacks. Missing-DB / missing-duckdb
     (FileNotFoundError, ImportError) are never retried.
     """
+
     def decorate(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -162,7 +163,7 @@ def _fetch_rating(db_path: Path, ticker: str) -> Rating | None:
         fair_value = row[7] if len(row) > 7 else None
         target_price = row[8] if len(row) > 8 else None
         if isinstance(as_of, str):
-            as_of = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+            as_of = datetime.fromisoformat(as_of)
 
         categories = []
         for r in con.execute(
@@ -225,7 +226,7 @@ def _fetch_rating(db_path: Path, ticker: str) -> Rating | None:
         return Rating(
             ticker=ticker,
             company_name=company_name,
-            as_of=as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc),
+            as_of=as_of if as_of.tzinfo else as_of.replace(tzinfo=UTC),
             confidence_score=float(confidence),
             advice=Advice(advice),
             volatility_score=float(volatility),
@@ -372,13 +373,11 @@ def _fetch_recent_failures(days: int, limit: int) -> list[dict]:
             [days, limit],
         ).fetchall()
     return [
-            {
-                "job_name": r[0],
-                "failed_at": r[1].isoformat() if r[1] else "",
-                "failed_at_display": (
-                    r[1].strftime("%Y-%m-%d %H:%M") + " UTC" if r[1] else ""
-                ),
-                "error": (r[2] or "").splitlines()[0][:160],
-            }
-            for r in rows
-        ]
+        {
+            "job_name": r[0],
+            "failed_at": r[1].isoformat() if r[1] else "",
+            "failed_at_display": (r[1].strftime("%Y-%m-%d %H:%M") + " UTC" if r[1] else ""),
+            "error": (r[2] or "").splitlines()[0][:160],
+        }
+        for r in rows
+    ]
