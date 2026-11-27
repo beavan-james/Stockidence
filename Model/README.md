@@ -63,8 +63,8 @@ copy, 15,569 rows × 377 tickers, 7,661 test rows):
 - Top-quintile excess: +3.12 pp/qtr (t=+2.30, positive 69% of quarters)
 - Precision@10: 18.5% (random 3.4%) · Precision@25: 22.3% (random 8.5%)
 
-These numbers predate the point-in-time filter below; the next retrain
-writes new ones to `mart.model_validation`.
+These numbers predate the point-in-time S&P 500 filter; the first retrain
+after the membership list lands writes new ones to `mart.model_validation`.
 
 Before the fix, `set_group` got ticker-ordered rows, so each query group was
 a block of mostly one ticker's history instead of a quarter's cohort. Same
@@ -74,34 +74,6 @@ top-20 vs S&P +5.65 → +4.77 pp/qtr. Over 8 seeds the fix averages about
 against the S&P and no change on the top quintile. Per-date IC barely moved
 (+0.071 → +0.065); the pooled-IC drop is the old groups rewarding
 cross-quarter ordering.
-
-### Point-in-time S&P 500 filter (2026-11-26)
-
-The same walk-forward on datasets rebuilt by `build_dataset.py` from the
-local warehouse copy (prices to 2026-08-28). Before: every warehouse row.
-After: only rows whose company was in the S&P 500 at the snapshot.
-
-| | Before | After |
-|---|---|---|
-| Training rows × tickers | 16,738 × 406 | 13,807 × 380 |
-| Median quarterly cohort | 316 | 279 |
-| Top-20 vs S&P 500 | +4.02 pp/qtr (t=1.83) | +2.27 pp/qtr (t=1.25) |
-| Top-20 vs the whole list | +3.67 (t=1.67) | +2.77 (t=1.56) |
-| Top-10 vs the whole list | +4.44 (t=1.40) | +3.98 (t=1.55) |
-| Whole list vs S&P 500 | +0.35 | −0.49 |
-| Top-20 vs stocks of similar volatility | +1.05 (t=0.78) | +1.08 (t=1.33) |
-| Rank IC (pooled) | +0.151 | +0.154 |
-| No model: the 20 most volatile (atr_pct) vs the list | +6.27 | +3.43 |
-
-Most of the drop is in the list, not in the model's ordering. Once a stock
-only counts from the day it joined (TSLA from Q4 2020, PLTR from Q3 2024),
-the equal-weight list goes from 0.35 pp/qtr ahead of the S&P to 0.49
-behind, and picking the most volatile stocks loses half its lead. Against
-stocks of similar volatility the model stays about +1 pp/qtr ahead, still
-short of significance. The after column is still an upper bound: the
-warehouse holds 12 former members, 93 more that still trade are planned for
-a backfill, and about 180 no longer trade and can't be fetched on the free
-tiers.
 
 Live model (2026-10-03 retrain, before the fix), from `mart.model_track_record`:
 top-20 vs S&P +4.57 pp/qtr (ahead 62% of quarters), rank IC +0.142, 7,691 test
@@ -219,23 +191,8 @@ numbers to `mart.weekly_validation`, and the Weekly method page shows those:
   2021 +18, 2022 −62, 2023 +206, 2024 +48, 2025 +115, 2026 to Aug 21 +60
 - Fit: 223,623 rows × 405 tickers, snapshots 2012-08-10 → 2026-08-21
 
-These predate the point-in-time S&P 500 filter. The same walk-forward on
-datasets rebuilt from the same warehouse copy, before (every row) and
-after (rows in the index at the snapshot):
-
-| | Before | After |
-|---|---|---|
-| Fit rows × tickers | 223,866 × 405 | 185,095 × 382 |
-| Test rows | 126,034 | 111,918 |
-| Top 10 vs the whole list | +67 bp/week (t=2.79, 58%) | +28 bp/week (t=1.59, 55%) |
-| Top 10 vs S&P 500 (VOO) | +70 bp/week (57%) | +25 bp/week (54%) |
-| Rank IC | +0.026 | +0.019 |
-| Precision@10 (random) | 15.4% (3.2%) | 12.2% (3.6%) |
-
-The weekly edge loses more than half its size and is no longer
-significant. It is still an upper bound for the reasons in the quarterly
-section: 93 former members that still trade are planned for a backfill,
-and about 180 can't be fetched.
+These predate the point-in-time S&P 500 filter; the first run after the
+membership list lands writes new ones to `mart.weekly_validation`.
 
 ### Refresh pipeline (Friday DAG)
 
@@ -283,13 +240,11 @@ Internally weekly rows are labelled by their Monday.
 - **No trading costs.** The backtest buys at Monday's open and sells at
   Friday's close, so it never holds over a weekend. The top 10 replaces
   27% of its names in an average week
-- **Survivorship.** Rows count only while the stock was in the S&P 500,
-  so a stock no longer gets credit for the run-up that put it in the index.
-  Stocks that left the index are still mostly missing (delisted ones can't
-  be fetched on the free tiers), which flatters absolute returns, likely
-  most for the volatile names this model favours. Compounding the weekly
-  top 10 gave 55%/yr against 17% for VOO before the filter: treat any such
-  figure as an upper bound, not an expectation
+- **Survivorship.** The universe is the tickers in the warehouse today, so
+  stocks delisted since 2019 are missing. That flatters absolute returns,
+  likely most for the volatile names this model favours. Compounding the
+  weekly top 10 gives 55%/yr against 17% for VOO over the same weeks:
+  treat that as an upper bound, not an expectation
 - **Concentration.** Technology fills 38% of top-10 slots against 16% of
   the cohort; one sector holds 5 or more of the 10 in a third of weeks
 - `stddev_252` (shared with the quarterly model) is the standard deviation
