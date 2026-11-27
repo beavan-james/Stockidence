@@ -122,8 +122,9 @@ class BaseClient:
         last_error: Exception | None = None
         for attempt in range(self.retries + 1):
             try:
-                return self._request_once(method, path, params=params, json_body=json_body,
-                                          headers=headers, text=text)
+                return self._request_once(
+                    method, path, params=params, json_body=json_body, headers=headers, text=text
+                )
             except NotFoundError:
                 raise
             except RateLimitError as exc:

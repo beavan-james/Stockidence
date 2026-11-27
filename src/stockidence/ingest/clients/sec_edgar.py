@@ -72,9 +72,18 @@ class SecEdgarClient(BaseClient):
         XML. Each entry has the filer's name and CIK in its title, the items
         in its summary, the acceptance time and the filing index URL."""
         return self.request(
-            "GET", f"{WWW}/cgi-bin/browse-edgar",
-            params={"action": "getcurrent", "type": form, "company": "", "dateb": "",
-                    "owner": "include", "start": start, "count": count, "output": "atom"},
+            "GET",
+            f"{WWW}/cgi-bin/browse-edgar",
+            params={
+                "action": "getcurrent",
+                "type": form,
+                "company": "",
+                "dateb": "",
+                "owner": "include",
+                "start": start,
+                "count": count,
+                "output": "atom",
+            },
             headers={"Accept": "application/atom+xml,application/xml;q=0.9,*/*;q=0.8"},
             text=True,
         )
@@ -84,8 +93,10 @@ class SecEdgarClient(BaseClient):
         filed, path). NotFoundError on a day with no filings."""
         quarter = (day.month - 1) // 3 + 1
         return self.request(
-            "GET", f"{WWW}/Archives/edgar/daily-index/{day.year}/QTR{quarter}/form.{day:%Y%m%d}.idx",
-            headers={"Accept": "text/plain,*/*;q=0.8"}, text=True,
+            "GET",
+            f"{WWW}/Archives/edgar/daily-index/{day.year}/QTR{quarter}/form.{day:%Y%m%d}.idx",
+            headers={"Accept": "text/plain,*/*;q=0.8"},
+            text=True,
         )
 
     def page(self, url: str) -> str:

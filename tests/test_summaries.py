@@ -642,15 +642,27 @@ def test_weekly_article_is_an_overview_then_sections():
 
 # --- the market ---------------------------------------------------------------
 
-SLIP = Headline("m1", "Stocks slip as yields climb",
-                "Wall Street fell on Thursday as Treasury yields rose. The Nasdaq led losses. "
-                "Oil was flat.", "Reuters", "https://news.example/m1")
-MARKET = Market(-0.0083, 15.234, (SLIP, Headline("m2", "Oil steadies", None, None, "https://news.example/m2")))
+SLIP = Headline(
+    "m1",
+    "Stocks slip as yields climb",
+    "Wall Street fell on Thursday as Treasury yields rose. The Nasdaq led losses. Oil was flat.",
+    "Reuters",
+    "https://news.example/m1",
+)
+MARKET = Market(
+    -0.0083, 15.234, (SLIP, Headline("m2", "Oil steadies", None, None, "https://news.example/m2"))
+)
 
 
-@pytest.mark.parametrize(("r", "text"), [
-    (0.0083, "up 0.8%"), (-0.012, "down 1.2%"), (0.0004, "up 0.04%"), (-0.00001, "unchanged"),
-])
+@pytest.mark.parametrize(
+    ("r", "text"),
+    [
+        (0.0083, "up 0.8%"),
+        (-0.012, "down 1.2%"),
+        (0.0004, "up 0.04%"),
+        (-0.00001, "unchanged"),
+    ],
+)
 def test_a_return_is_written_with_its_direction(r, text):
     assert percent(r) == text
 
@@ -662,13 +674,16 @@ def test_the_daily_market_block_names_the_session_and_trims_summaries():
         "Most covered market headlines:\n"
         "- Reuters: Stocks slip as yields climb — Wall Street fell on Thursday as Treasury yields "
         "rose. The Nasdaq led losses.\n"
-        "- Oil steadies")
+        "- Oil steadies"
+    )
 
 
 def test_the_weekly_market_block_covers_the_week():
     block = market_block(Market(0.012, None), "weekly", date(2026, 11, 20))
     assert block == "Market:\nS&P 500 over the week: up 1.2%."
-    assert "at the week's last close: 15.2" in market_block(Market(None, 15.2), "weekly", date(2026, 11, 20))
+    assert "at the week's last close: 15.2" in market_block(
+        Market(None, 15.2), "weekly", date(2026, 11, 20)
+    )
 
 
 def test_no_market_no_block():
@@ -680,7 +695,9 @@ def test_the_daily_paragraph_gets_the_market_and_keeps_its_headlines():
     # a sentence on the market from the block passes the checks
     line = " Reuters reported that stocks fell 0.8% in Thursday's session as Treasury yields rose."
     llm = FakeModel(lambda s, u, t, sc: _prose(u, 160) + line)
-    summary = write_daily(llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW, MARKET)
+    summary = write_daily(
+        llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW, MARKET
+    )
     assert summary.status == OK and summary.body.endswith(line.strip())
     assert summary.story_keys == ("daily-2026-11-20-1", "m1", "m2")
     user, system = llm.calls[0]["user"], llm.calls[0]["system"]
@@ -692,13 +709,18 @@ def test_an_outlet_the_block_lacks_still_fails():
     # the name check skips a sentence's first word, so this one is mid-sentence
     line = " Stocks fell 0.8% in Thursday's session, Bloomberg reported."
     llm = FakeModel(lambda s, u, t, sc: _prose(u, 160) + line)
-    summary = write_daily(llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW, MARKET)
+    summary = write_daily(
+        llm, date(2026, 11, 20), [(_story(), _card("daily-2026-11-20-1"))], NOW, MARKET
+    )
     assert summary.status == SOURCES_ONLY
     assert any("Bloomberg" in p for p in summary.problems)
 
 
 def test_the_weekly_overview_gets_the_week_s_market_and_sections_do_not():
-    stories = [_item_story(1, ("NVDA",), ("earnings",), 0.9), _item_story(2, ("WMT",), ("earnings",), 0.6)]
+    stories = [
+        _item_story(1, ("NVDA",), ("earnings",), 0.9),
+        _item_story(2, ("WMT",), ("earnings",), 0.6),
+    ]
     cards = {s.key: _card(s.key) for s in stories}
     sections = plan_week(group_stories(stories), cards, {}, ESTIMATE)
     llm = FakeModel(_writer)
@@ -861,8 +883,14 @@ def test_a_rebuilt_digest_is_written_again(wh):
     assert [s.story_keys for s in summaries.written] == [("a1", "b1")]
 
 
-def _seed_market(wh: Warehouse, period: str, day: str, sp500: float | None, vix: float | None,
-                 headlines: list[tuple[str, str]]) -> None:
+def _seed_market(
+    wh: Warehouse,
+    period: str,
+    day: str,
+    sp500: float | None,
+    vix: float | None,
+    headlines: list[tuple[str, str]],
+) -> None:
     """The digest's row with its market figures, and its context headlines
     (article id, headline) with their articles."""
     with wh.connect() as con:
@@ -870,16 +898,24 @@ def _seed_market(wh: Warehouse, period: str, day: str, sp500: float | None, vix:
             "INSERT OR REPLACE INTO mart.news_digests (period, digest_date, window_start, window_end,"
             " articles, routine_dropped, commentary_dropped, stories, outlets, built_at, sp500_return,"
             " vix) VALUES (?, ?, '2026-11-19 12:00', '2026-11-20 12:00', 3, 0, 0, 3, 1, ?, ?, ?)",
-            [period, day, NOW, sp500, vix])
-        con.execute("DELETE FROM mart.news_digest_context WHERE period = ? AND digest_date = ?", [period, day])
+            [period, day, NOW, sp500, vix],
+        )
+        con.execute(
+            "DELETE FROM mart.news_digest_context WHERE period = ? AND digest_date = ?",
+            [period, day],
+        )
         for rank, (aid, headline) in enumerate(headlines, start=1):
             url = f"https://feed.example/{aid}"
             con.execute(
                 "INSERT INTO mart.news_digest_context VALUES (?, ?, ?, ?, NULL, ?, 'Reuters',"
-                " '2026-11-19 20:00', 2, 2, 0.5)", [period, day, rank, headline, url])
+                " '2026-11-19 20:00', 2, 2, 0.5)",
+                [period, day, rank, headline, url],
+            )
             con.execute(
                 "INSERT OR REPLACE INTO staging.stg_news_articles (article_id, published_at, headline, url)"
-                " VALUES (?, '2026-11-19 20:00', ?, ?)", [aid, headline, url])
+                " VALUES (?, '2026-11-19 20:00', ?, ?)",
+                [aid, headline, url],
+            )
 
 
 def test_the_chain_gives_the_paragraph_its_market_and_rewrites_when_it_changes(wh):

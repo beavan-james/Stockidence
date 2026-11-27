@@ -43,13 +43,30 @@ from stockidence.staging.staging import rebuild_news_articles
 from stockidence.storage import Warehouse
 
 
-def _article(aid, headline, *, hours=0, source="Reuters", tickers=(), feed=None, items=(),
-             summary=None, base=datetime(2026, 8, 25, 14)):
+def _article(
+    aid,
+    headline,
+    *,
+    hours=0,
+    source="Reuters",
+    tickers=(),
+    feed=None,
+    items=(),
+    summary=None,
+    base=datetime(2026, 8, 25, 14),
+):
     return Article(
-        article_id=aid, published_at=base + timedelta(hours=hours), source=source,
-        headline=headline, summary=summary, url=f"https://x/{aid}", tickers=tuple(tickers),
-        words=headline_words(headline), categories=article_categories(headline, feed, items, summary),
-        feed=feed, items=tuple(items),
+        article_id=aid,
+        published_at=base + timedelta(hours=hours),
+        source=source,
+        headline=headline,
+        summary=summary,
+        url=f"https://x/{aid}",
+        tickers=tuple(tickers),
+        words=headline_words(headline),
+        categories=article_categories(headline, feed, items, summary),
+        feed=feed,
+        items=tuple(items),
     )
 
 
@@ -269,101 +286,178 @@ def test_articles_far_apart_are_not_merged():
 
 # --- events ----------------------------------------------------------------
 
-@pytest.mark.parametrize("items, released, routine", [
-    (["9.01"], None, True),                  # exhibits only
-    (["5.07"], None, True),                  # vote results
-    (["5.03", "9.01"], None, True),          # a bylaw change
-    (["1.01", "2.03", "9.01"], None, True),  # a credit agreement and the debt it creates
-    (["2.03", "5.07"], None, True),
-    (["1.01"], None, False),                 # an agreement alone may be a deal
-    (["2.02", "9.01"], None, False),
-    (["8.01", "9.01"], None, False),         # news only with a press release
-    (["8.01", "9.01"], True, False),
-    (["8.01", "9.01"], False, True),
-    (["7.01", "5.07"], False, True),
-    (["7.01", "2.02"], False, False),
-])
+
+@pytest.mark.parametrize(
+    "items, released, routine",
+    [
+        (["9.01"], None, True),  # exhibits only
+        (["5.07"], None, True),  # vote results
+        (["5.03", "9.01"], None, True),  # a bylaw change
+        (["1.01", "2.03", "9.01"], None, True),  # a credit agreement and the debt it creates
+        (["2.03", "5.07"], None, True),
+        (["1.01"], None, False),  # an agreement alone may be a deal
+        (["2.02", "9.01"], None, False),
+        (["8.01", "9.01"], None, False),  # news only with a press release
+        (["8.01", "9.01"], True, False),
+        (["8.01", "9.01"], False, True),
+        (["7.01", "5.07"], False, True),
+        (["7.01", "2.02"], False, False),
+    ],
+)
 def test_routine_items(items, released, routine):
     assert routine_items(items, released) == routine
 
 
-@pytest.mark.parametrize("items, text, event", [
-    (["1.03"], "", 1.0),
-    (["2.02", "9.01"], "Intuit Reports Fourth-Quarter Fiscal 2026 Results", 0.7),
-    (["2.02", "4.02"], "", 0.9),                                   # the best item
-    (["1.01"], "Acme to acquire Widget Co for $4 billion", 0.9),
-    (["1.01"], "Acme enters into a revolving credit agreement", 0.2),
-    (["5.02"], "Acme names Jane Doe chief executive officer", 0.6),
-    (["5.02"], "Acme CFO to retire at year end", 0.6),
-    (["5.02"], "A director will not stand for re-election", 0.1),
-    (["1.05"], "", 0.2),                                           # an item not listed
-    (["9.01"], "", 0.0),
-])
+@pytest.mark.parametrize(
+    "items, text, event",
+    [
+        (["1.03"], "", 1.0),
+        (["2.02", "9.01"], "Intuit Reports Fourth-Quarter Fiscal 2026 Results", 0.7),
+        (["2.02", "4.02"], "", 0.9),  # the best item
+        (["1.01"], "Acme to acquire Widget Co for $4 billion", 0.9),
+        (["1.01"], "Acme enters into a revolving credit agreement", 0.2),
+        (["5.02"], "Acme names Jane Doe chief executive officer", 0.6),
+        (["5.02"], "Acme CFO to retire at year end", 0.6),
+        (["5.02"], "A director will not stand for re-election", 0.1),
+        (["1.05"], "", 0.2),  # an item not listed
+        (["9.01"], "", 0.0),
+    ],
+)
 def test_item_event(items, text, event):
     assert item_event(items, text) == event
 
 
-@pytest.mark.parametrize("feed, headline, tickers, event", [
-    ("fed", "Federal Reserve issues FOMC statement", (), 1.0),
-    ("fed", "Minutes of the Federal Open Market Committee, October 27-28, 2026", (), 0.8),
-    ("fed", "Minutes of the Board's discount rate meetings on October 19 and October 28, 2026", (), 0.2),
-    ("fed", ("Federal Reserve announces revised tentative schedule of Federal Open Market "
-             "Committee meetings in 2027"), (), 0.2),
-    ("bls", "Consumer Price Index, Oct 2026: CPI +0.4%", (), 1.0),
-    ("bls", "The Employment Situation, Oct 2026: Unemployment Rate 4.1%; Payrolls +119,000", (), 1.0),
-    ("bls", "Producer Price Index, Oct 2026: PPI +0.2%", (), 0.8),
-    ("bls", "Productivity and Costs, Q3 2026: Productivity +1.9%", (), 0.4),
-    ("ftc", "FTC Sues to Block Kroger's Acquisition of Albertsons", ("KR",), 0.8),
-    ("ftc", "FTC Sues to Block Kroger's Acquisition of Albertsons", (), 0.4),  # no listed company named
-    ("ftc", "FTC Announces Hart-Scott-Rodino Thresholds for 2027", ("KR",), 0.4),
-    ("sec_press", "SEC Adopts Final Rules on Fund Names", (), 0.5),
-    ("sec_press", "SEC Charges Acme Corp with Accounting Fraud", ("ACME",), 0.5),
-    ("sec_press", "SEC Charges Investment Adviser with Fraud", (), 0.2),
-    ("sec_press", "SEC Announces Agenda for Investor Advisory Committee Meeting", (), 0.2),
-])
+@pytest.mark.parametrize(
+    "feed, headline, tickers, event",
+    [
+        ("fed", "Federal Reserve issues FOMC statement", (), 1.0),
+        ("fed", "Minutes of the Federal Open Market Committee, October 27-28, 2026", (), 0.8),
+        (
+            "fed",
+            "Minutes of the Board's discount rate meetings on October 19 and October 28, 2026",
+            (),
+            0.2,
+        ),
+        (
+            "fed",
+            (
+                "Federal Reserve announces revised tentative schedule of Federal Open Market "
+                "Committee meetings in 2027"
+            ),
+            (),
+            0.2,
+        ),
+        ("bls", "Consumer Price Index, Oct 2026: CPI +0.4%", (), 1.0),
+        (
+            "bls",
+            "The Employment Situation, Oct 2026: Unemployment Rate 4.1%; Payrolls +119,000",
+            (),
+            1.0,
+        ),
+        ("bls", "Producer Price Index, Oct 2026: PPI +0.2%", (), 0.8),
+        ("bls", "Productivity and Costs, Q3 2026: Productivity +1.9%", (), 0.4),
+        ("ftc", "FTC Sues to Block Kroger's Acquisition of Albertsons", ("KR",), 0.8),
+        (
+            "ftc",
+            "FTC Sues to Block Kroger's Acquisition of Albertsons",
+            (),
+            0.4,
+        ),  # no listed company named
+        ("ftc", "FTC Announces Hart-Scott-Rodino Thresholds for 2027", ("KR",), 0.4),
+        ("sec_press", "SEC Adopts Final Rules on Fund Names", (), 0.5),
+        ("sec_press", "SEC Charges Acme Corp with Accounting Fraud", ("ACME",), 0.5),
+        ("sec_press", "SEC Charges Investment Adviser with Fraud", (), 0.2),
+        ("sec_press", "SEC Announces Agenda for Investor Advisory Committee Meeting", (), 0.2),
+    ],
+)
 def test_agency_event(feed, headline, tickers, event):
     assert agency_event(feed, headline, tickers) == event
 
 
-@pytest.mark.parametrize("cap, size", [
-    (None, 0.0), (0, 0.0), (5e9, 0.0), (1e10, 0.0), (1e11, 0.5), (1e12, 1.0), (3e12, 1.0),
-])
+@pytest.mark.parametrize(
+    "cap, size",
+    [
+        (None, 0.0),
+        (0, 0.0),
+        (5e9, 0.0),
+        (1e10, 0.0),
+        (1e11, 0.5),
+        (1e12, 1.0),
+        (3e12, 1.0),
+    ],
+)
 def test_size_is_log_scaled_from_10bn_to_1tn(cap, size):
     assert size_score(cap) == pytest.approx(size)
 
 
-@pytest.mark.parametrize("headline, feed, items, summary, categories", [
-    ("Federal Reserve issues FOMC statement", "fed", (), None, ("macro",)),
-    ("SEC Charges Investment Adviser with Fraud", "sec_press", (), None, ("policy",)),
-    ("FTC Sues to Block Kroger's Acquisition of Albertsons", "ftc", (), None, ("deal", "policy")),
-    ("Intuit Reports Fourth-Quarter Fiscal 2026", "sec_8k", ("2.02", "9.01"), None, ("earnings",)),
-    ("Acme Completes Sale of Its Pipeline Unit", "sec_8k", ("2.01", "9.01"), None, ("deal",)),
-    ("Acme Corp: material agreement", "sec_8k", ("1.01",),
-     "Acme agreed to be acquired by Widget for $40 a share in cash.", ("deal",)),
-    ("Acme Corp: material agreement", "sec_8k", ("1.01",),
-     "Acme entered into a credit agreement with its lenders.", ()),
-])
+@pytest.mark.parametrize(
+    "headline, feed, items, summary, categories",
+    [
+        ("Federal Reserve issues FOMC statement", "fed", (), None, ("macro",)),
+        ("SEC Charges Investment Adviser with Fraud", "sec_press", (), None, ("policy",)),
+        (
+            "FTC Sues to Block Kroger's Acquisition of Albertsons",
+            "ftc",
+            (),
+            None,
+            ("deal", "policy"),
+        ),
+        (
+            "Intuit Reports Fourth-Quarter Fiscal 2026",
+            "sec_8k",
+            ("2.02", "9.01"),
+            None,
+            ("earnings",),
+        ),
+        ("Acme Completes Sale of Its Pipeline Unit", "sec_8k", ("2.01", "9.01"), None, ("deal",)),
+        (
+            "Acme Corp: material agreement",
+            "sec_8k",
+            ("1.01",),
+            "Acme agreed to be acquired by Widget for $40 a share in cash.",
+            ("deal",),
+        ),
+        (
+            "Acme Corp: material agreement",
+            "sec_8k",
+            ("1.01",),
+            "Acme entered into a credit agreement with its lenders.",
+            (),
+        ),
+    ],
+)
 def test_categories_come_from_the_source_too(headline, feed, items, summary, categories):
     assert article_categories(headline, feed, items, summary) == categories
 
 
-@pytest.mark.parametrize("feed, event, whole", [
-    ("fed", 1.0, True), ("bls", 0.4, True),
-    ("fed", 0.2, False),        # a meeting schedule, discount-rate minutes
-    ("sec_press", 0.5, False), ("ftc", 0.8, False), ("sec_8k", 1.0, False),
-])
+@pytest.mark.parametrize(
+    "feed, event, whole",
+    [
+        ("fed", 1.0, True),
+        ("bls", 0.4, True),
+        ("fed", 0.2, False),  # a meeting schedule, discount-rate minutes
+        ("sec_press", 0.5, False),
+        ("ftc", 0.8, False),
+        ("sec_8k", 1.0, False),
+    ],
+)
 def test_only_fed_and_bls_releases_of_weight_are_market_wide(feed, event, whole):
     assert market_wide(_article("a", "x", feed=feed), event) is whole
 
 
 # --- scoring ---------------------------------------------------------------
 
+
 def _filing_article(aid, headline, items, tickers, **kw):
-    return _article(aid, headline, feed="sec_8k", items=items, tickers=tickers, source="SEC filing", **kw)
+    return _article(
+        aid, headline, feed="sec_8k", items=items, tickers=tickers, source="SEC filing", **kw
+    )
 
 
 def test_score_is_the_weighted_sum():
-    a = _filing_article("r", "Intuit Reports Fourth-Quarter Fiscal 2026 Results", ("2.02", "9.01"), ["INTU"])
+    a = _filing_article(
+        "r", "Intuit Reports Fourth-Quarter Fiscal 2026 Results", ("2.02", "9.01"), ["INTU"]
+    )
     s = score_story([a], {"INTU": -0.10}, {"INTU"}, sizes={"INTU": 1e12})
     assert s.inputs == {"event": 0.7, "reaction": 1.0, "size": 1.0, "on_site": 1.0}
     assert s.score == pytest.approx(0.40 * 0.7 + 0.25 + 0.20 + 0.15)
@@ -371,10 +465,12 @@ def test_score_is_the_weighted_sum():
 
 
 def test_the_release_with_the_biggest_event_leads():
-    results = _filing_article("r", "Intuit Reports Fourth-Quarter Fiscal 2026 Results", ("2.02", "9.01"),
-                              ["INTU"])
-    follow_up = _filing_article("f", "Intuit Inc.: Regulation FD disclosure", ("7.01", "9.01"), ["INTU"],
-                                hours=1)
+    results = _filing_article(
+        "r", "Intuit Reports Fourth-Quarter Fiscal 2026 Results", ("2.02", "9.01"), ["INTU"]
+    )
+    follow_up = _filing_article(
+        "f", "Intuit Inc.: Regulation FD disclosure", ("7.01", "9.01"), ["INTU"], hours=1
+    )
     s = score_story([follow_up, results], {}, set())
     assert s.lead is results and s.inputs["event"] == 0.7
 
@@ -396,8 +492,14 @@ def test_reaction_is_the_lead_stocks_move_not_a_co_named_one():
 
 
 def test_no_price_for_the_lead_stock_scores_no_reaction_not_the_markets():
-    arts = [_article("1", "SEC Charges Valley National with Fraud", feed="sec_press",
-                     tickers=["VLYPN", "WMT"])]
+    arts = [
+        _article(
+            "1",
+            "SEC Charges Valley National with Fraud",
+            feed="sec_press",
+            tickers=["VLYPN", "WMT"],
+        )
+    ]
     s = score_story(arts, {"WMT": 0.05}, ranked=set(), market=0.02)
     assert s.move_ticker is None and s.inputs["reaction"] == 0.0
 
@@ -415,11 +517,15 @@ def test_a_fed_decision_takes_the_markets_move_and_full_size():
     assert (s.move_ticker, s.move_return) == (MARKET, -0.015)
     assert s.inputs == {"event": 1.0, "reaction": pytest.approx(0.75), "size": 1.0, "on_site": 0.0}
     assert s.score == pytest.approx(0.40 + 0.25 * 0.75 + 0.20)
-    assert score_story([a], {}, set(), WEEKLY, market=-0.015).inputs["reaction"] == pytest.approx(0.375)
+    assert score_story([a], {}, set(), WEEKLY, market=-0.015).inputs["reaction"] == pytest.approx(
+        0.375
+    )
 
 
 def test_a_minor_fed_release_is_not_market_wide():
-    a = _article("m", "Minutes of the Board's discount rate meetings on August 10, 2026", feed="fed")
+    a = _article(
+        "m", "Minutes of the Board's discount rate meetings on August 10, 2026", feed="fed"
+    )
     s = score_story([a], {}, set(), market=0.02)
     assert s.move_ticker is None and s.inputs["reaction"] == 0.0 and s.inputs["size"] == 0.0
     assert s.score < MIN_PICK_SCORE
@@ -435,10 +541,17 @@ def test_same_outlet_under_two_names_counts_once():
 
 # --- market context --------------------------------------------------------
 
+
 def test_context_coverage_is_log_scaled_by_outlet_and_capped():
     def story(n, period=DAILY):
         return score_context(
-            [_article(str(i), "Stocks rally as Fed holds rates", source=f"Outlet{i}") for i in range(n)], period)
+            [
+                _article(str(i), "Stocks rally as Fed holds rates", source=f"Outlet{i}")
+                for i in range(n)
+            ],
+            period,
+        )
+
     assert story(1).score == 0.0
     assert story(2).score == pytest.approx(1 / 3)
     assert story(8).score == 1.0
@@ -447,14 +560,17 @@ def test_context_coverage_is_log_scaled_by_outlet_and_capped():
 
 
 def test_context_keeps_the_most_covered_few():
-    groups = [[_article(f"{k}-{i}", f"Headline {k}", source=f"Outlet{i}") for i in range(k)]
-              for k in range(1, 9)]
+    groups = [
+        [_article(f"{k}-{i}", f"Headline {k}", source=f"Outlet{i}") for i in range(k)]
+        for k in range(1, 9)
+    ]
     picked = pick_context(groups, DAILY)
     assert [s.n_outlets for s in picked] == [8, 7, 6, 5, 4]
     assert len(pick_context(groups, WEEKLY)) == 8
 
 
 # --- picking ---------------------------------------------------------------
+
 
 def _story(aid, score, *categories):
     a = _article(aid, f"Story {aid}")
@@ -489,11 +605,14 @@ def test_a_story_under_the_floor_is_not_picked():
     assert _ids(pick_stories(ranked, DAILY)) == ["a", "b"]
 
 
-@pytest.mark.parametrize("policy_scores, picked", [
-    ((), []),                           # none that day: the top 10 on score
-    ((0.32,), ["p0"]),                  # one: it takes the 10th place
-    ((0.32, 0.31, 0.30), ["p0", "p1"]), # three: the best two take the 9th and 10th
-])
+@pytest.mark.parametrize(
+    "policy_scores, picked",
+    [
+        ((), []),  # none that day: the top 10 on score
+        ((0.32,), ["p0"]),  # one: it takes the 10th place
+        ((0.32, 0.31, 0.30), ["p0", "p1"]),  # three: the best two take the 9th and 10th
+    ],
+)
 def test_a_day_keeps_up_to_two_places_for_policy_and_macro(policy_scores, picked):
     ranked = _day(policy_scores=policy_scores)
     picks = pick_stories(ranked, DAILY)
@@ -511,10 +630,24 @@ def test_policy_already_in_the_top_ten_counts_toward_the_two():
 
 
 def test_a_reserved_place_needs_more_than_the_category():
-    rule = score_story([_article("s", "SEC Adopts Final Rules on Fund Names", feed="sec_press",
-                                 source="SEC")], {}, set())
-    challenge = score_story([_article("f", "FTC Sues to Block Kroger's Acquisition of Albertsons",
-                                      feed="ftc", source="FTC", tickers=["KR"])], {}, set())
+    rule = score_story(
+        [_article("s", "SEC Adopts Final Rules on Fund Names", feed="sec_press", source="SEC")],
+        {},
+        set(),
+    )
+    challenge = score_story(
+        [
+            _article(
+                "f",
+                "FTC Sues to Block Kroger's Acquisition of Albertsons",
+                feed="ftc",
+                source="FTC",
+                tickers=["KR"],
+            )
+        ],
+        {},
+        set(),
+    )
     assert rule.categories == ("policy",) and rule.score == pytest.approx(0.20)
     assert challenge.score == pytest.approx(0.32)
     others = _day()
@@ -546,22 +679,44 @@ def _slug(title):
 
 
 def _finnhub(title, ts, related, source="Reuters", category="general"):
-    return {"headline": title, "title": title, "time_published": ts, "source": source,
-            "category": category, "summary": f"{title}.", "url": f"https://news/{_slug(title)}-{source}",
-            "ticker_sentiment": [{"ticker": t} for t in related]}
+    return {
+        "headline": title,
+        "title": title,
+        "time_published": ts,
+        "source": source,
+        "category": category,
+        "summary": f"{title}.",
+        "url": f"https://news/{_slug(title)}-{source}",
+        "ticker_sentiment": [{"ticker": t} for t in related],
+    }
 
 
 def _filing(title, ts, tickers, items, summary=None):
-    return {"provider": "sec_edgar", "feed": "sec_8k", "title": title, "time_published": ts,
-            "ticker_sentiment": [{"ticker": t} for t in tickers], "source": "SEC filing",
-            "summary": summary, "url": f"https://www.sec.gov/Archives/{_slug(title)}.htm",
-            "items": items, "form": "8-K"}
+    return {
+        "provider": "sec_edgar",
+        "feed": "sec_8k",
+        "title": title,
+        "time_published": ts,
+        "ticker_sentiment": [{"ticker": t} for t in tickers],
+        "source": "SEC filing",
+        "summary": summary,
+        "url": f"https://www.sec.gov/Archives/{_slug(title)}.htm",
+        "items": items,
+        "form": "8-K",
+    }
 
 
 def _release(feed, source, title, ts, tickers=(), **extra):
-    payload = {"provider": "agencies", "feed": feed, "title": title, "source": source,
-               "ticker_sentiment": [{"ticker": t} for t in tickers], "summary": None,
-               "url": f"https://{feed}.example.gov/{_slug(title)}", **extra}
+    payload = {
+        "provider": "agencies",
+        "feed": feed,
+        "title": title,
+        "source": source,
+        "ticker_sentiment": [{"ticker": t} for t in tickers],
+        "summary": None,
+        "url": f"https://{feed}.example.gov/{_slug(title)}",
+        **extra,
+    }
     if ts:
         payload["time_published"] = ts
     return payload
@@ -575,52 +730,141 @@ def warehouse(tmp_path):
     wh.init_schema()
     with wh.connect() as con:
         # stories: two 8-Ks and three agency releases
-        _land(con, "intu", _filing("Intuit Reports Fourth-Quarter Fiscal 2026 Results", "20260825T201500",
-                                   ["INTU"], ["2.02", "9.01"],
-                                   "Intuit Inc. announced financial results for its fourth quarter."))
-        _land(con, "aapl", _filing("Apple Inc.: director or officer change", "20260825T213000", ["AAPL"],
-                                   ["5.02"], "A member of the Board informed the company that she will "
-                                   "not stand for re-election."))
-        _land(con, "fomc", _release("fed", "Federal Reserve", "Federal Reserve issues FOMC statement",
-                                    "20260825T180000"))
-        _land(con, "disc", _release("fed", "Federal Reserve",
-                                    "Minutes of the Board's discount rate meetings on July 20 and July 29, 2026",
-                                    "20260825T190000"))
-        _land(con, "secp", _release("sec_press", "SEC", "SEC Charges Investment Adviser with Defrauding Clients",
-                                    "20260825T160000"))
+        _land(
+            con,
+            "intu",
+            _filing(
+                "Intuit Reports Fourth-Quarter Fiscal 2026 Results",
+                "20260825T201500",
+                ["INTU"],
+                ["2.02", "9.01"],
+                "Intuit Inc. announced financial results for its fourth quarter.",
+            ),
+        )
+        _land(
+            con,
+            "aapl",
+            _filing(
+                "Apple Inc.: director or officer change",
+                "20260825T213000",
+                ["AAPL"],
+                ["5.02"],
+                "A member of the Board informed the company that she will "
+                "not stand for re-election.",
+            ),
+        )
+        _land(
+            con,
+            "fomc",
+            _release(
+                "fed", "Federal Reserve", "Federal Reserve issues FOMC statement", "20260825T180000"
+            ),
+        )
+        _land(
+            con,
+            "disc",
+            _release(
+                "fed",
+                "Federal Reserve",
+                "Minutes of the Board's discount rate meetings on July 20 and July 29, 2026",
+                "20260825T190000",
+            ),
+        )
+        _land(
+            con,
+            "secp",
+            _release(
+                "sec_press",
+                "SEC",
+                "SEC Charges Investment Adviser with Defrauding Clients",
+                "20260825T160000",
+            ),
+        )
         # the BLS figures already out on the first run: undated, never staged
-        _land(con, "bls0", _release("bls", "BLS", "Consumer Price Index, Jul 2026: CPI +0.2%", None,
-                                    baseline=True))
+        _land(
+            con,
+            "bls0",
+            _release(
+                "bls", "BLS", "Consumer Price Index, Jul 2026: CPI +0.2%", None, baseline=True
+            ),
+        )
         # a Sunday release: in the week, not in Wednesday's digest
-        _land(con, "kr", _release("ftc", "FTC", "FTC Sues to Block Kroger's Acquisition of Albertsons",
-                                  "20260823T150000", ["KR"]))
+        _land(
+            con,
+            "kr",
+            _release(
+                "ftc",
+                "FTC",
+                "FTC Sues to Block Kroger's Acquisition of Albertsons",
+                "20260823T150000",
+                ["KR"],
+            ),
+        )
         # market context: the news feed's general headlines
-        _land(con, "c1", _finnhub("Stocks rally as Fed signals patience on rates", "20260825T200000", []))
-        _land(con, "c2", _finnhub("Stocks rally after Fed signals patience on rates", "20260825T201000", [],
-                                  "CNBC"))
-        _land(con, "c3", _finnhub("Vanguard Group Inc. Takes Position in Apple Inc. $AAPL", "20260825T150000",
-                                  ["AAPL"]))
+        _land(
+            con,
+            "c1",
+            _finnhub("Stocks rally as Fed signals patience on rates", "20260825T200000", []),
+        )
+        _land(
+            con,
+            "c2",
+            _finnhub(
+                "Stocks rally after Fed signals patience on rates", "20260825T201000", [], "CNBC"
+            ),
+        )
+        _land(
+            con,
+            "c3",
+            _finnhub(
+                "Vanguard Group Inc. Takes Position in Apple Inc. $AAPL",
+                "20260825T150000",
+                ["AAPL"],
+            ),
+        )
         _land(con, "c4", _finnhub("Is Nvidia Stock a Buy Now?", "20260825T170000", ["NVDA"]))
         # neither stories nor context: a per-ticker pull, and Alpha Vantage
-        _land(con, "co", _finnhub("Intuit stock slides after results", "20260825T203000", ["INTU"],
-                                  category="company"))
-        _land(con, "av", {"title": "Cisco taps Supermicro for AI racks", "time_published": "20260825T160000",
-                          "source": "Benzinga", "url": "https://news/cisco", "summary": "",
-                          "ticker_sentiment": [{"ticker": "NVDA", "relevance_score": "0.6"},
-                                               {"ticker": "CSCO", "relevance_score": "0.9"},
-                                               {"ticker": "FOREX:USD", "relevance_score": "0.9"},
-                                               {"ticker": "AMD", "relevance_score": "0.1"}]})
-        con.execute("INSERT INTO staging.stg_prices_daily VALUES"
-                    " ('INTU', '2026-08-25', 1, 1, 1, 1, 1, -0.034),"
-                    " ('INTU', '2026-08-26', 1, 1, 1, 1, 1, 0.5),"  # the digest day itself: not counted
-                    " ('AAPL', '2026-08-25', 1, 1, 1, 1, 1, 0.01)")
-        con.execute("INSERT INTO staging.stg_fred_market VALUES"
-                    " ('SP500', '2026-08-21', 5940), ('SP500', '2026-08-24', 6000),"
-                    " ('SP500', '2026-08-25', 6060), ('VIXCLS', '2026-08-24', 16.0),"
-                    " ('VIXCLS', '2026-08-25', 15.2)")
+        _land(
+            con,
+            "co",
+            _finnhub(
+                "Intuit stock slides after results", "20260825T203000", ["INTU"], category="company"
+            ),
+        )
+        _land(
+            con,
+            "av",
+            {
+                "title": "Cisco taps Supermicro for AI racks",
+                "time_published": "20260825T160000",
+                "source": "Benzinga",
+                "url": "https://news/cisco",
+                "summary": "",
+                "ticker_sentiment": [
+                    {"ticker": "NVDA", "relevance_score": "0.6"},
+                    {"ticker": "CSCO", "relevance_score": "0.9"},
+                    {"ticker": "FOREX:USD", "relevance_score": "0.9"},
+                    {"ticker": "AMD", "relevance_score": "0.1"},
+                ],
+            },
+        )
+        con.execute(
+            "INSERT INTO staging.stg_prices_daily VALUES"
+            " ('INTU', '2026-08-25', 1, 1, 1, 1, 1, -0.034),"
+            " ('INTU', '2026-08-26', 1, 1, 1, 1, 1, 0.5),"  # the digest day itself: not counted
+            " ('AAPL', '2026-08-25', 1, 1, 1, 1, 1, 0.01)"
+        )
+        con.execute(
+            "INSERT INTO staging.stg_fred_market VALUES"
+            " ('SP500', '2026-08-21', 5940), ('SP500', '2026-08-24', 6000),"
+            " ('SP500', '2026-08-25', 6060), ('VIXCLS', '2026-08-24', 16.0),"
+            " ('VIXCLS', '2026-08-25', 15.2)"
+        )
         for ticker, cap in (("INTU", 180_000), ("AAPL", 3_000_000)):  # $ millions
-            con.execute("INSERT INTO raw.raw_company_profile VALUES (?, ?, ?)",
-                        [ticker, json.dumps({"marketCapitalization": cap}), T0])
+            con.execute(
+                "INSERT INTO raw.raw_company_profile VALUES (?, ?, ?)",
+                [ticker, json.dumps({"marketCapitalization": cap}), T0],
+            )
         con.execute("DELETE FROM mart.model_rankings")  # init_schema seeds the repo's snapshot
         con.execute("INSERT INTO mart.model_rankings VALUES ('2026-06-30', 1, 'INTU', 'Tech', 1.0)")
     return wh
@@ -635,14 +879,21 @@ AAPL_SCORE = 0.40 * 0.1 + 0.25 * 0.1 + 0.20
 def test_staging_types_every_source_into_one_layout(warehouse):
     assert rebuild_news_articles(warehouse) == 12  # all but the undated BLS baseline
     with warehouse.connect(read_only=True) as con:
-        rows = dict(con.execute(
-            "SELECT article_id, struct_pack(provider, feed, items, tickers, summary, published_at)"
-            " FROM staging.stg_news_articles").fetchall())
+        rows = dict(
+            con.execute(
+                "SELECT article_id, struct_pack(provider, feed, items, tickers, summary, published_at)"
+                " FROM staging.stg_news_articles"
+            ).fetchall()
+        )
     assert "bls0" not in rows
     assert rows["intu"]["provider"] == "sec_edgar" and rows["intu"]["feed"] == "sec_8k"
     assert rows["intu"]["items"] == ["2.02", "9.01"] and rows["intu"]["tickers"] == ["INTU"]
     assert rows["intu"]["published_at"] == datetime(2026, 8, 25, 20, 15)
-    assert (rows["fomc"]["provider"], rows["fomc"]["feed"], rows["fomc"]["items"]) == ("agencies", "fed", None)
+    assert (rows["fomc"]["provider"], rows["fomc"]["feed"], rows["fomc"]["items"]) == (
+        "agencies",
+        "fed",
+        None,
+    )
     assert rows["fomc"]["summary"] is None
     assert (rows["c1"]["provider"], rows["c1"]["feed"]) == ("finnhub", "finnhub_general")
     assert rows["co"]["feed"] == "finnhub_company"
@@ -655,7 +906,9 @@ T1, T2 = "2026-08-26 12:00:00+00", "2026-08-26 13:00:00+00"
 
 def test_staging_is_incremental_on_fetched_at(warehouse):
     rebuild_news_articles(warehouse)
-    assert rebuild_news_articles(warehouse) == 12  # >= watermark: the last batch is re-read, idempotently
+    assert (
+        rebuild_news_articles(warehouse) == 12
+    )  # >= watermark: the last batch is re-read, idempotently
     with warehouse.connect() as con:
         _land(con, "late", _finnhub("Later story", "20260826T100000", ["MSFT"]), T1)
     assert rebuild_news_articles(warehouse) == 13  # the batch at the watermark, plus the new row
@@ -675,9 +928,15 @@ def test_rows_staged_before_feed_existed_are_restaged_in_full(warehouse):
         _land(con, "later", _finnhub("Even later story", "20260826T110000", ["MSFT"]), T2)
     assert rebuild_news_articles(warehouse) == 14  # not just the 2 from the watermark on
     with warehouse.connect(read_only=True) as con:
-        assert con.execute("SELECT COUNT(*) FROM staging.stg_news_articles WHERE feed IS NULL").fetchone()[0] == 0
-        assert con.execute("SELECT items FROM staging.stg_news_articles WHERE article_id = 'intu'"
-                           ).fetchone()[0] == ["2.02", "9.01"]
+        assert (
+            con.execute(
+                "SELECT COUNT(*) FROM staging.stg_news_articles WHERE feed IS NULL"
+            ).fetchone()[0]
+            == 0
+        )
+        assert con.execute(
+            "SELECT items FROM staging.stg_news_articles WHERE article_id = 'intu'"
+        ).fetchone()[0] == ["2.02", "9.01"]
     assert rebuild_news_articles(warehouse) == 1  # incremental again
 
 
@@ -686,37 +945,68 @@ def test_build_picks_from_primary_sources_and_keeps_the_feed_as_context(warehous
     for _ in range(2):  # rebuilds in place
         out = build_daily_digest(warehouse, date(2026, 8, 26))
     assert out == {
-        "period": "daily", "digest_date": "2026-08-26", "articles": 5, "routine_dropped": 1,
-        "commentary_dropped": 1, "stories": 5, "outlets": 3, "picked": 3, "context": 1,
-        "sp500_return": pytest.approx(0.01), "vix": 15.2,
+        "period": "daily",
+        "digest_date": "2026-08-26",
+        "articles": 5,
+        "routine_dropped": 1,
+        "commentary_dropped": 1,
+        "stories": 5,
+        "outlets": 3,
+        "picked": 3,
+        "context": 1,
+        "sp500_return": pytest.approx(0.01),
+        "vix": 15.2,
     }
     with warehouse.connect(read_only=True) as con:
-        head = con.execute("SELECT COUNT(*), any_value(sp500_return), any_value(vix),"
-                           " any_value(session_gap_minutes) FROM mart.news_digests").fetchone()
+        head = con.execute(
+            "SELECT COUNT(*), any_value(sp500_return), any_value(vix),"
+            " any_value(session_gap_minutes) FROM mart.news_digests"
+        ).fetchone()
         stories = con.execute(
             "SELECT rank, headline, move_ticker, move_return, event, reaction, size, on_site, score,"
-            " coverage, category, categories FROM mart.news_digest_stories ORDER BY rank").fetchall()
+            " coverage, category, categories FROM mart.news_digest_stories ORDER BY rank"
+        ).fetchall()
         members = con.execute(
-            "SELECT rank, article_id FROM mart.news_digest_articles ORDER BY 1, 2").fetchall()
+            "SELECT rank, article_id FROM mart.news_digest_articles ORDER BY 1, 2"
+        ).fetchall()
         context = con.execute(
-            "SELECT rank, headline, n_articles, n_outlets, score FROM mart.news_digest_context").fetchall()
+            "SELECT rank, headline, n_articles, n_outlets, score FROM mart.news_digest_context"
+        ).fetchall()
     assert head == (1, pytest.approx(0.01), 15.2, None)
     # the FOMC statement on the market's +1% (half marks), then Intuit's
     # results on its -3.4%, then a director leaving Apple; the minor Fed and
     # SEC releases score under the floor
-    assert [s[1] for s in stories] == ["Federal Reserve issues FOMC statement",
-                                       "Intuit Reports Fourth-Quarter Fiscal 2026 Results",
-                                       "Apple Inc.: director or officer change"]
+    assert [s[1] for s in stories] == [
+        "Federal Reserve issues FOMC statement",
+        "Intuit Reports Fourth-Quarter Fiscal 2026 Results",
+        "Apple Inc.: director or officer change",
+    ]
     fomc, intu, aapl = stories
-    assert fomc[2:9] == (MARKET, pytest.approx(0.01), 1.0, pytest.approx(0.5), 1.0, 0.0,
-                         pytest.approx(FOMC_SCORE))
+    assert fomc[2:9] == (
+        MARKET,
+        pytest.approx(0.01),
+        1.0,
+        pytest.approx(0.5),
+        1.0,
+        0.0,
+        pytest.approx(FOMC_SCORE),
+    )
     assert fomc[11] == ["macro"]
-    assert intu[2:9] == ("INTU", pytest.approx(-0.034), 0.7, pytest.approx(0.34),
-                         pytest.approx(INTU_SIZE), 1.0, pytest.approx(INTU_SCORE))
+    assert intu[2:9] == (
+        "INTU",
+        pytest.approx(-0.034),
+        0.7,
+        pytest.approx(0.34),
+        pytest.approx(INTU_SIZE),
+        1.0,
+        pytest.approx(INTU_SCORE),
+    )
     assert intu[9:12] == (0.0, 0.0, ["earnings"])
     assert aapl[8] == pytest.approx(AAPL_SCORE)
     assert members == [(1, "fomc"), (2, "intu"), (3, "aapl")]
-    assert context == [(1, "Stocks rally as Fed signals patience on rates", 2, 2, pytest.approx(1 / 3))]
+    assert context == [
+        (1, "Stocks rally as Fed signals patience on rates", 2, 2, pytest.approx(1 / 3))
+    ]
 
 
 def test_build_refuses_weekends(warehouse):
@@ -733,17 +1023,25 @@ def test_weekly_build_covers_the_week_and_compounds_the_moves(warehouse):
     assert out["sp500_return"] == pytest.approx(6060 / 5940 - 1) and out["vix"] == 15.2
     with warehouse.connect(read_only=True) as con:
         periods = con.execute(
-            "SELECT period, COUNT(*) FROM mart.news_digests GROUP BY 1 ORDER BY 1").fetchall()
+            "SELECT period, COUNT(*) FROM mart.news_digests GROUP BY 1 ORDER BY 1"
+        ).fetchall()
         rows = con.execute(
             "SELECT headline, move_ticker, move_return, reaction FROM mart.news_digest_stories"
-            " WHERE period = 'weekly' ORDER BY rank").fetchall()
+            " WHERE period = 'weekly' ORDER BY rank"
+        ).fetchall()
     assert periods == [("daily", 1), ("weekly", 1)]
     by_headline = {r[0]: r[1:] for r in rows}
     # Tuesday -3.4% then Wednesday +50%, compounded; full marks past 20%
     assert by_headline["Intuit Reports Fourth-Quarter Fiscal 2026 Results"] == (
-        "INTU", pytest.approx(0.966 * 1.5 - 1), 1.0)
+        "INTU",
+        pytest.approx(0.966 * 1.5 - 1),
+        1.0,
+    )
     assert by_headline["Federal Reserve issues FOMC statement"] == (
-        MARKET, pytest.approx(6060 / 5940 - 1), pytest.approx((6060 / 5940 - 1) / 0.04))
+        MARKET,
+        pytest.approx(6060 / 5940 - 1),
+        pytest.approx((6060 / 5940 - 1) / 0.04),
+    )
     assert "FTC Sues to Block Kroger's Acquisition of Albertsons" in by_headline
     assert rows[0][0] == "Intuit Reports Fourth-Quarter Fiscal 2026 Results"
 
@@ -772,20 +1070,37 @@ def test_read_api(warehouse, monkeypatch):
     fomc, intu = latest["items"][:2]
     assert fomc["move_ticker"] == "S&P 500"
     assert fomc["components"] == {"event": 1.0, "reaction": 0.5, "size": 1.0, "on_site": 0.0}
-    assert intu["components"] == {"event": 0.7, "reaction": 0.34, "size": round(INTU_SIZE, 4),
-                                  "on_site": 1.0}
+    assert intu["components"] == {
+        "event": 0.7,
+        "reaction": 0.34,
+        "size": round(INTU_SIZE, 4),
+        "on_site": 1.0,
+    }
     assert intu["also_covered"] == []
     assert latest["weights"] == {"event": 0.40, "reaction": 0.25, "size": 0.20, "on_site": 0.15}
-    assert latest["full_marks"] == {"move": 0.1, "market_move": 0.02, "size_from": 1e10, "size_full_at": 1e12}
+    assert latest["full_marks"] == {
+        "move": 0.1,
+        "market_move": 0.02,
+        "size_from": 1e10,
+        "size_full_at": 1e12,
+    }
 
-    assert client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"] == "2026-08-26"
+    assert (
+        client.get("/api/digest/daily", params={"date": "2026-08-25"}).json()["next_date"]
+        == "2026-08-26"
+    )
     assert client.get("/api/digest/daily", params={"date": "2026-08-29"}).status_code == 404
     assert client.get("/api/digest/daily", params={"date": "2026-02-30"}).status_code == 422
 
     build_weekly_digest(warehouse, date(2026, 8, 28))
     weekly = client.get("/api/digest/weekly").json()
     assert weekly["period"] == "weekly" and weekly["digest_date"] == "2026-08-28"
-    assert weekly["full_marks"] == {"move": 0.2, "market_move": 0.04, "size_from": 1e10, "size_full_at": 1e12}
+    assert weekly["full_marks"] == {
+        "move": 0.2,
+        "market_move": 0.04,
+        "size_from": 1e10,
+        "size_full_at": 1e12,
+    }
     assert client.get("/api/digest/weekly", params={"date": "2026-08-21"}).status_code == 404
     assert client.get("/api/digest/monthly").status_code == 422
 
@@ -813,8 +1128,12 @@ def test_read_api_shows_a_digest_from_the_news_feed_as_it_was_scored(warehouse, 
         )
     monkeypatch.setenv("STOCKIDENCE_DB", str(warehouse.path))
     body = TestClient(app).get("/api/digest/daily", params={"date": "2026-07-01"}).json()
-    assert body["items"][0]["components"] == {"coverage": 0.6667, "reaction": 0.2, "category": 1.0,
-                                              "on_site": 0.0}
+    assert body["items"][0]["components"] == {
+        "coverage": 0.6667,
+        "reaction": 0.2,
+        "category": 1.0,
+        "on_site": 0.0,
+    }
     assert body["sp500_return"] is None and body["vix"] is None
 
 
@@ -836,9 +1155,11 @@ def test_init_schema_adds_the_new_columns_to_old_tables(tmp_path):
     path = tmp_path / "old.duckdb"
     con = duckdb.connect(str(path))
     con.execute("CREATE SCHEMA staging")
-    con.execute("CREATE TABLE staging.stg_news_articles (article_id VARCHAR, published_at TIMESTAMP,"
-                " provider VARCHAR, source VARCHAR, headline VARCHAR, summary VARCHAR, url VARCHAR,"
-                " tickers VARCHAR[], fetched_at TIMESTAMPTZ)")
+    con.execute(
+        "CREATE TABLE staging.stg_news_articles (article_id VARCHAR, published_at TIMESTAMP,"
+        " provider VARCHAR, source VARCHAR, headline VARCHAR, summary VARCHAR, url VARCHAR,"
+        " tickers VARCHAR[], fetched_at TIMESTAMPTZ)"
+    )
     con.execute("INSERT INTO staging.stg_news_articles (article_id) VALUES ('old')")
     con.close()
     wh = Warehouse(path)

@@ -23,7 +23,7 @@ HEADLINE_CHARS = 300
 
 @dataclass(frozen=True)
 class Headline:
-    key: str              # the article id, kept with the summary for its sources
+    key: str  # the article id, kept with the summary for its sources
     headline: str
     summary: str | None
     outlet: str | None
@@ -32,8 +32,8 @@ class Headline:
 
 @dataclass(frozen=True)
 class Market:
-    sp500_return: float | None   # the session's (daily) or the week's (weekly)
-    vix: float | None            # the latest close in that span
+    sp500_return: float | None  # the session's (daily) or the week's (weekly)
+    vix: float | None  # the latest close in that span
     headlines: tuple[Headline, ...] = ()
 
     @property

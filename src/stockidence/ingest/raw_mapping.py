@@ -49,7 +49,11 @@ def primary_news_rows(articles: list[dict[str, Any]]) -> dict[str, list[dict[str
     for a in articles:
         rows["raw_news_articles"].append({"article_id": a["article_id"], "payload": a})
         rows["news_ticker_sentiment"].extend(
-            {"article_id": a["article_id"], "ticker": t["ticker"], "payload": {"ticker": t["ticker"]}}
+            {
+                "article_id": a["article_id"],
+                "ticker": t["ticker"],
+                "payload": {"ticker": t["ticker"]},
+            }
             for t in a.get("ticker_sentiment") or []
         )
     return rows
@@ -477,17 +481,21 @@ def _news_rows(
         tickers = [t.strip() for t in (item.get("related") or "").split(",") if t.strip()]
         if symbol and symbol not in tickers:
             tickers.append(symbol)
-        articles.append({
-            "article_id": article_id,
-            "payload": {
-                **item,
-                # the general feed is market context; a per-ticker pull is company news
-                "feed": "finnhub_company" if symbol else "finnhub_general",
-                "title": item.get("headline"),
-                "time_published": datetime.fromtimestamp(published, UTC).strftime("%Y%m%dT%H%M%S"),
-                "ticker_sentiment": [{"ticker": t} for t in tickers],
-            },
-        })
+        articles.append(
+            {
+                "article_id": article_id,
+                "payload": {
+                    **item,
+                    # the general feed is market context; a per-ticker pull is company news
+                    "feed": "finnhub_company" if symbol else "finnhub_general",
+                    "title": item.get("headline"),
+                    "time_published": datetime.fromtimestamp(published, UTC).strftime(
+                        "%Y%m%dT%H%M%S"
+                    ),
+                    "ticker_sentiment": [{"ticker": t} for t in tickers],
+                },
+            }
+        )
         ticker_rows.extend(
             {"article_id": article_id, "ticker": t, "payload": {"ticker": t}} for t in tickers
         )
@@ -512,7 +520,9 @@ def normalize_ticker_news(
     return {"ticker_news_fetches": [{"ticker": symbol}], **_news_rows(payload, symbol)}
 
 
-def normalize_sec_company_tickers(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_sec_company_tickers(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """SEC files/company_tickers.json: {"0": {cik_str, ticker, title}, ...},
     one row per ticker (a share class has its own ticker, the company's CIK)."""
     rows = [

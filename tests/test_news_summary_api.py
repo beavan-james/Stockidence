@@ -102,7 +102,8 @@ def client(tmp_path, monkeypatch):
         con.execute(
             """INSERT INTO mart.news_digest_context VALUES ('daily', '2026-08-26', 1,
                    'Stocks slip as yields climb', NULL, 'https://news/mk1', 'Reuters',
-                   '2026-08-25 21:00', 3, 2, 0.5)""")
+                   '2026-08-25 21:00', 3, 2, 0.5)"""
+        )
         for period, day, part, heading, body, keys, status in SUMMARIES:
             con.execute(
                 "INSERT INTO mart.news_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'v1', ?)",
@@ -154,7 +155,8 @@ def test_latest_daily_paragraph_with_its_sources(client):
     ]
     # the market headline it was given is listed apart
     assert part["market_sources"] == [
-        {"headline": "Stocks slip as yields climb", "outlet": "Reuters", "url": "https://news/mk1"}]
+        {"headline": "Stocks slip as yields climb", "outlet": "Reuters", "url": "https://news/mk1"}
+    ]
 
 
 def test_weekly_article_is_the_overview_then_its_sections(client):

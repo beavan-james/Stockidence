@@ -147,10 +147,14 @@ def _summary(
 
 # --- daily --------------------------------------------------------------------
 
-def daily_prompt(day: date, stories: list[tuple[StoryInput, Card]],
-                 market: Market | None = None) -> str:
-    header = (f"Daily market news summary for {day:%A %Y-%m-%d}, covering the news "
-              "up to 07:00 New York time. Fact cards, most important first:")
+
+def daily_prompt(
+    day: date, stories: list[tuple[StoryInput, Card]], market: Market | None = None
+) -> str:
+    header = (
+        f"Daily market news summary for {day:%A %Y-%m-%d}, covering the news "
+        "up to 07:00 New York time. Fact cards, most important first:"
+    )
     cards = [f"{n}. {render_card(card, story)}" for n, (story, card) in enumerate(stories, start=1)]
     block = market_block(market, "daily", day)
     return "\n\n".join([header, *cards, *([block] if block else [])])
@@ -164,13 +168,19 @@ def _with_market(keys: list[str], market: Market | None, period: str, day: date)
     return [*keys, *(k for k in market.keys if k not in keys)]
 
 
-def write_daily(llm: Ollama, day: date, stories: list[tuple[StoryInput, Card]],
-                now: datetime, market: Market | None = None) -> Summary:
+def write_daily(
+    llm: Ollama,
+    day: date,
+    stories: list[tuple[StoryInput, Card]],
+    now: datetime,
+    market: Market | None = None,
+) -> Summary:
     """The day's paragraph from its stories' cards, in rank order, and the
     market beside them."""
     given = daily_prompt(day, stories, market)
-    text, problems = write(llm, DAILY_SYSTEM, given, words=DAILY_WORDS,
-                           max_output=DAILY_OUTPUT, paragraphs=False)
+    text, problems = write(
+        llm, DAILY_SYSTEM, given, words=DAILY_WORDS, max_output=DAILY_OUTPUT, paragraphs=False
+    )
     keys = _with_market([card.story_key for _, card in stories], market, "daily", day)
     return _summary("daily", day, 0, None, text, keys, llm, now, problems)
 
@@ -208,8 +218,9 @@ def overview_prompt(friday: date, sections: list[Section], market: Market | None
     return "\n".join(lines)
 
 
-def write_weekly(llm: Ollama, friday: date, sections: list[Section], now: datetime,
-                 market: Market | None = None) -> list[Summary]:
+def write_weekly(
+    llm: Ollama, friday: date, sections: list[Section], now: datetime, market: Market | None = None
+) -> list[Summary]:
     """One call per section, then the overview, which also gets the week's
     market; part 0 is the overview."""
     parts: list[Summary] = []
@@ -230,7 +241,13 @@ def write_weekly(llm: Ollama, friday: date, sections: list[Section], now: dateti
             )
         )
     system = OVERVIEW_SYSTEM.format(low=OVERVIEW_WORDS[0], high=OVERVIEW_WORDS[1])
-    text, problems = write(llm, system, overview_prompt(friday, sections, market),
-                           words=OVERVIEW_WORDS, max_output=OVERVIEW_OUTPUT, paragraphs=False)
+    text, problems = write(
+        llm,
+        system,
+        overview_prompt(friday, sections, market),
+        words=OVERVIEW_WORDS,
+        max_output=OVERVIEW_OUTPUT,
+        paragraphs=False,
+    )
     keys = _with_market([k for s in sections for k in s.story_keys], market, "weekly", friday)
     return [_summary("weekly", friday, 0, None, text, keys, llm, now, problems), *parts]

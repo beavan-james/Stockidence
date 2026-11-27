@@ -13,7 +13,9 @@ from typing import Any
 
 from .base import BaseClient
 
-FEED_ACCEPT = "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5"
+FEED_ACCEPT = (
+    "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5"
+)
 
 
 class AgencyFeedClient(BaseClient):

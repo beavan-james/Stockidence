@@ -33,27 +33,53 @@ def _full_marks(period: str) -> dict[str, float]:
     from ..mart.news_digest import PERIODS, SIZE_DECADES, SIZE_FROM
 
     spec = PERIODS[period]
-    return {"move": spec.reaction_full_at, "market_move": spec.market_full_at,
-            "size_from": SIZE_FROM, "size_full_at": SIZE_FROM * 10**SIZE_DECADES}
+    return {
+        "move": spec.reaction_full_at,
+        "market_move": spec.market_full_at,
+        "size_from": SIZE_FROM,
+        "size_full_at": SIZE_FROM * 10**SIZE_DECADES,
+    }
 
 
 def _components(cov, rea, cat, site, event, size) -> dict[str, float]:
     """A story's inputs as it was scored: event and size from primary
     sources, or coverage and category on a digest from the news feed."""
     if event is None:
-        return {"coverage": round(cov, 4), "reaction": round(rea, 4),
-                "category": round(cat, 4), "on_site": round(site, 4)}
-    return {"event": round(event, 4), "reaction": round(rea, 4),
-            "size": round(size or 0.0, 4), "on_site": round(site, 4)}
+        return {
+            "coverage": round(cov, 4),
+            "reaction": round(rea, 4),
+            "category": round(cat, 4),
+            "on_site": round(site, 4),
+        }
+    return {
+        "event": round(event, 4),
+        "reaction": round(rea, 4),
+        "size": round(size or 0.0, 4),
+        "on_site": round(site, 4),
+    }
 
 
 def _empty(period: str) -> dict:
-    return {"period": period, "digest_date": None, "previous_date": None, "next_date": None,
-            "window_start": None, "window_end": None, "built_at": None, "articles": 0,
-            "routine_dropped": 0, "commentary_dropped": 0, "stories": 0, "outlets": 0,
-            "session_gap_minutes": None, "sp500_return": None, "vix": None,
-            "weights": _weights(), "full_marks": _full_marks(period),
-            "items": []}
+    return {
+        "period": period,
+        "digest_date": None,
+        "previous_date": None,
+        "next_date": None,
+        "window_start": None,
+        "window_end": None,
+        "built_at": None,
+        "articles": 0,
+        "routine_dropped": 0,
+        "commentary_dropped": 0,
+        "stories": 0,
+        "outlets": 0,
+        "session_gap_minutes": None,
+        "sp500_return": None,
+        "vix": None,
+        "weights": _weights(),
+        "full_marks": _full_marks(period),
+        "items": [],
+    }
 
 
 def get_digest(period: str, digest_date: date | None = None) -> dict | None:
@@ -154,7 +180,8 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
         "session_gap_minutes": head[9],
         "sp500_return": head[10],
         "vix": head[11],
-        "weights": _weights(), "full_marks": _full_marks(period),
+        "weights": _weights(),
+        "full_marks": _full_marks(period),
         "items": [
             {
                 "rank": int(rank),
@@ -173,8 +200,26 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
                 "components": _components(cov, rea, cat, site, event, size),
                 "also_covered": also.get(int(rank), []),
             }
-            for (rank, headline, summary, url, source, published, tickers, categories,
-                 n_articles, n_outlets, move_ticker, move_return,
-                 cov, rea, cat, site, score, event, size) in stories
+            for (
+                rank,
+                headline,
+                summary,
+                url,
+                source,
+                published,
+                tickers,
+                categories,
+                n_articles,
+                n_outlets,
+                move_ticker,
+                move_return,
+                cov,
+                rea,
+                cat,
+                site,
+                score,
+                event,
+                size,
+            ) in stories
         ],
     }

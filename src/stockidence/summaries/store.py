@@ -31,7 +31,7 @@ class SummaryInputs:
     cards: dict[str, Card]  # existing cards for any of their articles
     sectors: dict[str, str]  # ticker -> sector, for the weekly sections
     summaries: dict[Digest, tuple[Summary, ...]]  # what the digests to write already have
-    write: tuple[Digest, ...]                # the digests to write a summary for
+    write: tuple[Digest, ...]  # the digests to write a summary for
     markets: dict[Digest, Market] = field(default_factory=dict)  # the market beside each to write
 
 
@@ -161,9 +161,13 @@ def _markets(con, digests: list[Digest]) -> dict[Digest, Market]:
         [_keys(digests)],
     ).fetchall():
         if key:  # the article row is what the summary's sources are read from
-            headlines.setdefault((period, day), []).append(Headline(key, headline, summary, outlet, url))
-    return {(period, day): Market(sp500, vix, tuple(headlines.get((period, day), ())))
-            for period, day, sp500, vix in figures}
+            headlines.setdefault((period, day), []).append(
+                Headline(key, headline, summary, outlet, url)
+            )
+    return {
+        (period, day): Market(sp500, vix, tuple(headlines.get((period, day), ())))
+        for period, day, sp500, vix in figures
+    }
 
 
 def _summaries(con, digests: list[Digest]) -> dict[Digest, tuple[Summary, ...]]:

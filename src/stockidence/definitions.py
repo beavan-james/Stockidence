@@ -266,7 +266,8 @@ def ingest_primary_news_op(context: OpExecutionContext, prev: dict) -> dict:
         if info.get("failed") or info.get("rate_limited") or info.get("capped"):
             context.log.warning(
                 f"[sec_8k_releases] {len(info.get('failed', []))} filings failed, rate limited: "
-                f"{info.get('rate_limited')}, capped: {info.get('capped')}; the cursor waits for them")
+                f"{info.get('rate_limited')}, capped: {info.get('capped')}; the cursor waits for them"
+            )
         out["sec_8k_releases"] = info.get("landed", 0)
     except Exception as exc:  # the cursor is unchanged, the next run retries
         context.log.warning(f"[sec_8k_releases] failed: {exc}")
@@ -318,12 +319,14 @@ def _log_digests(context: OpExecutionContext, built: list[dict]) -> None:
             context.log.info(
                 f"{tag} {d['picked']} of {d['stories']} stories from {d['articles']} releases; "
                 f"{d['context']} market headlines ({d['routine_dropped']} routine, "
-                f"{d['commentary_dropped']} commentary dropped)")
+                f"{d['commentary_dropped']} commentary dropped)"
+            )
         else:
             context.log.info(
                 f"{tag} {d['picked']} of {d['stories']} stories from "
                 f"{d['articles']} articles ({d['routine_dropped']} routine, "
-                f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets")
+                f"{d['commentary_dropped']} commentary dropped), {d['outlets']} outlets"
+            )
         if (d.get("session_gap_minutes") or 0) >= _DIGEST_GAP_WARN_MINUTES:
             context.log.warning(
                 f"{tag} no article for {d['session_gap_minutes']} minutes of a session: "
@@ -502,8 +505,9 @@ def daily_digest_job() -> None:
     """Weekday morning chain: news pull -> 8-Ks and agency releases -> news
     staging -> digest -> the picked stories' pages -> their text -> cards ->
     the paragraph."""
-    text = stage_article_text_op(fetch_articles_op(build_digest_op(stage_news_op(
-        ingest_primary_news_op(ingest_news_op())))))
+    text = stage_article_text_op(
+        fetch_articles_op(build_digest_op(stage_news_op(ingest_primary_news_op(ingest_news_op()))))
+    )
     _summarize(text)
 
 
@@ -526,8 +530,11 @@ def weekly_digest_job() -> None:
     staging -> the week's digest -> pages for its stories and the week's
     daily stories -> text -> cards for stories still without one -> the
     weekly article."""
-    text = stage_article_text_op(fetch_articles_op(build_weekly_digest_op(stage_news_op(
-        ingest_primary_news_op(ingest_news_op())))))
+    text = stage_article_text_op(
+        fetch_articles_op(
+            build_weekly_digest_op(stage_news_op(ingest_primary_news_op(ingest_news_op())))
+        )
+    )
     _summarize(text)
 
 

@@ -56,12 +56,12 @@ ATOM = "{http://www.w3.org/2005/Atom}"
 
 FORMS = frozenset({"8-K"})  # an 8-K/A repeats or corrects news already out
 FEED_PAGE = 100
-MAX_FEED_PAGES = 40         # 4,000 filings, about two busy days
+MAX_FEED_PAGES = 40  # 4,000 filings, about two busy days
 FIRST_LOOKBACK = timedelta(hours=36)
-MAX_FILINGS = 300           # tracked filings read per run, a cap for backfills
+MAX_FILINGS = 300  # tracked filings read per run, a cap for backfills
 RETRY_WINDOW = timedelta(days=2)  # a failed filing holds the cursor back this long at most
-KNOWN_DAYS = 14             # landed accessions read back this far, to skip repeats
-MIN_INTERVAL = 0.2          # seconds between SEC requests: 5 a second
+KNOWN_DAYS = 14  # landed accessions read back this far, to skip repeats
+MIN_INTERVAL = 0.2  # seconds between SEC requests: 5 a second
 SOURCE = "SEC filing"
 FEED = "sec_8k"
 
@@ -71,20 +71,34 @@ CURSOR_DIMENSION = "cursor"
 
 # Short names for the headline of a filing with no press release.
 ITEM_NAMES: dict[str, str] = {
-    "1.01": "material agreement", "1.02": "material agreement terminated",
-    "1.03": "bankruptcy or receivership", "1.04": "mine safety",
-    "1.05": "cybersecurity incident", "2.01": "acquisition or disposal completed",
-    "2.02": "results of operations", "2.03": "new financial obligation",
-    "2.04": "obligation accelerated", "2.05": "exit or disposal costs",
-    "2.06": "material impairment", "3.01": "listing notice or transfer",
-    "3.02": "unregistered share sale", "3.03": "change to shareholder rights",
-    "4.01": "auditor change", "4.02": "past financial statements no longer reliable",
-    "5.01": "change in control", "5.02": "director or officer change",
-    "5.03": "bylaw or fiscal year change", "5.04": "benefit plan trading suspension",
-    "5.05": "code of ethics change", "5.06": "shell company status change",
-    "5.07": "shareholder vote results", "5.08": "director nominations",
-    "6.01": "asset-backed securities", "7.01": "Regulation FD disclosure",
-    "8.01": "other events", "9.01": "exhibits",
+    "1.01": "material agreement",
+    "1.02": "material agreement terminated",
+    "1.03": "bankruptcy or receivership",
+    "1.04": "mine safety",
+    "1.05": "cybersecurity incident",
+    "2.01": "acquisition or disposal completed",
+    "2.02": "results of operations",
+    "2.03": "new financial obligation",
+    "2.04": "obligation accelerated",
+    "2.05": "exit or disposal costs",
+    "2.06": "material impairment",
+    "3.01": "listing notice or transfer",
+    "3.02": "unregistered share sale",
+    "3.03": "change to shareholder rights",
+    "4.01": "auditor change",
+    "4.02": "past financial statements no longer reliable",
+    "5.01": "change in control",
+    "5.02": "director or officer change",
+    "5.03": "bylaw or fiscal year change",
+    "5.04": "benefit plan trading suspension",
+    "5.05": "code of ethics change",
+    "5.06": "shell company status change",
+    "5.07": "shareholder vote results",
+    "5.08": "director nominations",
+    "6.01": "asset-backed securities",
+    "7.01": "Regulation FD disclosure",
+    "8.01": "other events",
+    "9.01": "exhibits",
 }
 
 _RELEASE_TYPES = ("EX-99.1", "EX-99", "EX-99.01")
@@ -94,7 +108,8 @@ _ITEM = re.compile(r"Item\s+(\d\.\d\d)")
 _ACCESSION = re.compile(r"accession-number=(\d{10}-\d{2}-\d{6})")
 _INDEX_ROW = re.compile(
     r"^(?P<form>\S+(?: \S+)*?)\s{2,}(?P<company>.+?)\s{2,}(?P<cik>\d+)\s{2,}(?P<filed>\d{8})\s{2,}"
-    r"(?P<path>edgar/data/\S+?/(?P<accession>\d{10}-\d{2}-\d{6})\.txt)\s*$")
+    r"(?P<path>edgar/data/\S+?/(?P<accession>\d{10}-\d{2}-\d{6})\.txt)\s*$"
+)
 
 
 @dataclass(frozen=True)
@@ -103,8 +118,8 @@ class Filing:
     unknown until its index page is read (a filing from the daily index)."""
 
     accession: str
-    cik: str              # without leading zeros
-    company: str          # EDGAR's name for the filer
+    cik: str  # without leading zeros
+    company: str  # EDGAR's name for the filer
     form: str
     index_url: str
     accepted: datetime | None = None  # UTC
@@ -121,9 +136,9 @@ class Company:
 
 @dataclass(frozen=True)
 class PullPlan:
-    since: datetime                   # the cursor, UTC
-    companies: dict[str, Company]     # by CIK
-    known: frozenset[str]             # accession numbers already landed
+    since: datetime  # the cursor, UTC
+    companies: dict[str, Company]  # by CIK
+    known: frozenset[str]  # accession numbers already landed
 
 
 @dataclass
@@ -133,7 +148,7 @@ class Pulled:
     articles: list[dict[str, Any]] = field(default_factory=list)
     cursor: datetime | None = None
     requests: int = 0
-    filings: int = 0                  # tracked filings found
+    filings: int = 0  # tracked filings found
     skipped: Counter = field(default_factory=Counter)
     failed: list[str] = field(default_factory=list)
     gap_days: list[str] = field(default_factory=list)
@@ -142,6 +157,7 @@ class Pulled:
 
 
 # --- parsing ----------------------------------------------------------------
+
 
 def _utc(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
@@ -161,15 +177,17 @@ def parse_feed(xml: str) -> list[Filing]:
         if not (cik and link is not None and accession and updated):
             continue
         name = _TITLE_NAME.search(title)
-        filings.append(Filing(
-            accession=accession.group(1),
-            cik=str(int(cik.group(1))),
-            company=name.group(1).strip() if name else "",
-            form=category.get("term", "") if category is not None else "",
-            index_url=link.get("href", ""),
-            accepted=_utc(datetime.fromisoformat(updated)),
-            items=tuple(dict.fromkeys(_ITEM.findall(e.findtext(f"{ATOM}summary") or ""))),
-        ))
+        filings.append(
+            Filing(
+                accession=accession.group(1),
+                cik=str(int(cik.group(1))),
+                company=name.group(1).strip() if name else "",
+                form=category.get("term", "") if category is not None else "",
+                index_url=link.get("href", ""),
+                accepted=_utc(datetime.fromisoformat(updated)),
+                items=tuple(dict.fromkeys(_ITEM.findall(e.findtext(f"{ATOM}summary") or ""))),
+            )
+        )
     return filings
 
 
@@ -182,19 +200,24 @@ def parse_form_index(text: str) -> list[Filing]:
             continue
         cik = str(int(m["cik"]))
         acc = m["accession"]
-        filings.append(Filing(
-            accession=acc, cik=cik, company=m["company"].strip(), form=m["form"],
-            index_url=f"{WWW}/Archives/edgar/data/{cik}/{acc.replace('-', '')}/{acc}-index.htm",
-            filed=date(int(m["filed"][:4]), int(m["filed"][4:6]), int(m["filed"][6:])),
-        ))
+        filings.append(
+            Filing(
+                accession=acc,
+                cik=cik,
+                company=m["company"].strip(),
+                form=m["form"],
+                index_url=f"{WWW}/Archives/edgar/data/{cik}/{acc.replace('-', '')}/{acc}-index.htm",
+                filed=date(int(m["filed"][:4]), int(m["filed"][4:6]), int(m["filed"][6:])),
+            )
+        )
     return filings
 
 
 @dataclass(frozen=True)
 class FilingIndex:
     items: tuple[str, ...]
-    accepted: datetime | None                 # UTC
-    documents: tuple[tuple[str, str], ...]    # (type, absolute URL), in filing order
+    accepted: datetime | None  # UTC
+    documents: tuple[tuple[str, str], ...]  # (type, absolute URL), in filing order
 
 
 def _cell_text(cell: str) -> str:
@@ -204,15 +227,20 @@ def _cell_text(cell: str) -> str:
 def parse_index(page: str) -> FilingIndex:
     """A filing index page: its items, acceptance time (New York time on
     the page) and the documents of its first table."""
+
     def info(head: str) -> str | None:
-        m = re.search(rf'<div class="infoHead">{head}</div>\s*<div class="info">(.*?)</div>', page, re.DOTALL)
+        m = re.search(
+            rf'<div class="infoHead">{head}</div>\s*<div class="info">(.*?)</div>', page, re.DOTALL
+        )
         return m.group(1) if m else None
 
     items = tuple(dict.fromkeys(_ITEM.findall(_cell_text(info("Items") or ""))))
     accepted = None
     if raw := info("Accepted"):
         try:
-            accepted = _utc(datetime.strptime(raw.strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=NEW_YORK))
+            accepted = _utc(
+                datetime.strptime(raw.strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=NEW_YORK)
+            )
         except ValueError:
             accepted = None
     documents = []
@@ -223,11 +251,15 @@ def parse_index(page: str) -> FilingIndex:
         if len(cells) < 4 or not href:
             continue
         path = html_lib.unescape(href.group(1)).replace("/ix?doc=", "")
-        documents.append((_cell_text(cells[3]).upper(), path if path.startswith("http") else f"{WWW}{path}"))
+        documents.append(
+            (_cell_text(cells[3]).upper(), path if path.startswith("http") else f"{WWW}{path}")
+        )
     return FilingIndex(items, accepted, tuple(documents))
 
 
-def pick_document(documents: Iterable[tuple[str, str]], form: str = "8-K") -> tuple[str, str] | None:
+def pick_document(
+    documents: Iterable[tuple[str, str]], form: str = "8-K"
+) -> tuple[str, str] | None:
     """The press release if the filing has one, else the form itself."""
     docs = list(documents)
     for kind in _RELEASE_TYPES:
@@ -239,11 +271,30 @@ def pick_document(documents: Iterable[tuple[str, str]], form: str = "8-K") -> tu
 
 _BOILERPLATE = re.compile(
     r"^(?:exhibit\s*99(?:\.\d+)?|(?:news|press|earnings)\s+release|for immediate release|news"
-    r"|(?:media|investor|press)?\s*contacts?|investor relations|page \d+)\b[\s:.\-–]*", re.IGNORECASE)
-_SMALL = frozenset([
-    "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to",
-    "vs", "with"
-])
+    r"|(?:media|investor|press)?\s*contacts?|investor relations|page \d+)\b[\s:.\-–]*",
+    re.IGNORECASE,
+)
+_SMALL = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "as",
+        "at",
+        "by",
+        "for",
+        "from",
+        "in",
+        "into",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "vs",
+        "with",
+    ]
+)
 
 
 def _title_case(line: str) -> str:
@@ -253,7 +304,8 @@ def _title_case(line: str) -> str:
     words = line.lower().split()
     return " ".join(
         w if any(c.isdigit() for c in w) else (w if i and w in _SMALL else w[:1].upper() + w[1:])
-        for i, w in enumerate(words))
+        for i, w in enumerate(words)
+    )
 
 
 def release_title(lines: list[str]) -> str | None:
@@ -283,17 +335,23 @@ def opening(lines: list[str], skip: str | None = None, limit: int = 600) -> str 
     return None
 
 
-def headline_and_summary(text: str, released: bool, company: str,
-                         items: Iterable[str]) -> tuple[str, str | None]:
+def headline_and_summary(
+    text: str, released: bool, company: str, items: Iterable[str]
+) -> tuple[str, str | None]:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     title = release_title(lines) if released else None
     if title is None:
         first = next((i for i in items if i != "9.01"), None)
-        title = f"{company}: {ITEM_NAMES.get(first, 'current report')}" if first else f"{company}: current report"
+        title = (
+            f"{company}: {ITEM_NAMES.get(first, 'current report')}"
+            if first
+            else f"{company}: current report"
+        )
     return title, opening(lines, skip=title)
 
 
 # --- plan -------------------------------------------------------------------
+
 
 def plan(warehouse: Warehouse, now: datetime) -> PullPlan:
     """The cursor, the tracked companies by CIK and the accessions already
@@ -325,13 +383,15 @@ def plan(warehouse: Warehouse, now: datetime) -> PullPlan:
             """,
             [FEED, now - timedelta(days=KNOWN_DAYS)],
         ).fetchall()
-    since = (_utc(datetime.fromisoformat(row[0])) if row and row[0] else now - FIRST_LOOKBACK)
-    companies = {str(int(cik)): Company(tuple(tk), name or "", cap)
-                 for cik, tk, name, cap in rows if cik}
+    since = _utc(datetime.fromisoformat(row[0])) if row and row[0] else now - FIRST_LOOKBACK
+    companies = {
+        str(int(cik)): Company(tuple(tk), name or "", cap) for cik, tk, name, cap in rows if cik
+    }
     return PullPlan(since=since, companies=companies, known=frozenset(a for (a,) in known if a))
 
 
 # --- fetch ------------------------------------------------------------------
+
 
 def _weekdays(first: date, last: date) -> list[date]:
     days = []
@@ -384,8 +444,9 @@ def discover(client: Any, p: PullPlan, now: datetime, out: Pulled) -> list[Filin
     return sorted(found.values(), key=lambda f: (_when(f, now), f.accession))
 
 
-def read_filing(client: Any, f: Filing, company: Company, since: datetime,
-                out: Pulled) -> dict[str, Any] | None:
+def read_filing(
+    client: Any, f: Filing, company: Company, since: datetime, out: Pulled
+) -> dict[str, Any] | None:
     """The filing's article payload, or None when it is routine or older
     than the cursor. Network errors propagate to the caller."""
     if f.items and routine_items(f.items):
@@ -474,7 +535,9 @@ def fetch(client: Any, p: PullPlan, now: datetime, max_filings: int = MAX_FILING
 def _when(f: Filing, now: datetime) -> datetime:
     """When the filing was accepted, or the start of the day it was filed
     (New York time) for one from the daily index."""
-    return f.accepted or _utc(datetime.combine(f.filed or now.date(), datetime.min.time(), NEW_YORK))
+    return f.accepted or _utc(
+        datetime.combine(f.filed or now.date(), datetime.min.time(), NEW_YORK)
+    )
 
 
 def _before(f: Filing, now: datetime) -> datetime:
@@ -484,6 +547,7 @@ def _before(f: Filing, now: datetime) -> datetime:
 
 # --- land -------------------------------------------------------------------
 
+
 def land(warehouse: Warehouse, pulled: Pulled, now: datetime) -> int:
     rows = primary_news_rows(pulled.articles)
     written = 0
@@ -491,20 +555,34 @@ def land(warehouse: Warehouse, pulled: Pulled, now: datetime) -> int:
         if artifact_rows:
             written += warehouse.land(artifact, artifact_rows, fetched_at=now)
     if pulled.cursor is not None:
-        warehouse.upsert_watermark(CURSOR_ENDPOINT, CURSOR_DIMENSION, fetched_at=now,
-                                   high_watermark=pulled.cursor.isoformat())
+        warehouse.upsert_watermark(
+            CURSOR_ENDPOINT,
+            CURSOR_DIMENSION,
+            fetched_at=now,
+            high_watermark=pulled.cursor.isoformat(),
+        )
     return written
 
 
-def pull_8k_releases(warehouse: Warehouse, client: Any, *, now: datetime | None = None,
-                     max_filings: int = MAX_FILINGS) -> dict:
+def pull_8k_releases(
+    warehouse: Warehouse,
+    client: Any,
+    *,
+    now: datetime | None = None,
+    max_filings: int = MAX_FILINGS,
+) -> dict:
     """Plan, fetch and land the tracked companies' new 8-Ks; returns what
     happened, for the run log."""
     now = now or datetime.now(UTC)
     p = plan(warehouse, now)
     if not p.companies:
-        return {"companies": 0, "filings": 0, "landed": 0, "requests": 0,
-                "note": "no tracked company has a CIK yet (sec_company_tickers not landed?)"}
+        return {
+            "companies": 0,
+            "filings": 0,
+            "landed": 0,
+            "requests": 0,
+            "note": "no tracked company has a CIK yet (sec_company_tickers not landed?)",
+        }
     pulled = fetch(client, p, now, max_filings)
     land(warehouse, pulled, now)
     return {
@@ -529,7 +607,23 @@ def new_client() -> Any:
 
 
 __all__ = [
-    "Company", "Filing", "FilingIndex", "PullPlan", "Pulled", "discover", "fetch",
-    "headline_and_summary", "land", "new_client", "opening", "parse_feed", "parse_form_index",
-    "parse_index", "pick_document", "plan", "pull_8k_releases", "read_filing", "release_title",
+    "Company",
+    "Filing",
+    "FilingIndex",
+    "PullPlan",
+    "Pulled",
+    "discover",
+    "fetch",
+    "headline_and_summary",
+    "land",
+    "new_client",
+    "opening",
+    "parse_feed",
+    "parse_form_index",
+    "parse_index",
+    "pick_document",
+    "plan",
+    "pull_8k_releases",
+    "read_filing",
+    "release_title",
 ]

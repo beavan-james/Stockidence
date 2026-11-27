@@ -222,11 +222,17 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
     # finnhub_company, alpha_vantage, sec_8k, fed, bls, sec_press, ftc);
     # items are an 8-K's item numbers. The PK is article_id alone.
     "stg_news_articles": [
-        ("article_id", "VARCHAR"), ("published_at", "TIMESTAMP"),
-        ("provider", "VARCHAR"), ("source", "VARCHAR"),
-        ("headline", "VARCHAR"), ("summary", "VARCHAR"), ("url", "VARCHAR"),
-        ("tickers", "VARCHAR[]"), ("fetched_at", "TIMESTAMPTZ"),
-        ("feed", "VARCHAR"), ("items", "VARCHAR[]"),
+        ("article_id", "VARCHAR"),
+        ("published_at", "TIMESTAMP"),
+        ("provider", "VARCHAR"),
+        ("source", "VARCHAR"),
+        ("headline", "VARCHAR"),
+        ("summary", "VARCHAR"),
+        ("url", "VARCHAR"),
+        ("tickers", "VARCHAR[]"),
+        ("fetched_at", "TIMESTAMPTZ"),
+        ("feed", "VARCHAR"),
+        ("items", "VARCHAR[]"),
     ],
     # main text of each fetched article page (raw.news_article_pages), cut to
     # the first MAX_WORDS words; `words` counts the whole article, and
@@ -1009,8 +1015,12 @@ class Warehouse:
                 written += 1
 
         if dimension_key is not None:
-            self.upsert_watermark(f"raw.{artifact}", dimension_key,
-                                  fetched_at=fetched_at, high_watermark=high_watermark)
+            self.upsert_watermark(
+                f"raw.{artifact}",
+                dimension_key,
+                fetched_at=fetched_at,
+                high_watermark=high_watermark,
+            )
         else:
             self._touch_watermarks_for(artifact, keys, rows, high_watermark, fetched_at)
         return written

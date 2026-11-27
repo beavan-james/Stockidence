@@ -554,13 +554,23 @@ def test_sec_gov_gets_the_sec_agent_and_the_rest_the_scrapers(monkeypatch):
 def test_the_fetcher_names_itself_to_sec_gov_as_sec_asks(monkeypatch):
     monkeypatch.setenv("SEC_USER_AGENT", SEC_AGENT)
     url = "https://www.sec.gov/Archives/edgar/data/1/2/ex99-1.htm"
-    net = Net({"https://www.sec.gov/robots.txt": _robots(), url: _page(),
-               "https://a.com/robots.txt": _robots(), "https://a.com/story": _page()})
+    net = Net(
+        {
+            "https://www.sec.gov/robots.txt": _robots(),
+            url: _page(),
+            "https://a.com/robots.txt": _robots(),
+            "https://a.com/story": _page(),
+        }
+    )
     fetcher = _fetcher(net)
     assert fetcher.fetch(url).readable and fetcher.fetch("https://a.com/story").readable
     agents = {str(r.url): r.headers["user-agent"] for r in net.requests}
-    assert agents == {"https://www.sec.gov/robots.txt": SEC_AGENT, url: SEC_AGENT,
-                      "https://a.com/robots.txt": USER_AGENT, "https://a.com/story": USER_AGENT}
+    assert agents == {
+        "https://www.sec.gov/robots.txt": SEC_AGENT,
+        url: SEC_AGENT,
+        "https://a.com/robots.txt": USER_AGENT,
+        "https://a.com/story": USER_AGENT,
+    }
 
 
 def test_unwrap_filing_reads_the_html_inside_edgars_envelope():
@@ -590,17 +600,25 @@ def test_an_8ks_cover_and_signatures_are_dropped():
     assert drop_filing_cover(COVER).splitlines() == [
         "Item 2.02 Results of Operations and Financial Condition.",
         "On November 25, 2026, Acme Corp issued a press release announcing its results.",
-        "Item 9.01 Financial Statements and Exhibits."]
+        "Item 9.01 Financial Statements and Exhibits.",
+    ]
 
 
 def test_without_the_check_boxes_the_8k_starts_at_its_first_item():
-    text = COVER.replace("Indicate by check mark whether the registrant is an emerging growth company.\n", "")
+    text = COVER.replace(
+        "Indicate by check mark whether the registrant is an emerging growth company.\n", ""
+    )
     text = text.replace("Emerging growth company\n", "")
-    assert drop_filing_cover(text).splitlines()[0] == "Item 2.02 Results of Operations and Financial Condition."
+    assert (
+        drop_filing_cover(text).splitlines()[0]
+        == "Item 2.02 Results of Operations and Financial Condition."
+    )
 
 
 def test_other_text_is_left_as_it_is():
-    release = "ACME CORP REPORTS RESULTS\nThe company said its Form 8-K filing has more.\nSignatures"
+    release = (
+        "ACME CORP REPORTS RESULTS\nThe company said its Form 8-K filing has more.\nSignatures"
+    )
     assert drop_filing_cover(release) == release
     assert drop_filing_cover("") == ""
 
@@ -609,4 +627,8 @@ def test_extract_text_reads_an_enveloped_filing():
     body = "".join(f"<p>{_paragraph(i)}</p>" for i in range(4))
     wrapped = f"<DOCUMENT>\n<TYPE>EX-99.1\n<TEXT>\n<html><body><article>{body}</article></body></html>\n</TEXT>"
     text = extract_text(wrapped).text
-    assert text.startswith("In the 0th part of the report") and "<TYPE>" not in text and "EX-99.1" not in text
+    assert (
+        text.startswith("In the 0th part of the report")
+        and "<TYPE>" not in text
+        and "EX-99.1" not in text
+    )

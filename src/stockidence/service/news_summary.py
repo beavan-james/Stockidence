@@ -134,8 +134,10 @@ def _fetch(period: str, digest_date: date | None) -> dict:
                 [period, head[0]],
             ).fetchall()
             keys = list(dict.fromkeys(k for row in rows for k in row[4]))
-            found = {key: (headline, outlet, url)
-                     for key, headline, outlet, url in con.execute(_SOURCES, [keys]).fetchall()}
+            found = {
+                key: (headline, outlet, url)
+                for key, headline, outlet, url in con.execute(_SOURCES, [keys]).fetchall()
+            }
             market = {key for (key,) in con.execute(_MARKET_KEYS, [period, head[0]]).fetchall()}
         except Exception as exc:
             if not _missing_table(exc):
@@ -164,9 +166,14 @@ def _fetch(period: str, digest_date: date | None) -> dict:
         "prompt_version": rows[0][7],
         "created_at": max(r[8] for r in rows).isoformat(),
         "parts": [
-            {"part": part, "heading": heading, "body": body, "status": status,
-             "sources": sources(keys or []),
-             "market_sources": sources(keys or [], of_market=True)}
+            {
+                "part": part,
+                "heading": heading,
+                "body": body,
+                "status": status,
+                "sources": sources(keys or []),
+                "market_sources": sources(keys or [], of_market=True),
+            }
             for _, part, heading, body, keys, status, *_ in rows
         ],
     }

@@ -264,8 +264,9 @@ class ArticleFetcher:
         robots: Robots | None = None  # stays None on a 5xx or a failed request
         self._wait(host)
         try:
-            resp = self.client.get(f"{key}/robots.txt",
-                                   headers={"Accept": ROBOTS_ACCEPT, **self._agent(host)})
+            resp = self.client.get(
+                f"{key}/robots.txt", headers={"Accept": ROBOTS_ACCEPT, **self._agent(host)}
+            )
             if resp.status_code in (401, 403):
                 robots = KEEP_OUT
             elif 400 <= resp.status_code < 500:

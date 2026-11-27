@@ -113,7 +113,9 @@ def write_summaries(
                 keys = [card.story_key for _, card in pairs]
                 if not pairs:
                     empty.append((period, day))
-                elif not redo and _done(inputs.summaries.get((period, day)), [*keys, *headline_keys]):
+                elif not redo and _done(
+                    inputs.summaries.get((period, day)), [*keys, *headline_keys]
+                ):
                     skipped.append((period, day))
                 else:
                     written.append(write_daily(llm, day, pairs, clock(), market))
@@ -127,7 +129,9 @@ def write_summaries(
                 keys = [k for s in sections for k in s.story_keys]
                 if not sections:
                     empty.append((period, day))
-                elif not redo and _done(inputs.summaries.get((period, day)), [*keys, *headline_keys]):
+                elif not redo and _done(
+                    inputs.summaries.get((period, day)), [*keys, *headline_keys]
+                ):
                     skipped.append((period, day))
                 else:
                     written += write_weekly(llm, day, sections, clock(), market)

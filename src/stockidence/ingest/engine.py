@@ -208,9 +208,13 @@ class IngestEngine:
             if not artifact_rows:
                 continue
             written += self.warehouse.land(
-                artifact, artifact_rows, fetched_at=now, high_watermark=high_watermark,
+                artifact,
+                artifact_rows,
+                fetched_at=now,
+                high_watermark=high_watermark,
                 merge=MERGERS.get(artifact),
-                dimension_key=dimension_key if artifact in _SNAPSHOT_ARTIFACTS else None)
+                dimension_key=dimension_key if artifact in _SNAPSHOT_ARTIFACTS else None,
+            )
         return written
 
     def _ingest(
@@ -224,7 +228,9 @@ class IngestEngine:
             else None
         )
         written = self._land_rows(rows, now, high_watermark, dimension_key)
-        return IngestResult(spec.name, dimension_key, True, "fetch complete", written, high_watermark)
+        return IngestResult(
+            spec.name, dimension_key, True, "fetch complete", written, high_watermark
+        )
 
     def ingest_on_demand(
         self,

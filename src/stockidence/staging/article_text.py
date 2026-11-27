@@ -76,7 +76,7 @@ def unwrap_filing(html: str) -> str:
     if start is None or not _ENVELOPE.search(html, 0, start.start()):
         return html
     end = html.lower().rfind("</html>")
-    return html[start.start(): end + len("</html>") if end > start.start() else len(html)]
+    return html[start.start() : end + len("</html>") if end > start.start() else len(html)]
 
 
 def drop_filing_cover(text: str) -> str:
@@ -97,7 +97,9 @@ def drop_filing_cover(text: str) -> str:
         start = next((i for i, line in enumerate(lines) if _ITEM.match(line.strip())), None)
         if start is None:
             return text
-    end = next((i for i in range(start, len(lines)) if _SIGNATURES.fullmatch(lines[i].strip())), len(lines))
+    end = next(
+        (i for i in range(start, len(lines)) if _SIGNATURES.fullmatch(lines[i].strip())), len(lines)
+    )
     return "\n".join(lines[start:end])
 
 

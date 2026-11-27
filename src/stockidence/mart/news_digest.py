@@ -66,7 +66,7 @@ from zoneinfo import ZoneInfo
 from ..storage import Warehouse
 
 NEW_YORK = ZoneInfo("America/New_York")
-CUTOFF = time(7, 0)                   # the digest day turns over here, NY time
+CUTOFF = time(7, 0)  # the digest day turns over here, NY time
 
 # ---------------------------------------------------------------------------
 # Story importance (provisional: tune here, not in logic)
@@ -93,19 +93,27 @@ class Period:
     has bigger moves than a day, and more outlets per headline, so it needs
     more of both for full marks."""
 
-    name: str                # the mart key
-    size: int                # stories kept
-    coverage_full_at: int    # outlets, for the market headlines
+    name: str  # the mart key
+    size: int  # stories kept
+    coverage_full_at: int  # outlets, for the market headlines
     reaction_full_at: float  # absolute return over the period, for a stock
-    market_full_at: float    # the same for the S&P 500
-    context: int             # market headlines kept
-    reserved: int = 0        # places kept for RESERVED_CATEGORIES stories
+    market_full_at: float  # the same for the S&P 500
+    context: int  # market headlines kept
+    reserved: int = 0  # places kept for RESERVED_CATEGORIES stories
 
 
-DAILY = Period("daily", size=10, coverage_full_at=8, reaction_full_at=0.10, market_full_at=0.02,
-               context=5, reserved=2)
-WEEKLY = Period("weekly", size=15, coverage_full_at=12, reaction_full_at=0.20, market_full_at=0.04,
-                context=10)
+DAILY = Period(
+    "daily",
+    size=10,
+    coverage_full_at=8,
+    reaction_full_at=0.10,
+    market_full_at=0.02,
+    context=5,
+    reserved=2,
+)
+WEEKLY = Period(
+    "weekly", size=15, coverage_full_at=12, reaction_full_at=0.20, market_full_at=0.04, context=10
+)
 PERIODS: dict[str, Period] = {p.name: p for p in (DAILY, WEEKLY)}
 
 # A story needs this to be picked at all: a mid-sized event (an 8.01 press
@@ -127,32 +135,33 @@ MARKET = "S&P 500"  # move_ticker of a story whose reaction is the market's
 # 8-K items by how much they say on their own; a filing scores its best
 # item. 1.01 and 5.02 depend on the release's words (item_event).
 EVENT_ITEMS: dict[str, float] = {
-    "1.03": 1.0,   # bankruptcy or receivership
-    "4.02": 0.9,   # past financial statements no longer reliable
-    "2.01": 0.8,   # acquisition or disposal completed
-    "2.02": 0.7,   # results
-    "2.05": 0.6,   # exit or disposal costs
-    "2.06": 0.6,   # material impairment
-    "3.01": 0.5,   # delisting notice or transfer
-    "7.01": 0.3,   # Regulation FD (with a press release; without, routine)
-    "8.01": 0.3,   # other events (the same)
-    "2.03": 0.0,   # a new debt
-    "3.02": 0.0,   # unregistered share sale
-    "5.03": 0.0,   # bylaw or fiscal-year change
-    "5.07": 0.0,   # shareholder vote results
+    "1.03": 1.0,  # bankruptcy or receivership
+    "4.02": 0.9,  # past financial statements no longer reliable
+    "2.01": 0.8,  # acquisition or disposal completed
+    "2.02": 0.7,  # results
+    "2.05": 0.6,  # exit or disposal costs
+    "2.06": 0.6,  # material impairment
+    "3.01": 0.5,  # delisting notice or transfer
+    "7.01": 0.3,  # Regulation FD (with a press release; without, routine)
+    "8.01": 0.3,  # other events (the same)
+    "2.03": 0.0,  # a new debt
+    "3.02": 0.0,  # unregistered share sale
+    "5.03": 0.0,  # bylaw or fiscal-year change
+    "5.07": 0.0,  # shareholder vote results
 }
-DEAL_AGREEMENT = 0.9   # 1.01 whose release is a merger or acquisition
+DEAL_AGREEMENT = 0.9  # 1.01 whose release is a merger or acquisition
 OTHER_AGREEMENT = 0.2  # 1.01 otherwise: mostly credit agreements
-TOP_OFFICER = 0.6      # 5.02 naming the CEO or CFO
-OTHER_OFFICER = 0.1    # 5.02 otherwise: a director, a pay plan
-OTHER_ITEM = 0.2       # an item not listed
+TOP_OFFICER = 0.6  # 5.02 naming the CEO or CFO
+OTHER_OFFICER = 0.1  # 5.02 otherwise: a director, a pay plan
+OTHER_ITEM = 0.2  # an item not listed
 _TOP_OFFICER = re.compile(
-    r"\b(?:ceo|cfo|chief executive(?: officer)?|chief financial(?: officer)?)\b", re.IGNORECASE)
+    r"\b(?:ceo|cfo|chief executive(?: officer)?|chief financial(?: officer)?)\b", re.IGNORECASE
+)
 
 # Items that are never news on their own. 9.01 is the exhibit list.
 ROUTINE_ITEMS = frozenset({"5.07", "5.03", "3.02"})
 FINANCING_ITEMS = frozenset({"1.01", "2.03"})  # a credit agreement and the debt it creates
-PRESS_ITEMS = frozenset({"7.01", "8.01"})      # news only with a press release attached
+PRESS_ITEMS = frozenset({"7.01", "8.01"})  # news only with a press release attached
 
 # Agency releases: (pattern on the title, event), first match wins, then
 # the feed's default.
@@ -172,16 +181,25 @@ AGENCY_DEFAULTS: dict[str, float] = {"fed": 0.2, "bls": 0.4, "ftc": 0.4, "sec_pr
 FTC_CHALLENGE = 0.8
 _FTC_ACTION = re.compile(
     r"\b(?:sues?|suing|block\w*|challeng\w*|complaint|takes? action|orders?|settle\w*|consent"
-    r"|prevent\w*|abandon\w*|resolv\w*)\b", re.IGNORECASE)
+    r"|prevent\w*|abandon\w*|resolv\w*)\b",
+    re.IGNORECASE,
+)
 # An SEC final rule, or an action against a named listed company.
 SEC_ACTION = 0.5
 _SEC_RULE = re.compile(r"\b(?:adopts|final rules?|finalizes)\b", re.IGNORECASE)
-_SEC_CHARGE = re.compile(r"\b(?:charge[sd]?|sues?|settle\w*|fine[sd]?|penalt\w*|fraud)\b", re.IGNORECASE)
+_SEC_CHARGE = re.compile(
+    r"\b(?:charge[sd]?|sues?|settle\w*|fine[sd]?|penalt\w*|fraud)\b", re.IGNORECASE
+)
 # Releases about the whole economy, from an event of MARKET_EVENT: as big
 # as any company's news, and the market's move is theirs.
 FULL_SIZE_FEEDS = frozenset({"fed", "bls"})
 MARKET_EVENT = 0.4
-FEED_CATEGORIES: dict[str, str] = {"fed": "macro", "bls": "macro", "sec_press": "policy", "ftc": "policy"}
+FEED_CATEGORIES: dict[str, str] = {
+    "fed": "macro",
+    "bls": "macro",
+    "sec_press": "policy",
+    "ftc": "policy",
+}
 
 # Market cap ($) at which size starts adding, and the decades to full marks.
 SIZE_FROM = 1e10
@@ -501,21 +519,26 @@ def routine_items(items: Iterable[str], released: bool | None = None) -> bool:
     press release attached), a Regulation FD or other-events item too;
     with `released` unknown, only what is routine either way."""
     rest = set(items) - {"9.01"}
-    return (not rest or rest <= ROUTINE_ITEMS
-            or ("2.03" in rest and rest <= FINANCING_ITEMS | ROUTINE_ITEMS)
-            or (released is False and rest <= PRESS_ITEMS | ROUTINE_ITEMS))
+    return (
+        not rest
+        or rest <= ROUTINE_ITEMS
+        or ("2.03" in rest and rest <= FINANCING_ITEMS | ROUTINE_ITEMS)
+        or (released is False and rest <= PRESS_ITEMS | ROUTINE_ITEMS)
+    )
 
 
 def item_event(items: Iterable[str], text: str) -> float:
     """An 8-K's event: its best item's. `text` is the release's headline and
     summary, which say whether a material agreement is a deal and whether
     an officer change is the CEO or CFO."""
+
     def one(item: str) -> float:
         if item == "1.01":
             return DEAL_AGREEMENT if CATEGORIES["deal"].search(text) else OTHER_AGREEMENT
         if item == "5.02":
             return TOP_OFFICER if _TOP_OFFICER.search(text) else OTHER_OFFICER
         return EVENT_ITEMS.get(item, OTHER_ITEM)
+
     return max(map(one, set(items) - {"9.01"}), default=0.0)
 
 
@@ -526,7 +549,9 @@ def agency_event(feed: str, headline: str, tickers: tuple[str, ...] = ()) -> flo
             return event
     if feed == "ftc" and tickers and _FTC_ACTION.search(headline):
         return FTC_CHALLENGE
-    if feed == "sec_press" and (_SEC_RULE.search(headline) or (tickers and _SEC_CHARGE.search(headline))):
+    if feed == "sec_press" and (
+        _SEC_RULE.search(headline) or (tickers and _SEC_CHARGE.search(headline))
+    ):
         return SEC_ACTION
     return AGENCY_DEFAULTS.get(feed, 0.0)
 
@@ -537,8 +562,9 @@ def article_event(a: Article) -> float:
     return agency_event(a.feed or "", a.headline, a.tickers)
 
 
-def article_categories(headline: str, feed: str | None = None, items: Iterable[str] = (),
-                       summary: str | None = None) -> tuple[str, ...]:
+def article_categories(
+    headline: str, feed: str | None = None, items: Iterable[str] = (), summary: str | None = None
+) -> tuple[str, ...]:
     """The headline's categories, plus what the source says: an agency's
     kind (macro or policy), an 8-K's results item (earnings) or completed
     or agreed deal."""
@@ -629,8 +655,12 @@ def story_tickers(articles: list[Article]) -> tuple[str, ...]:
 
 
 def score_story(
-    articles: list[Article], moves: dict[str, float], ranked: set[str], period: Period = DAILY,
-    sizes: dict[str, float] | None = None, market: float | None = None,
+    articles: list[Article],
+    moves: dict[str, float],
+    ranked: set[str],
+    period: Period = DAILY,
+    sizes: dict[str, float] | None = None,
+    market: float | None = None,
 ) -> Story:
     """A primary-source story's score. `moves` are stock returns over the
     period, `sizes` market caps in dollars, `market` the S&P 500's return.
@@ -677,13 +707,24 @@ def score_story(
 def _by_score(stories: list[Story]) -> list[Story]:
     """Highest score first; ties go to the story with more articles, then
     the more recent one."""
-    return sorted(stories, key=lambda s: (-s.score, -len(s.articles),
-                                          -s.lead.published_at.timestamp(), s.lead.article_id))
+    return sorted(
+        stories,
+        key=lambda s: (
+            -s.score,
+            -len(s.articles),
+            -s.lead.published_at.timestamp(),
+            s.lead.article_id,
+        ),
+    )
 
 
 def rank_stories(
-    groups: list[list[Article]], moves: dict[str, float], ranked: set[str], period: Period = DAILY,
-    sizes: dict[str, float] | None = None, market: float | None = None,
+    groups: list[list[Article]],
+    moves: dict[str, float],
+    ranked: set[str],
+    period: Period = DAILY,
+    sizes: dict[str, float] | None = None,
+    market: float | None = None,
 ) -> list[Story]:
     return _by_score([score_story(g, moves, ranked, period, sizes, market) for g in groups])
 
@@ -695,15 +736,20 @@ def score_context(articles: list[Article], period: Period = DAILY) -> Story:
     coverage = min(1.0, math.log2(n_outlets) / math.log2(period.coverage_full_at))
     return Story(
         articles=tuple(sorted(articles, key=lambda a: a.published_at)),
-        lead=lead_article(articles), tickers=story_tickers(articles),
-        categories=tuple(sorted({c for a in articles for c in a.categories})), n_outlets=n_outlets,
-        move_ticker=None, move_return=None, inputs={"coverage": coverage}, score=coverage,
+        lead=lead_article(articles),
+        tickers=story_tickers(articles),
+        categories=tuple(sorted({c for a in articles for c in a.categories})),
+        n_outlets=n_outlets,
+        move_ticker=None,
+        move_return=None,
+        inputs={"coverage": coverage},
+        score=coverage,
     )
 
 
 def pick_context(groups: list[list[Article]], period: Period = DAILY) -> list[Story]:
     """The period's most covered market headlines."""
-    return _by_score([score_context(g, period) for g in groups])[:period.context]
+    return _by_score([score_context(g, period) for g in groups])[: period.context]
 
 
 def reserved_kind(story: Story) -> bool:
@@ -719,7 +765,7 @@ def pick_stories(ranked: list[Story], period: Period = DAILY) -> list[Story]:
     lowest-ranked others. A reserved pick scored below every story it
     joins, so the picks stay in score order with it at the bottom."""
     ranked = [s for s in ranked if s.score >= MIN_PICK_SCORE]
-    top = ranked[:period.size]
+    top = ranked[: period.size]
     missing = period.reserved - sum(map(reserved_kind, top))
     extra = [
         s for s in ranked[period.size :] if reserved_kind(s) and s.score >= RESERVED_MIN_SCORE
@@ -734,6 +780,7 @@ def pick_stories(ranked: list[Story], period: Period = DAILY) -> list[Story]:
 # Warehouse IO
 # ---------------------------------------------------------------------------
 
+
 def _load_articles(con, start: datetime, end: datetime, feeds: frozenset[str]) -> list[Article]:
     rows = con.execute(
         """
@@ -744,10 +791,19 @@ def _load_articles(con, start: datetime, end: datetime, feeds: frozenset[str]) -
         [start, end, sorted(feeds)],
     ).fetchall()
     return [
-        Article(article_id=aid, published_at=ts, source=src, headline=h, summary=s,
-                url=u, tickers=tuple(tk or ()), words=headline_words(h),
-                categories=article_categories(h, feed, items or (), s),
-                feed=feed, items=tuple(items or ()))
+        Article(
+            article_id=aid,
+            published_at=ts,
+            source=src,
+            headline=h,
+            summary=s,
+            url=u,
+            tickers=tuple(tk or ()),
+            words=headline_words(h),
+            categories=article_categories(h, feed, items or (), s),
+            feed=feed,
+            items=tuple(items or ()),
+        )
         for aid, ts, src, h, s, u, tk, feed, items in rows
     ]
 
@@ -871,13 +927,23 @@ def _build(
         articles = _load_articles(con, start, end, PRIMARY_FEEDS)
         headlines = _load_articles(con, start, end, CONTEXT_FEEDS)
         kinds = Counter(not_news(a.headline) for a in headlines)
-        context = pick_context(group_stories([a for a in headlines if not_news(a.headline) is None]),
-                               period)
+        context = pick_context(
+            group_stories([a for a in headlines if not_news(a.headline) is None]), period
+        )
         groups = group_stories(articles)
         tickers = {t for a in articles for t in a.tickers}
         sp500, vix = market(con)
-        stories = pick_stories(rank_stories(groups, moves(con, tickers), _ranked(con, ranked_before),
-                                            period, _sizes(con, tickers), sp500), period)
+        stories = pick_stories(
+            rank_stories(
+                groups,
+                moves(con, tickers),
+                _ranked(con, ranked_before),
+                period,
+                _sizes(con, tickers),
+                sp500,
+            ),
+            period,
+        )
         summary = {
             "period": period.name,
             "digest_date": digest_date.isoformat(),
@@ -894,8 +960,12 @@ def _build(
 
         key = [period.name, digest_date]
         con.execute("BEGIN TRANSACTION")
-        for table in ("news_digests", "news_digest_stories", "news_digest_articles",
-                      "news_digest_context"):
+        for table in (
+            "news_digests",
+            "news_digest_stories",
+            "news_digest_articles",
+            "news_digest_context",
+        ):
             con.execute(f"DELETE FROM mart.{table} WHERE period = ? AND digest_date = ?", key)
         con.execute(
             """
@@ -904,9 +974,19 @@ def _build(
                 sp500_return, vix, built_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
             """,
-            [*key, start, end, summary["articles"], summary["routine_dropped"],
-             summary["commentary_dropped"], summary["stories"], summary["outlets"],
-             sp500, vix, datetime.now(UTC)],
+            [
+                *key,
+                start,
+                end,
+                summary["articles"],
+                summary["routine_dropped"],
+                summary["commentary_dropped"],
+                summary["stories"],
+                summary["outlets"],
+                sp500,
+                vix,
+                datetime.now(UTC),
+            ],
         )
         for rank, s in enumerate(stories, start=1):
             con.execute(
@@ -917,10 +997,26 @@ def _build(
                     event, size)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?)
                 """,
-                [*key, rank, s.lead.headline, s.lead.summary, s.lead.url, s.lead.source,
-                 s.lead.published_at, list(s.tickers), list(s.categories), len(s.articles),
-                 s.n_outlets, s.move_ticker, s.move_return, s.inputs["reaction"],
-                 s.inputs["on_site"], s.score, s.inputs["event"], s.inputs["size"]],
+                [
+                    *key,
+                    rank,
+                    s.lead.headline,
+                    s.lead.summary,
+                    s.lead.url,
+                    s.lead.source,
+                    s.lead.published_at,
+                    list(s.tickers),
+                    list(s.categories),
+                    len(s.articles),
+                    s.n_outlets,
+                    s.move_ticker,
+                    s.move_return,
+                    s.inputs["reaction"],
+                    s.inputs["on_site"],
+                    s.score,
+                    s.inputs["event"],
+                    s.inputs["size"],
+                ],
             )
             con.executemany(
                 "INSERT INTO mart.news_digest_articles (period, digest_date, rank, article_id)"
@@ -934,9 +1030,21 @@ def _build(
                     url, source, published_at, n_articles, n_outlets, score)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [[*key, rank, c.lead.headline, c.lead.summary, c.lead.url, c.lead.source,
-                  c.lead.published_at, len(c.articles), c.n_outlets, c.score]
-                 for rank, c in enumerate(context, start=1)],
+                [
+                    [
+                        *key,
+                        rank,
+                        c.lead.headline,
+                        c.lead.summary,
+                        c.lead.url,
+                        c.lead.source,
+                        c.lead.published_at,
+                        len(c.articles),
+                        c.n_outlets,
+                        c.score,
+                    ]
+                    for rank, c in enumerate(context, start=1)
+                ],
             )
         con.execute("COMMIT")
     return summary
@@ -950,9 +1058,13 @@ def build_daily_digest(warehouse: Warehouse, digest_date: date) -> dict:
         raise ValueError(f"{digest_date} is a weekend; daily digests are dated Monday to Friday")
     session = previous_weekday(digest_date)
     return _build(
-        warehouse, DAILY, digest_date, digest_window(digest_date),
+        warehouse,
+        DAILY,
+        digest_date,
+        digest_window(digest_date),
         lambda con, tickers: _moves(con, tickers, session, digest_date),
-        lambda con: _market_day(con, session, digest_date), digest_date,
+        lambda con: _market_day(con, session, digest_date),
+        digest_date,
     )
 
 
@@ -965,9 +1077,13 @@ def build_weekly_digest(warehouse: Warehouse, friday: date) -> dict:
         raise ValueError(f"{friday} is not a Friday; weekly digests are dated by the week's Friday")
     sessions = week_sessions(friday)
     return _build(
-        warehouse, WEEKLY, friday, weekly_window(friday),
+        warehouse,
+        WEEKLY,
+        friday,
+        weekly_window(friday),
         lambda con, tickers: _week_moves(con, tickers, sessions[0], sessions[-1]),
-        lambda con: _market_week(con, sessions[0], sessions[-1]), friday + timedelta(days=1),
+        lambda con: _market_week(con, sessions[0], sessions[-1]),
+        friday + timedelta(days=1),
     )
 
 

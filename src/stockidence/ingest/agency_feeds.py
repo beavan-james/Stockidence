@@ -50,8 +50,8 @@ MAX_SUMMARY = 600
 
 @dataclass(frozen=True)
 class Feed:
-    key: str      # stg_news_articles.feed
-    source: str   # stg_news_articles.source
+    key: str  # stg_news_articles.feed
+    source: str  # stg_news_articles.source
     url: str
 
 
@@ -77,21 +77,52 @@ BLS_RELEASES: dict[str, str] = {
 
 # Company names that are also everyday words: a title saying "Block" or
 # "Target" is not taken to name the company.
-_COMMON_NAMES = frozenset([
-    "block", "target", "match", "ball", "gap", "progressive", "southern", "republic", "public",
-    "global", "general", "united", "american", "first", "national", "international", "equity",
-    "realty", "energy", "capital", "financial", "service", "services", "resources", "technologies",
-    "systems", "partners", "brands", "health", "healthcare", "insurance"
-])
+_COMMON_NAMES = frozenset(
+    [
+        "block",
+        "target",
+        "match",
+        "ball",
+        "gap",
+        "progressive",
+        "southern",
+        "republic",
+        "public",
+        "global",
+        "general",
+        "united",
+        "american",
+        "first",
+        "national",
+        "international",
+        "equity",
+        "realty",
+        "energy",
+        "capital",
+        "financial",
+        "service",
+        "services",
+        "resources",
+        "technologies",
+        "systems",
+        "partners",
+        "brands",
+        "health",
+        "healthcare",
+        "insurance",
+    ]
+)
 _SUFFIX = re.compile(
     r"(?:[,.]?\s+(?:inc|incorporated|corp|corporation|co|company|companies|holdings?|group|ltd|limited"
-    r"|plc|n\.?v|s\.?a|ag|se|lp|llc|l\.?p|trust|the|class [a-z]|/[a-z]{2}/?))+\.?$", re.IGNORECASE)
+    r"|plc|n\.?v|s\.?a|ag|se|lp|llc|l\.?p|trust|the|class [a-z]|/[a-z]{2}/?))+\.?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
 class AgencyPlan:
-    known: frozenset[str]                      # article ids already landed
-    bls_seen: bool                             # a BLS release was landed before
+    known: frozenset[str]  # article ids already landed
+    bls_seen: bool  # a BLS release was landed before
     names: tuple[tuple[re.Pattern[str], str], ...]  # (name pattern, ticker)
 
 
@@ -103,6 +134,7 @@ class Pulled:
 
 
 # --- names ------------------------------------------------------------------
+
 
 def short_name(name: str) -> str:
     """'NVIDIA Corp' -> 'NVIDIA', 'The Kroger Co.' -> 'Kroger'."""
@@ -122,7 +154,9 @@ def name_patterns(companies: list[tuple[str, str]]) -> tuple[tuple[re.Pattern[st
         short = short_name(name or "")
         if len(short) < 4 or short.lower() in _COMMON_NAMES:
             continue
-        out.append((re.compile(rf"(?<![\w&]){re.escape(short)}(?:['’]s)?(?![\w&])", re.IGNORECASE), ticker))
+        out.append(
+            (re.compile(rf"(?<![\w&]){re.escape(short)}(?:['’]s)?(?![\w&])", re.IGNORECASE), ticker)
+        )
     return tuple(out)
 
 
@@ -131,6 +165,7 @@ def named_tickers(title: str, names: tuple[tuple[re.Pattern[str], str], ...]) ->
 
 
 # --- parsing ----------------------------------------------------------------
+
 
 def _text(value: str | None) -> str:
     return " ".join(html_lib.unescape(re.sub(r"<[^>]+>", " ", value or "")).split())
@@ -158,14 +193,24 @@ def parse_items(xml: bytes | str) -> list[dict[str, Any]]:
     root = ET.fromstring(xml.encode("utf-8") if isinstance(xml, str) else xml)
     items = []
     for it in root.findall(".//item"):
-        items.append({"title": _text(it.findtext("title")), "link": (it.findtext("link") or "").strip(),
-                      "published": _when(it.findtext("pubDate")), "description": it.findtext("description")})
+        items.append(
+            {
+                "title": _text(it.findtext("title")),
+                "link": (it.findtext("link") or "").strip(),
+                "published": _when(it.findtext("pubDate")),
+                "description": it.findtext("description"),
+            }
+        )
     for it in root.findall(f".//{ATOM}entry"):
         link = it.find(f"{ATOM}link")
-        items.append({"title": _text(it.findtext(f"{ATOM}title")),
-                      "link": (link.get("href", "") if link is not None else "").strip(),
-                      "published": _when(it.findtext(f"{ATOM}updated")),
-                      "description": it.findtext(f"{ATOM}summary")})
+        items.append(
+            {
+                "title": _text(it.findtext(f"{ATOM}title")),
+                "link": (link.get("href", "") if link is not None else "").strip(),
+                "published": _when(it.findtext(f"{ATOM}updated")),
+                "description": it.findtext(f"{ATOM}summary"),
+            }
+        )
     return [i for i in items if i["title"] and i["link"]]
 
 
@@ -176,7 +221,9 @@ def bls_releases(description: str) -> list[dict[str, Any]]:
     for block in re.findall(r"<p>(.*?)</p>", description or "", re.DOTALL):
         name = re.match(r"\s*([^<]+?):\s*<br", block)
         figure = re.search(r'class="data"[^>]*>(.*?)</span>', block, re.DOTALL)
-        link = re.search(r'href="(https?://[^"]*/news\.release/([a-z0-9]+)\.[a-z0-9]+\.htm)"', block)
+        link = re.search(
+            r'href="(https?://[^"]*/news\.release/([a-z0-9]+)\.[a-z0-9]+\.htm)"', block
+        )
         if not (name and figure and link):
             continue
         value, _, period = _text(figure.group(1)).rpartition(" in ")
@@ -184,8 +231,9 @@ def bls_releases(description: str) -> list[dict[str, Any]]:
             continue
         code = link.group(2)
         url = link.group(1).replace(".toc.htm", ".nr0.htm")
-        entry = releases.setdefault((url, period), {"url": url, "period": period, "code": code,
-                                                    "indicators": []})
+        entry = releases.setdefault(
+            (url, period), {"url": url, "period": period, "code": code, "indicators": []}
+        )
         entry["indicators"].append((_text(name.group(1)), value))
     return list(releases.values())
 
@@ -201,6 +249,7 @@ def bls_headline(release: dict[str, Any]) -> str:
 
 
 # --- plan -------------------------------------------------------------------
+
 
 def plan(warehouse: Warehouse) -> AgencyPlan:
     with warehouse.connect(read_only=True) as con:
@@ -229,8 +278,17 @@ def plan(warehouse: Warehouse) -> AgencyPlan:
 
 # --- fetch ------------------------------------------------------------------
 
-def _payload(feed: Feed, key: str, title: str, url: str, published: datetime | None,
-             summary: str | None, tickers: list[str], **extra: Any) -> dict[str, Any]:
+
+def _payload(
+    feed: Feed,
+    key: str,
+    title: str,
+    url: str,
+    published: datetime | None,
+    summary: str | None,
+    tickers: list[str],
+    **extra: Any,
+) -> dict[str, Any]:
     payload = {
         "article_id": article_id(key),
         "provider": PROVIDER,
@@ -247,7 +305,9 @@ def _payload(feed: Feed, key: str, title: str, url: str, published: datetime | N
     return payload
 
 
-def articles_from(feed: Feed, body: bytes | str, p: AgencyPlan, now: datetime) -> list[dict[str, Any]]:
+def articles_from(
+    feed: Feed, body: bytes | str, p: AgencyPlan, now: datetime
+) -> list[dict[str, Any]]:
     """The feed's new releases as article payloads."""
     out = []
     for item in parse_items(body):
@@ -259,25 +319,44 @@ def articles_from(feed: Feed, body: bytes | str, p: AgencyPlan, now: datetime) -
                 # first run: the figures already out are landed undated, so
                 # staging leaves them out and later runs know them
                 baseline = not p.bls_seen
-                out.append(_payload(
-                    feed, key, bls_headline(release), release["url"],
-                    None if baseline else item["published"] or now, None, [],
-                    period=release["period"], **({"baseline": True} if baseline else {})))
+                out.append(
+                    _payload(
+                        feed,
+                        key,
+                        bls_headline(release),
+                        release["url"],
+                        None if baseline else item["published"] or now,
+                        None,
+                        [],
+                        period=release["period"],
+                        **({"baseline": True} if baseline else {}),
+                    )
+                )
             continue
         published = item["published"]
         if published is None or now - published > LOOKBACK or article_id(item["link"]) in p.known:
             continue
         summary = _text(item["description"])
-        if summary.rstrip(". ") == item["title"].rstrip(". ") or summary.startswith(item["title"][:60]):
+        if summary.rstrip(". ") == item["title"].rstrip(". ") or summary.startswith(
+            item["title"][:60]
+        ):
             summary = ""  # the Fed's descriptions repeat the title
         tickers = named_tickers(item["title"], p.names) if feed.key in NAMED_FEEDS else []
-        out.append(_payload(feed, item["link"], item["title"], item["link"], published,
-                            _cap(summary), tickers))
+        out.append(
+            _payload(
+                feed, item["link"], item["title"], item["link"], published, _cap(summary), tickers
+            )
+        )
     return out
 
 
-def fetch(client: Any, p: AgencyPlan, now: datetime,
-          verdict: Callable[[str], str], feeds: tuple[Feed, ...] = FEEDS) -> Pulled:
+def fetch(
+    client: Any,
+    p: AgencyPlan,
+    now: datetime,
+    verdict: Callable[[str], str],
+    feeds: tuple[Feed, ...] = FEEDS,
+) -> Pulled:
     """Read each feed whose site's robots.txt allows it; network only."""
     out = Pulled()
     for feed in feeds:
@@ -289,7 +368,13 @@ def fetch(client: Any, p: AgencyPlan, now: datetime,
             body = client.feed(feed.url)
             out.requests += 1
             new = articles_from(feed, body, p, now)
-        except (APIError, InvalidResponseError, RateLimitError, httpx.HTTPError, ET.ParseError) as exc:
+        except (
+            APIError,
+            InvalidResponseError,
+            RateLimitError,
+            httpx.HTTPError,
+            ET.ParseError,
+        ) as exc:
             out.feeds[feed.key] = f"failed ({type(exc).__name__})"
             continue
         out.articles.extend(new)
@@ -299,6 +384,7 @@ def fetch(client: Any, p: AgencyPlan, now: datetime,
 
 # --- land -------------------------------------------------------------------
 
+
 def land(warehouse: Warehouse, pulled: Pulled, now: datetime) -> int:
     written = 0
     for artifact, rows in primary_news_rows(pulled.articles).items():
@@ -307,9 +393,14 @@ def land(warehouse: Warehouse, pulled: Pulled, now: datetime) -> int:
     return written
 
 
-def pull_agency_releases(warehouse: Warehouse, client: Any | None = None, *,
-                         now: datetime | None = None, fetcher: ArticleFetcher | None = None,
-                         feeds: tuple[Feed, ...] = FEEDS) -> dict:
+def pull_agency_releases(
+    warehouse: Warehouse,
+    client: Any | None = None,
+    *,
+    now: datetime | None = None,
+    fetcher: ArticleFetcher | None = None,
+    feeds: tuple[Feed, ...] = FEEDS,
+) -> dict:
     """Plan, fetch and land the agencies' new releases; returns what
     happened, for the run log."""
     now = now or datetime.now(UTC)
@@ -326,5 +417,9 @@ def pull_agency_releases(warehouse: Warehouse, client: Any | None = None, *,
         if own_fetcher:
             fetcher.close()
     land(warehouse, pulled, now)
-    return {"landed": len(pulled.articles), "feeds": pulled.feeds, "requests": pulled.requests,
-            "baseline": sum(bool(a.get("baseline")) for a in pulled.articles)}
+    return {
+        "landed": len(pulled.articles),
+        "feeds": pulled.feeds,
+        "requests": pulled.requests,
+        "baseline": sum(bool(a.get("baseline")) for a in pulled.articles),
+    }
