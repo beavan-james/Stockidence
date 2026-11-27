@@ -85,6 +85,9 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     "raw_peers": [("ticker", "VARCHAR")],
     # market-wide index series from FRED — keyed (series, date), not per ticker
     "raw_fred_market": [("series", "VARCHAR"), ("date", "DATE")],
+    # SEC's ticker -> CIK list (files/company_tickers.json), one row per
+    # ticker; a snapshot, so a landing bumps one watermark
+    "raw_sec_company_tickers": [("ticker", "VARCHAR")],
 }
 
 
@@ -132,6 +135,22 @@ def _migrate_gainers_losers_bucket(con) -> None:
     con.execute("COMMIT")
 
 
+# Columns added to tables after they were first created: CREATE TABLE IF
+# NOT EXISTS leaves an existing table as it is, so each is added here when
+# missing. Appended, so they follow the table's original columns.
+_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "staging.stg_news_articles": [("feed", "VARCHAR"), ("items", "VARCHAR[]")],
+    "mart.news_digests": [("sp500_return", "DOUBLE"), ("vix", "DOUBLE")],
+    "mart.news_digest_stories": [("event", "DOUBLE"), ("size", "DOUBLE")],
+}
+
+
+def _add_missing_columns(con) -> None:
+    for table, columns in _ADDED_COLUMNS.items():
+        for name, typ in columns:
+            con.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "{name}" {typ}')
+
+
 @dataclass(frozen=True)
 class Watermark:
     """Most recent fetch of one (endpoint, dimension)."""
@@ -172,15 +191,18 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("filed_date", "DATE"), ("end_date", "DATE"),
         ("bs_source", "VARCHAR"), ("payload", "JSON"),
     ],
-    # one row per article, Alpha Vantage history and Finnhub alike, typed
-    # into the same columns. published_at is UTC; tickers are the stocks the
-    # article is about. fetched_at carries over from raw and is the
-    # incremental rebuild's high watermark. The PK is article_id alone.
+    # one row per article, every source typed into the same columns.
+    # published_at is UTC; tickers are the stocks the article is about.
+    # fetched_at carries over from raw and is the incremental rebuild's high
+    # watermark. feed says where the article came from (finnhub_general,
+    # finnhub_company, alpha_vantage, sec_8k, fed, bls, sec_press, ftc);
+    # items are an 8-K's item numbers. The PK is article_id alone.
     "stg_news_articles": [
         ("article_id", "VARCHAR"), ("published_at", "TIMESTAMP"),
         ("provider", "VARCHAR"), ("source", "VARCHAR"),
         ("headline", "VARCHAR"), ("summary", "VARCHAR"), ("url", "VARCHAR"),
         ("tickers", "VARCHAR[]"), ("fetched_at", "TIMESTAMPTZ"),
+        ("feed", "VARCHAR"), ("items", "VARCHAR[]"),
     ],
     # main text of each fetched article page (raw.news_article_pages), cut to
     # the first MAX_WORDS words; `words` counts the whole article, and
@@ -714,11 +736,15 @@ class Warehouse:
                 """
             )
             # News digest (stockidence.mart.news_digest), keyed by period
-            # ('daily' for now) and the digest's date. news_digests holds the
-            # window and how much news it saw; news_digest_stories the top
-            # stories with each score input; news_digest_articles the
-            # articles grouped under each story. A rebuild replaces the
-            # digest's rows in all three.
+            # ('daily' or 'weekly') and the digest's date. news_digests holds
+            # the window, how much news it saw and the market's move;
+            # news_digest_stories the top stories with each score input
+            # (event and size from primary sources; coverage and category
+            # only on older digests, built from the news feed;
+            # move_ticker 'S&P 500' when the market's move is the reaction);
+            # news_digest_articles the articles grouped under each story;
+            # news_digest_context the feed's headlines beside them. A
+            # rebuild replaces the digest's rows in all four.
             con.execute(
                 """
                 CREATE TABLE IF NOT EXISTS mart.news_digests (
@@ -733,6 +759,8 @@ class Warehouse:
                     outlets INTEGER NOT NULL,
                     session_gap_minutes INTEGER,
                     built_at TIMESTAMPTZ NOT NULL,
+                    sp500_return DOUBLE,
+                    vix DOUBLE,
                     PRIMARY KEY (period, digest_date)
                 )
                 """
@@ -758,6 +786,29 @@ class Warehouse:
                     reaction DOUBLE NOT NULL,
                     category DOUBLE NOT NULL,
                     on_site DOUBLE NOT NULL,
+                    score DOUBLE NOT NULL,
+                    event DOUBLE,
+                    size DOUBLE,
+                    PRIMARY KEY (period, digest_date, rank)
+                )
+                """
+            )
+            # The market context beside a digest's stories: the news feed's
+            # most covered headlines (Finnhub's general feed), for the
+            # summaries' market paragraph. Never stories themselves.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mart.news_digest_context (
+                    period VARCHAR NOT NULL,
+                    digest_date DATE NOT NULL,
+                    rank INTEGER NOT NULL,
+                    headline VARCHAR NOT NULL,
+                    summary VARCHAR,
+                    url VARCHAR NOT NULL,
+                    source VARCHAR,
+                    published_at TIMESTAMP NOT NULL,
+                    n_articles INTEGER NOT NULL,
+                    n_outlets INTEGER NOT NULL,
                     score DOUBLE NOT NULL,
                     PRIMARY KEY (period, digest_date, rank)
                 )
@@ -815,6 +866,7 @@ class Warehouse:
                 )
                 """
             )
+            _add_missing_columns(con)
             # Category-level contract for the rating breakdown: one row per
             # (ticker, category) with the confidence blend's category weight —
             # NOT the component rows (which carry within-category sub-weights).
@@ -849,13 +901,16 @@ class Warehouse:
         fetched_at: datetime | None = None,
         high_watermark: str | None = None,
         merge: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+        dimension_key: str | None = None,
     ) -> int:
         """Upsert raw rows idempotently keyed on the artifact's PK columns.
 
         Each row keeps its full original response fragment as JSON `payload`
         (raw is minimally transformed by design). With `merge`, a key that is
         already stored gets merge(incoming, stored) instead of the incoming
-        payload (see raw_mapping.MERGERS). Returns rows written.
+        payload (see raw_mapping.MERGERS). With `dimension_key` (a snapshot
+        such as the SEC ticker list), one watermark for that dimension is
+        bumped instead of one per leading key. Returns rows written.
         """
         if artifact not in RAW_SCHEMA:
             raise KeyError(f"unknown artifact table: {artifact}")
@@ -889,7 +944,11 @@ class Warehouse:
                 )
                 written += 1
 
-        self._touch_watermarks_for(artifact, keys, rows, high_watermark, fetched_at)
+        if dimension_key is not None:
+            self.upsert_watermark(f"raw.{artifact}", dimension_key,
+                                  fetched_at=fetched_at, high_watermark=high_watermark)
+        else:
+            self._touch_watermarks_for(artifact, keys, rows, high_watermark, fetched_at)
         return written
 
     def _touch_watermarks_for(

@@ -7,16 +7,22 @@ by the Dagster jobs, not the test suite.
 
 from __future__ import annotations
 
+from datetime import date
+
 import httpx
 import pytest
 
+from stockidence.ingest.articles import USER_AGENT
+from stockidence.ingest.clients.agencies import FEED_ACCEPT, AgencyFeedClient
 from stockidence.ingest.clients.alpha_vantage import AlphaVantageClient
 from stockidence.ingest.clients.base import (
     APIError,
     InvalidResponseError,
+    NotFoundError,
     RateLimitError,
 )
 from stockidence.ingest.clients.finnhub import FinnhubClient
+from stockidence.ingest.clients.sec_edgar import SecEdgarClient
 from stockidence.ingest.clients.twelve_data import TwelveDataClient
 
 
@@ -234,3 +240,79 @@ class TestTwelveData:
         client = _client(monkeypatch, TwelveDataClient, handler)
         with pytest.raises(RateLimitError):
             client.time_series("AAPL")
+
+# a stand-in for the real SEC_USER_AGENT, which .env may hold
+SEC_AGENT = "Test test@example.com"
+
+
+def _sec(monkeypatch, handler, **kwargs):
+    monkeypatch.setenv("SEC_USER_AGENT", SEC_AGENT)
+    _mock_transport(monkeypatch, handler)
+    kwargs.setdefault("retries", 0)
+    return SecEdgarClient(pace_file=None, min_interval_seconds=0.0, **kwargs)
+
+
+class TestSecArchive:
+    def test_latest_filings_come_back_as_text_with_the_agent(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert str(request.url).startswith("https://www.sec.gov/cgi-bin/browse-edgar?")
+            assert request.url.params["action"] == "getcurrent" and request.url.params["type"] == "8-K"
+            assert request.url.params["start"] == "100" and request.url.params["output"] == "atom"
+            assert request.headers["user-agent"] == SEC_AGENT
+            return httpx.Response(200, text="<feed/>", headers={"content-type": "application/atom+xml"})
+
+        assert _sec(monkeypatch, handler).current_filings("8-K", start=100) == "<feed/>"
+
+    def test_daily_form_index_404_is_not_found_and_not_retried(self, monkeypatch):
+        seen = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            return httpx.Response(404, text="Not Found", request=request)
+
+        client = _sec(monkeypatch, handler, retries=2)
+        with pytest.raises(NotFoundError):
+            client.daily_form_index(date(2026, 11, 26))
+        assert seen == ["https://www.sec.gov/Archives/edgar/daily-index/2026/QTR4/form.20261126.idx"]
+
+    def test_not_found_is_still_an_api_error(self, monkeypatch):
+        client = _sec(monkeypatch, lambda request: httpx.Response(404, request=request))
+        with pytest.raises(APIError):
+            client.page("https://www.sec.gov/Archives/edgar/data/1/2/x.htm")
+
+    def test_page_reads_only_the_archive(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise AssertionError("no request should be made")
+
+        client = _sec(monkeypatch, handler)
+        with pytest.raises(ValueError):
+            client.page("https://example.com/https://www.sec.gov/x.htm")
+
+    def test_company_tickers_is_json(self, monkeypatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert str(request.url) == "https://www.sec.gov/files/company_tickers.json"
+            return httpx.Response(200, json={"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}})
+
+        assert _sec(monkeypatch, handler).company_tickers()["0"]["ticker"] == "AAPL"
+
+    def test_no_agent_no_client(self, monkeypatch):
+        monkeypatch.setenv("SEC_USER_AGENT", "")
+        with pytest.raises(ValueError):
+            SecEdgarClient(pace_file=None)
+
+
+class TestAgencyFeeds:
+    def test_a_feed_is_read_as_text_with_the_scrapers_agent(self, monkeypatch):
+        monkeypatch.setenv("SEC_USER_AGENT", SEC_AGENT)
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen[request.url.host] = (request.headers["user-agent"], request.headers["accept"])
+            return httpx.Response(200, text="<rss/>", headers={"content-type": "application/rss+xml"})
+
+        _mock_transport(monkeypatch, handler)
+        client = AgencyFeedClient(pace_file=None, min_interval_seconds=0.0, retries=0)
+        assert client.feed("https://www.federalreserve.gov/feeds/press_monetary.xml") == "<rss/>"
+        assert client.feed("https://www.sec.gov/news/pressreleases.rss") == "<rss/>"
+        assert seen == {"www.federalreserve.gov": (USER_AGENT, FEED_ACCEPT),
+                        "www.sec.gov": (SEC_AGENT, FEED_ACCEPT)}  # sec.gov asks for a contact

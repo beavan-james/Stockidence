@@ -82,10 +82,12 @@ caching layer exists to solve, not a problem to buy around.
 
 | Source            | Used for                                                                                                                                                                            | Reference |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| **Finnhub**       | Company profile 2, basic & as-reported financials, EPS surprises, insider sentiment, recommendation trends, peers, IPO & earnings calendars, quote, stock symbol listing, market & company news |    [Finnhub API Documentation](https://finnhub.io/docs/api/introduction)     |
+| **Finnhub**       | Company profile 2, basic & as-reported financials, EPS surprises, insider sentiment, recommendation trends, peers, IPO & earnings calendars, quote, stock symbol listing, market & company news (market news is the digests' context, never their stories) |    [Finnhub API Documentation](https://finnhub.io/docs/api/introduction)     |
 | **Twelve Data**   | Price time series (`interval=1day`, split-adjusted); weekly/monthly are resampled downstream in the warehouse, not fetched                                                          |    [Twelve Data API Documentation ](https://twelvedata.com/docs/introduction/overview)      |
 | **Alpha Vantage** | Top gainers/losers, earnings call transcript, macro indicators (inflation, CPI, unemployment, fed funds, natural gas, real GDP), commodities (gold/silver) |     [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/)      |
 | **FRED**         | Market-wide daily index levels — CBOE VIX (`VIXCLS`, since 1990) and S&P 500 price index (`SP500`, ~10y daily history); read as point-in-time market-regime features by the ML model datasets, not the deterministic scorer | [FRED Series Observations API](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) |
+| **SEC EDGAR**     | The tracked companies' 8-Ks (the news digests' company stories), SEC's ticker → CIK list, and balance sheets Finnhub serves empty; free, keyless, a named User-Agent (`SEC_USER_AGENT`) | [`API.md`](API.md) |
+| **Fed · BLS · SEC · FTC feeds** | Government releases for the news digests' macro and policy stories: FOMC statements and minutes, BLS headline numbers, SEC press releases, FTC competition releases (public RSS, robots.txt obeyed) | [`API.md`](API.md) |
 
 The full endpoint list — grouped by the scoring category each feeds — is in
 [`API.md`](API.md).
@@ -112,6 +114,7 @@ and refresh pipeline: [`Model/README.md`](Model/README.md).
 - **Near-real-time:** Finnhub quote (cache TTL ~1 min)
 - **Daily:** VIX / S&P 500 market indexes (FRED)
 - **Twice daily + overnight:** market news (Finnhub; 7am / 7pm ET pulls, plus the 01:00 UTC daily pull; upserts on article_id, served with SQL-side date filter + paging)
+- **Weekdays 07:30 ET + Saturdays 07:30 ET:** the tracked companies' new 8-Ks and the agencies' new releases, chained into the daily and weekly digest jobs (8-K cursor and per-release ids, so each is read once; SEC's ticker list refreshed when older than 7 days)
 - **Overnight (00:30 ET, Tue–Sat):** movers for the session that just closed; the free tier publishes them late in the evening
 - **Weekdays:** IPO/earnings calendars
 - **Monthly:** commodities, macro indicators, stock symbol listing
