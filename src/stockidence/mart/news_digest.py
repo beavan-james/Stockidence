@@ -382,8 +382,8 @@ def similarity(
     if not weights:
         union = len(a | b)
         return len(a & b) / union if union else 0.0
-    union = sum(weights.get(w, 1.0) for w in a | b)
-    return sum(weights.get(w, 1.0) for w in a & b) / union if union else 0.0
+    weighted_union = sum(weights.get(w, 1.0) for w in a | b)
+    return sum(weights.get(w, 1.0) for w in a & b) / weighted_union if weighted_union else 0.0
 
 
 def outlet(source: str | None) -> str:

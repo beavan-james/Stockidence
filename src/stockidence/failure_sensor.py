@@ -15,6 +15,7 @@ from dagster import (
     RunFailureSensorContext,
     run_failure_sensor,
 )
+from dagster._core.events import JobFailureData
 
 from .storage import Warehouse
 
@@ -49,7 +50,10 @@ def record_failure(
 
 def _error_message(context: RunFailureSensorContext) -> str | None:
     try:
-        return context.failure_event.event_specific_data.error.to_string()
+        data = context.failure_event.event_specific_data
+        if isinstance(data, JobFailureData) and data.error is not None:
+            return data.error.to_string()
+        return None
     except Exception:
         return None
 

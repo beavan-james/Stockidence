@@ -24,7 +24,7 @@ Split of labor:
 from __future__ import annotations
 
 from ..staging.staging import rebuild_financials_reported, rebuild_prices_daily
-from ..storage import Warehouse
+from ..storage import Warehouse, one_row
 
 
 def _rebuild_resample(warehouse: Warehouse, table: str, bucket: str, ticker: str) -> int:
@@ -47,9 +47,9 @@ def _rebuild_resample(warehouse: Warehouse, table: str, bucket: str, ticker: str
             """,
             [ticker],
         )
-        return con.execute(
-            f"SELECT COUNT(*) FROM mart.{table} WHERE ticker = ?", [ticker]
-        ).fetchone()[0]
+        return one_row(
+            con.execute(f"SELECT COUNT(*) FROM mart.{table} WHERE ticker = ?", [ticker])
+        )[0]
 
 
 def rebuild_prices_weekly(warehouse: Warehouse, ticker: str) -> int:
@@ -105,20 +105,20 @@ def rebuild_advanced_analytics(warehouse: Warehouse, ticker: str) -> int:
             """,
             [ticker],
         )
-        return con.execute(
-            "SELECT COUNT(*) FROM mart.m_advanced_analytics WHERE ticker = ?", [ticker]
-        ).fetchone()[0]
+        return one_row(
+            con.execute("SELECT COUNT(*) FROM mart.m_advanced_analytics WHERE ticker = ?", [ticker])
+        )[0]
 
 
 # ------------------------------------------------------- recursive indicators
 
 
-def ema(values: list[float], span: int) -> list[float | None]:
+def ema(values: list[float], span: int) -> list[float]:
     """Exponential moving average seeded with the first value (standard)."""
     if not values:
         return []
     k = 2.0 / (span + 1)
-    out: list[float | None] = [values[0]]
+    out: list[float] = [values[0]]
     for v in values[1:]:
         out.append(v * k + out[-1] * (1 - k))
     return out
@@ -372,6 +372,9 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
     signal = ema([m for m in macd if m is not None], 9)
     sig_it = iter(signal)
     macd_signal = [next(sig_it) if m is not None else None for m in macd]
+    macd_hist = [
+        m - s if m is not None and s is not None else None for m, s in zip(macd, macd_signal)
+    ]
 
     obv, money = _obv_and_ad(closes, highs, lows, volumes)
     r = rsi(closes)
@@ -394,9 +397,7 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
             ema_26[i],
             macd[i],
             macd_signal[i],
-            macd[i] - macd_signal[i]
-            if macd[i] is not None and macd_signal[i] is not None
-            else None,
+            macd_hist[i],
             r[i],
             a[i],
             dx_[i],
@@ -468,7 +469,7 @@ def rebuild_fred_market(warehouse: Warehouse) -> int:
             ORDER BY date
             """
         )
-        return con.execute("SELECT COUNT(*) FROM mart.m_fred_market").fetchone()[0]
+        return one_row(con.execute("SELECT COUNT(*) FROM mart.m_fred_market"))[0]
 
 
 def rebuild_all_for_ticker(warehouse: Warehouse, ticker: str) -> dict[str, int]:

@@ -201,7 +201,7 @@ def render(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)) -> 
         f"stdev={statistics.pstdev(conf):.1f} "
         f"min={min(conf):.1f} max={max(conf):.1f}"
     )
-    counts = {}
+    counts: dict[str, int] = {}
     for r in rows:
         counts[r.rating] = counts.get(r.rating, 0) + 1
     lines.append("rating mix: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
@@ -210,9 +210,6 @@ def render(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)) -> 
         header += f"   {'acc ' + str(h) + 'd':>9}{'ret ' + str(h) + 'd':>10}"
     lines.append(header)
     idx = {(s.rating, s.horizon): s for s in summarize(rows, horizons)}
-    counts: dict[str, int] = {}
-    for r in rows:
-        counts[r.rating] = counts.get(r.rating, 0) + 1
     for rating in (*BULLISH, *BEARISH, "Hold"):
         if not any((rating, h) in idx for h in horizons):
             continue
