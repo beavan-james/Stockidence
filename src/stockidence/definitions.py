@@ -37,7 +37,7 @@ model ops of the digest jobs are the exception: they never open the
 warehouse, so they don't hold the slot while the model writes.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from dagster import (
@@ -108,7 +108,7 @@ WAREHOUSE_POOL = "warehouse"
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @resource
@@ -132,8 +132,7 @@ def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...
     staging + mart from the freshly fetched index series. Unlike the per-ticker
     derived assets, these have no API calls and no ticker partition.
     """
-    names = [spec.name for spec in scheduled_endpoints()
-             if spec.cadence == cadence]
+    names = [spec.name for spec in scheduled_endpoints() if spec.cadence == cadence]
     if not names:
         return None
 
@@ -142,23 +141,27 @@ def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...
         engine = context.resources.engine
         for name in names:
             result = engine.ingest_scheduled(name, now=_now())
-            context.log.info(
-                f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
+            context.log.info(f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
 
     derived_ops: list[Any] = []
     for i, (label, rebuild) in enumerate(post_derived):
-        @op(name=f"{cadence.value}_{label}_op", required_resource_keys={"engine"},
-            pool=WAREHOUSE_POOL)
+
+        @op(
+            name=f"{cadence.value}_{label}_op",
+            required_resource_keys={"engine"},
+            pool=WAREHOUSE_POOL,
+        )
         def derive_cadence(context, _rebuild: Any = rebuild, _label: str = label) -> None:
             rows = _rebuild(context.resources.engine.warehouse)
             context.log.info(f"[derived:{_label}] rebuilt {rows} rows")
+
         derived_ops.append(derive_cadence)
 
     @job(name=f"{cadence.value}_ingest")
     def cadence_job():
         ingest_cadence()
-        for op in derived_ops:
-            op()
+        for derived_op in derived_ops:
+            derived_op()
 
     return cadence_job
 
@@ -172,25 +175,28 @@ daily_job = _make_cadence_job(
 )
 
 
-@schedule(job=monthly_job, cron_schedule="0 2 1 * *",
-          default_status=DefaultScheduleStatus.RUNNING)
-def monthly_schedule() -> dict:  # noqa: ANN401
+@schedule(job=monthly_job, cron_schedule="0 2 1 * *", default_status=DefaultScheduleStatus.RUNNING)
+def monthly_schedule() -> dict:
     """01:00 UTC on the 1st of each month: commodities, macro, symbols."""
     return {}
 
 
-@schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5",
-          default_status=DefaultScheduleStatus.RUNNING)
-def weekdays_schedule() -> dict:  # noqa: ANN401
+@schedule(
+    job=weekdays_job, cron_schedule="30 21 * * 1-5", default_status=DefaultScheduleStatus.RUNNING
+)
+def weekdays_schedule() -> dict:
     """21:30 UTC on weekdays, after the US close (20:00 UTC in DST, 21:00 UTC
     in winter): the IPO and earnings calendars."""
     return {}
 
 
-@schedule(job=overnight_job, cron_schedule="30 0 * * 2-6",
-          execution_timezone="America/New_York",
-          default_status=DefaultScheduleStatus.RUNNING)
-def overnight_schedule() -> dict:  # noqa: ANN401
+@schedule(
+    job=overnight_job,
+    cron_schedule="30 0 * * 2-6",
+    execution_timezone="America/New_York",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+def overnight_schedule() -> dict:
     """00:30 New York time, Tuesday to Saturday: the movers of the session
     that closed the afternoon before. Alpha Vantage's free tier publishes a
     session's list late in the evening; at 17:30 it still served the session
@@ -199,9 +205,8 @@ def overnight_schedule() -> dict:  # noqa: ANN401
     return {}
 
 
-@schedule(job=daily_job, cron_schedule="0 1 * * *",
-          default_status=DefaultScheduleStatus.RUNNING)
-def daily_schedule() -> dict:  # noqa: ANN401
+@schedule(job=daily_job, cron_schedule="0 1 * * *", default_status=DefaultScheduleStatus.RUNNING)
+def daily_schedule() -> dict:
     """Daily market news (Finnhub) plus the FRED market indexes."""
     return {}
 
@@ -210,8 +215,7 @@ def daily_schedule() -> dict:  # noqa: ANN401
 def ingest_news_op(context) -> dict:
     engine = context.resources.engine
     result = engine.ingest_scheduled("market_news", now=_now())
-    context.log.info(
-        f"[scheduled:market_news] {result.reason} ({result.rows_written} rows)")
+    context.log.info(f"[scheduled:market_news] {result.reason} ({result.rows_written} rows)")
     return {"news_rows": result.rows_written}
 
 
@@ -223,16 +227,14 @@ def news_job():
     ingest_news_op()
 
 
-@schedule(job=news_job, cron_schedule="0 11 * * *",
-          default_status=DefaultScheduleStatus.RUNNING)
-def news_morning_schedule() -> dict:  # noqa: ANN401
+@schedule(job=news_job, cron_schedule="0 11 * * *", default_status=DefaultScheduleStatus.RUNNING)
+def news_morning_schedule() -> dict:
     """11:00 UTC (~7am ET): morning news pull."""
     return {}
 
 
-@schedule(job=news_job, cron_schedule="0 23 * * *",
-          default_status=DefaultScheduleStatus.RUNNING)
-def news_evening_schedule() -> dict:  # noqa: ANN401
+@schedule(job=news_job, cron_schedule="0 23 * * *", default_status=DefaultScheduleStatus.RUNNING)
+def news_evening_schedule() -> dict:
     """23:00 UTC (~7pm ET): evening news pull."""
     return {}
 
@@ -325,24 +327,29 @@ def _log_digests(context: OpExecutionContext, built: list[dict]) -> None:
         if (d.get("session_gap_minutes") or 0) >= _DIGEST_GAP_WARN_MINUTES:
             context.log.warning(
                 f"{tag} no article for {d['session_gap_minutes']} minutes of a session: "
-                "the news feed likely missed stories between pulls")
+                "the news feed likely missed stories between pulls"
+            )
 
 
 @op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def build_digest_op(context: OpExecutionContext, config: DailyDigestConfig, prev: dict) -> dict:
     """Pick the day's top stories into mart.news_digest_* (one digest per date)."""
-    last = (date.fromisoformat(config.digest_date)
-            if config.digest_date else latest_digest_date(_now()))
+    last = (
+        date.fromisoformat(config.digest_date) if config.digest_date else latest_digest_date(_now())
+    )
     built = build_daily_digests(context.resources.engine.warehouse, last, max(config.days, 1))
     _log_digests(context, built)
     return {**prev, "digests": built}
 
 
 @op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
-def build_weekly_digest_op(context: OpExecutionContext, config: WeeklyDigestConfig, prev: dict) -> dict:
+def build_weekly_digest_op(
+    context: OpExecutionContext, config: WeeklyDigestConfig, prev: dict
+) -> dict:
     """Pick the week's top stories into mart.news_digest_* (period 'weekly')."""
-    last = (date.fromisoformat(config.digest_date)
-            if config.digest_date else latest_weekly_date(_now()))
+    last = (
+        date.fromisoformat(config.digest_date) if config.digest_date else latest_weekly_date(_now())
+    )
     built = build_weekly_digests(context.resources.engine.warehouse, last, max(config.weeks, 1))
     _log_digests(context, built)
     return {**prev, "digests": built}
@@ -364,15 +371,20 @@ def fetch_articles_op(context: OpExecutionContext, config: FetchArticlesConfig, 
     """
     digests = digests_to_read(prev.get("digests", []))
     info = fetch_digest_articles(
-        context.resources.engine.warehouse, digests, now=_now(), max_requests=config.max_requests)
+        context.resources.engine.warehouse, digests, now=_now(), max_requests=config.max_requests
+    )
     context.log.info(
         f"[articles] read {info['stories_read']} of {info['stories']} stories still unread "
-        f"with {info['page_requests']} page requests: {info['outcomes']}")
+        f"with {info['page_requests']} page requests: {info['outcomes']}"
+    )
     if info["skipped_domains"]:
-        context.log.info(f"[articles] skipped by robots.txt or unreachable: {info['skipped_domains']}")
+        context.log.info(
+            f"[articles] skipped by robots.txt or unreachable: {info['skipped_domains']}"
+        )
     if info["capped"]:
         context.log.warning(
-            f"[articles] stopped at {config.max_requests} page requests; the rest wait for the next run")
+            f"[articles] stopped at {config.max_requests} page requests; the rest wait for the next run"
+        )
     return {**prev, "articles": info}
 
 
@@ -399,32 +411,39 @@ class RedoConfig(Config):
 
 
 def _built(prev: dict) -> list[tuple[str, date]]:
-    return [(d["period"], date.fromisoformat(str(d["digest_date"]))) for d in prev.get("digests", [])]
+    return [
+        (d["period"], date.fromisoformat(str(d["digest_date"]))) for d in prev.get("digests", [])
+    ]
 
 
 @op(required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
 def read_summary_inputs_op(context: OpExecutionContext, prev: dict) -> dict:
     """Read the stories, their article text and existing cards and summaries."""
-    inputs = read_inputs(context.resources.engine.warehouse,
-                         digests_to_read(prev.get("digests", [])), _built(prev))
+    inputs = read_inputs(
+        context.resources.engine.warehouse, digests_to_read(prev.get("digests", [])), _built(prev)
+    )
     readable = sum(1 for s in inputs.stories if s.texts)
     context.log.info(
         f"[summaries] {len(inputs.stories)} stories ({readable} with article text), "
-        f"{len(inputs.cards)} cards already made; writing {inputs.write or 'nothing'}")
+        f"{len(inputs.cards)} cards already made; writing {inputs.write or 'nothing'}"
+    )
     return {**prev, "summary_inputs": inputs}
 
 
 @op(required_resource_keys={"llm"})
 def write_story_cards_op(context: OpExecutionContext, config: RedoConfig, prev: dict) -> dict:
     """One fact card per story that has none (model; no warehouse)."""
+
     def logged(card: Card) -> None:
         note = f": {'; '.join(card.problems)}" if card.problems else ""
         context.log.info(
             f"[card] {card.story_key} {card.status} in {card.seconds:.0f}s "
-            f"({card.input_tokens} tokens in, {card.output_tokens} out){note}")
+            f"({card.input_tokens} tokens in, {card.output_tokens} out){note}"
+        )
 
-    run = make_cards(context.resources.llm, prev["summary_inputs"], _now,
-                     redo=config.redo, on_card=logged)
+    run = make_cards(
+        context.resources.llm, prev["summary_inputs"], _now, redo=config.redo, on_card=logged
+    )
     return {**prev, "card_run": run}
 
 
@@ -538,33 +557,39 @@ def ticker_data(context: AssetExecutionContext) -> None:
     for endpoint in _ON_DEMAND_ENDPOINTS:
         dimension = ticker
         if endpoint == "earnings_call_transcript":
-            latest = engine.warehouse.connect(read_only=True).execute(
-                """
+            latest = (
+                engine.warehouse.connect(read_only=True)
+                .execute(
+                    """
                 SELECT year, quarter FROM raw.raw_earnings_calendar
                 WHERE symbol = ?
                   AND CAST(json_extract_string(payload, '$.date') AS DATE) <= current_date
                 ORDER BY year DESC, quarter DESC LIMIT 1
                 """,
-                [ticker],
-            ).fetchone()
+                    [ticker],
+                )
+                .fetchone()
+            )
             if latest is None:
                 # free-tier calendar only looks ahead ~2 weeks: fall back to
                 # the latest reported quarter from /stock/earnings
-                latest = engine.warehouse.connect(read_only=True).execute(
-                    """
+                latest = (
+                    engine.warehouse.connect(read_only=True)
+                    .execute(
+                        """
                     SELECT year, quarter FROM raw.raw_eps_surprises
                     WHERE ticker = ? ORDER BY year DESC, quarter DESC LIMIT 1
                     """,
-                    [ticker],
-                ).fetchone()
+                        [ticker],
+                    )
+                    .fetchone()
+                )
             if latest is None:
-                context.log.info(
-                    f"[{ticker}] no earnings period on record; skipping transcript")
+                context.log.info(f"[{ticker}] no earnings period on record; skipping transcript")
                 continue
             dimension = f"{ticker}|{latest[1]}|{latest[0]}"
         result = engine.ingest_on_demand(endpoint, dimension, now=_now())
-        context.log.info(
-            f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
+        context.log.info(f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
 
 
 def _derived_asset(name: str, rebuild: Any, deps: AssetSelection | list | object) -> object:
@@ -581,27 +606,26 @@ def _derived_asset(name: str, rebuild: Any, deps: AssetSelection | list | object
         deps=deps,
     )
     def _asset(context: AssetExecutionContext) -> None:
-        rows = rebuild(context.resources.engine.warehouse,
-                       context.partition_key)
-        context.log.info(
-            f"[derived:{name}:{context.partition_key}] rebuilt {rows} rows")
+        rows = rebuild(context.resources.engine.warehouse, context.partition_key)
+        context.log.info(f"[derived:{name}:{context.partition_key}] rebuilt {rows} rows")
 
     return _asset
 
 
-stg_prices_daily = _derived_asset(
-    "stg_prices_daily", rebuild_prices_daily, deps=[ticker_data])
-m_prices_weekly = _derived_asset(
-    "m_prices_weekly", rebuild_prices_weekly, deps=[stg_prices_daily])
+stg_prices_daily = _derived_asset("stg_prices_daily", rebuild_prices_daily, deps=[ticker_data])
+m_prices_weekly = _derived_asset("m_prices_weekly", rebuild_prices_weekly, deps=[stg_prices_daily])
 m_prices_monthly = _derived_asset(
-    "m_prices_monthly", rebuild_prices_monthly, deps=[stg_prices_daily])
+    "m_prices_monthly", rebuild_prices_monthly, deps=[stg_prices_daily]
+)
 m_advanced_analytics = _derived_asset(
-    "m_advanced_analytics", rebuild_advanced_analytics, deps=[stg_prices_daily])
+    "m_advanced_analytics", rebuild_advanced_analytics, deps=[stg_prices_daily]
+)
 m_technical_indicators = _derived_asset(
     "m_technical_indicators", rebuild_technical_indicators, deps=[stg_prices_daily]
 )
 stg_financials_reported = _derived_asset(
-    "stg_financials_reported", rebuild_financials_reported, deps=[ticker_data])
+    "stg_financials_reported", rebuild_financials_reported, deps=[ticker_data]
+)
 
 
 @asset(
@@ -712,7 +736,9 @@ def _restage_filings(context: OpExecutionContext, tag: str) -> None:
     staged = rebuild_financials_reported(warehouse)
     since = (_now().date() - timedelta(days=365)).isoformat()
     sources = balance_sheet_sources(warehouse, since)
-    context.log.info(f"[{tag}] staged {staged} filings; balance sheets of filings since {since}: {sources}")
+    context.log.info(
+        f"[{tag}] staged {staged} filings; balance sheets of filings since {since}: {sources}"
+    )
     missing = sources.get("none", 0)
     if missing > 0.1 * sum(sources.values()):
         context.log.warning(
@@ -788,7 +814,7 @@ def model_retrain_job() -> None:
     cron_schedule="0 3 1 1,4,7,10 *",
     default_status=DefaultScheduleStatus.RUNNING,
 )
-def quarterly_schedule() -> dict:  # noqa: ANN401
+def quarterly_schedule() -> dict:
     """03:00 UTC on the first day of each quarter (Jan/Apr/Jul/Oct)."""
     return {}
 
@@ -808,7 +834,8 @@ def weekly_refresh_op(context: OpExecutionContext) -> dict:
     universe = weekly_universe(engine.warehouse)
     context.log.info(f"weekly refresh: {len(universe)} tickers")
     summary = refresh_tickers(
-        engine, universe, force_endpoints=frozenset({"prices.daily"}), log=context.log.info)
+        engine, universe, force_endpoints=frozenset({"prices.daily"}), log=context.log.info
+    )
     if summary["errors"]:
         by_endpoint: dict[str, int] = {}
         for err in summary["errors"]:
@@ -831,8 +858,10 @@ def _rebuild_weekly_dataset(context: OpExecutionContext) -> dict:
         f"{info['first_week']} -> {info['last_week']}; ranking the {info['score_snapshot']} "
         f"snapshot ({info['score_tickers']} tickers, close {info['week_close']})"
     )
-    for key, what in (("stale_tickers", "stopped before the week's last close"),
-                      ("missing_tickers", "have no bars this week")):
+    for key, what in (
+        ("stale_tickers", "stopped before the week's last close"),
+        ("missing_tickers", "have no bars this week"),
+    ):
         if info[key]:
             context.log.warning(
                 f"[weekly dataset] {len(info[key])} tickers {what} and are left out: "
@@ -890,7 +919,7 @@ def weekly_rank_job() -> None:
     execution_timezone="America/New_York",
     default_status=DefaultScheduleStatus.RUNNING,
 )
-def weekly_schedule() -> dict:  # noqa: ANN401
+def weekly_schedule() -> dict:
     """17:30 ET every Friday, 90 minutes after the close (New York time, so
     DST never shifts it): the list is ready well before Monday's open."""
     return {}
@@ -898,15 +927,43 @@ def weekly_schedule() -> dict:  # noqa: ANN401
 
 defs = Definitions(
     resources={"engine": engine_resource, "llm": llm_resource},
-    assets=[ticker_data, stg_prices_daily, stg_financials_reported, m_prices_weekly,
-            m_prices_monthly, m_advanced_analytics, m_technical_indicators, ticker_score],
-    jobs=[monthly_job, weekdays_job, overnight_job, daily_job, news_job, daily_digest_job,
-          weekly_digest_job, refresh_tickers_job, refresh_quotes_job, quarterly_model_refresh_job,
-          model_retrain_job, weekly_model_refresh_job, weekly_rank_job],
-    schedules=[monthly_schedule, weekdays_schedule, overnight_schedule, daily_schedule,
-               news_morning_schedule, news_evening_schedule, daily_digest_schedule,
-               weekly_digest_schedule,
-               quarterly_schedule, weekly_schedule],
+    assets=[
+        ticker_data,
+        stg_prices_daily,
+        stg_financials_reported,
+        m_prices_weekly,
+        m_prices_monthly,
+        m_advanced_analytics,
+        m_technical_indicators,
+        ticker_score,
+    ],
+    jobs=[
+        monthly_job,
+        weekdays_job,
+        overnight_job,
+        daily_job,
+        news_job,
+        daily_digest_job,
+        weekly_digest_job,
+        refresh_tickers_job,
+        refresh_quotes_job,
+        quarterly_model_refresh_job,
+        model_retrain_job,
+        weekly_model_refresh_job,
+        weekly_rank_job,
+    ],
+    schedules=[
+        monthly_schedule,
+        weekdays_schedule,
+        overnight_schedule,
+        daily_schedule,
+        news_morning_schedule,
+        news_evening_schedule,
+        daily_digest_schedule,
+        weekly_digest_schedule,
+        quarterly_schedule,
+        weekly_schedule,
+    ],
     # DuckDB is a single-writer file: with the default multiprocess executor
     # every step runs in its own subprocess and the four mart siblings (all
     # depending only on stg_prices_daily) launch concurrently and fight over

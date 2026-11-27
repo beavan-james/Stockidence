@@ -119,8 +119,10 @@ _REGISTRY: list[EndpointSpec] = [
         watermark=("indicator", "date"),
         artifacts=("raw_macro_indicators",),
         ttl=timedelta(days=31),
-        notes=("AV INFLATION is annual and frozen upstream at Jan 2024; "
-               "the frontend derives current YoY from the CPI series instead"),
+        notes=(
+            "AV INFLATION is annual and frozen upstream at Jan 2024; "
+            "the frontend derives current YoY from the CPI series instead"
+        ),
     ),
     EndpointSpec(
         name="macro.cpi",
@@ -596,6 +598,7 @@ def scheduled_endpoints() -> list[EndpointSpec]:
 
 def on_demand_endpoints() -> list[EndpointSpec]:
     return [
-        spec for spec in _REGISTRY
+        spec
+        for spec in _REGISTRY
         if spec.trigger in (Trigger.ON_DEMAND_EVERY, Trigger.ON_DEMAND_STALE)
     ]

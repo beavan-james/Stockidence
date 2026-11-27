@@ -58,9 +58,7 @@ def submit_refresh_run(tickers: list[str]) -> str:
         raise ValueError("no tickers to refresh")
     run_config = {"ops": {REFRESH_OP_NAME: {"config": {"tickers": clean}}}}
     try:
-        return _client_and_config().submit_job_execution(
-            REFRESH_JOB_NAME, run_config=run_config
-        )
+        return _client_and_config().submit_job_execution(REFRESH_JOB_NAME, run_config=run_config)
     except Exception as exc:
         raise RuntimeError(f"Dagster launch failed: {exc}") from exc
 
@@ -68,7 +66,11 @@ def submit_refresh_run(tickers: list[str]) -> str:
 def request_refresh(tickers: list[str]) -> str | None:
     """Best-effort launch with per-ticker cooldown. Never raises."""
     now = time.monotonic()
-    due = [t for t in tickers if now - _last_launch.get(t.strip().upper(), 0.0) > _LAUNCH_COOLDOWN_SECONDS]
+    due = [
+        t
+        for t in tickers
+        if now - _last_launch.get(t.strip().upper(), 0.0) > _LAUNCH_COOLDOWN_SECONDS
+    ]
     if not due:
         return None
     try:
@@ -102,8 +104,6 @@ def submit_quotes_run(tickers: list[str]) -> str:
         raise ValueError("no tickers to refresh")
     run_config = {"ops": {QUOTES_OP_NAME: {"config": {"tickers": clean}}}}
     try:
-        return _client_and_config().submit_job_execution(
-            QUOTES_JOB_NAME, run_config=run_config
-        )
+        return _client_and_config().submit_job_execution(QUOTES_JOB_NAME, run_config=run_config)
     except Exception as exc:
         raise RuntimeError(f"Dagster launch failed: {exc}") from exc

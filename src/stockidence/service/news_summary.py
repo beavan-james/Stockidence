@@ -26,9 +26,17 @@ from .warehouse import _resilient
 
 
 def _empty(period: str) -> dict:
-    return {"period": period, "digest_date": None, "previous_date": None, "next_date": None,
-            "session_gap_minutes": None, "model": None, "prompt_version": None,
-            "created_at": None, "parts": []}
+    return {
+        "period": period,
+        "digest_date": None,
+        "previous_date": None,
+        "next_date": None,
+        "session_gap_minutes": None,
+        "model": None,
+        "prompt_version": None,
+        "created_at": None,
+        "parts": [],
+    }
 
 
 def get_summary(period: str, digest_date: date | None = None) -> dict:

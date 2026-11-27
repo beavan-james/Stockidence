@@ -23,13 +23,30 @@ def test_prices_daily():
     payload = {
         "status": "ok",
         "values": [
-            {"datetime": "2026-08-14", "open": "1.0", "high": "1.1", "low": "0.9", "close": "1.05", "volume": "100"},
-            {"datetime": "2026-08-17", "open": "1.05", "high": "1.2", "low": "1.0", "close": "1.15", "volume": "200"},
+            {
+                "datetime": "2026-08-14",
+                "open": "1.0",
+                "high": "1.1",
+                "low": "0.9",
+                "close": "1.05",
+                "volume": "100",
+            },
+            {
+                "datetime": "2026-08-17",
+                "open": "1.05",
+                "high": "1.2",
+                "low": "1.0",
+                "close": "1.15",
+                "volume": "200",
+            },
         ],
     }
     rows = normalize_for("prices.daily", payload, "AAPL", NOW)
     rows = rows["raw_prices_daily"]
-    assert [(r["date"].isoformat(), r["ticker"]) for r in rows] == [("2026-08-14", "AAPL"), ("2026-08-17", "AAPL")]
+    assert [(r["date"].isoformat(), r["ticker"]) for r in rows] == [
+        ("2026-08-14", "AAPL"),
+        ("2026-08-17", "AAPL"),
+    ]
 
 
 def test_financials_reported_filters_holes():
@@ -105,7 +122,9 @@ def test_transcript_uses_payload_quarter():
             {"speaker": "Luca Maestri", "title": "CFO", "content": "Numbers next."},
         ],
     }
-    rows = normalize_for("earnings_call_transcript", payload, "AAPL|4|2025", NOW)["raw_transcript_segments"]
+    rows = normalize_for("earnings_call_transcript", payload, "AAPL|4|2025", NOW)[
+        "raw_transcript_segments"
+    ]
     assert len(rows) == 2
     assert rows[0]["speaker_sequence"] == 0
     assert rows[1]["speaker_sequence"] == 1
@@ -162,7 +181,11 @@ def test_commodities():
 
 
 def test_macro_indicators():
-    payload = {"name": "Inflation", "interval": "monthly", "data": [{"date": "2026-07-01", "value": "3.2"}]}
+    payload = {
+        "name": "Inflation",
+        "interval": "monthly",
+        "data": [{"date": "2026-07-01", "value": "3.2"}],
+    }
     rows = normalize_for("macro.inflation", payload, "inflation", NOW)["raw_macro_indicators"]
     assert rows[0]["indicator"] == "inflation"
     assert rows[0]["date"].isoformat() == "2026-07-01"
@@ -180,7 +203,9 @@ def test_gainers_losers():
         "top_losers": [{"ticker": "BBB", "price": "1.0", "change_percentage": "-9"}],
         "most_actively_traded": [{"ticker": "CCC", "price": "50.0"}],
     }
-    rows = normalize_for("top_gainers_losers", payload, "top_gainers_losers", NOW)["raw_gainers_losers"]
+    rows = normalize_for("top_gainers_losers", payload, "top_gainers_losers", NOW)[
+        "raw_gainers_losers"
+    ]
     assert {r["ticker"] for r in rows} == {"AAA", "BBB", "CCC"}
     # the session the list describes, not the day it was fetched
     assert NOW.date() != date(2026, 8, 14)
@@ -191,10 +216,18 @@ def test_gainers_losers():
 def test_earnings_calendar():
     payload = {
         "earningsCalendar": [
-            {"date": "2026-08-17", "symbol": "AAPL", "quarter": 3, "year": 2026, "epsEstimate": 1.5},
+            {
+                "date": "2026-08-17",
+                "symbol": "AAPL",
+                "quarter": 3,
+                "year": 2026,
+                "epsEstimate": 1.5,
+            },
         ]
     }
-    rows = normalize_for("earnings_calendar", payload, "earnings_calendar", NOW)["raw_earnings_calendar"]
+    rows = normalize_for("earnings_calendar", payload, "earnings_calendar", NOW)[
+        "raw_earnings_calendar"
+    ]
     assert rows[0]["symbol"] == "AAPL"
     assert rows[0]["quarter"] == 3 and rows[0]["year"] == 2026
 
@@ -220,7 +253,10 @@ def test_all_normalizers_cover_registry():
 
     # chained endpoints (the digest's article pages) are landed by their own
     # job op, not through the engine, so they have no JSON normalizer
-    fetched = [spec.name for spec in REGISTRY.values()
-               if spec.provider != Provider.DERIVED and spec.trigger != Trigger.CHAINED]
+    fetched = [
+        spec.name
+        for spec in REGISTRY.values()
+        if spec.provider != Provider.DERIVED and spec.trigger != Trigger.CHAINED
+    ]
     missing = [name for name in fetched if name not in NORMALIZERS]
     assert not missing, f"endpoints without normalizers: {missing}"

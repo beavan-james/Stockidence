@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import APIError, BaseClient, InvalidResponseError, RateLimitError, build_query
+from .base import APIError, BaseClient, RateLimitError, build_query
 
 
 class AlphaVantageClient(BaseClient):
@@ -25,7 +25,9 @@ class AlphaVantageClient(BaseClient):
             api_key=key,
             base_url="https://www.alphavantage.co",
             timeout=timeout,
-            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["alpha_vantage"]),
+            min_interval_seconds=kwargs.pop(
+                "min_interval_seconds", settings.min_interval_seconds["alpha_vantage"]
+            ),
             # shared across all run processes so bulk enqueues can't stampede
             # the free-tier burst limit (see BaseClient._pace_shared)
             pace_file=kwargs.pop("pace_file", settings.alpha_vantage_pace_file or None),

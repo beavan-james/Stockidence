@@ -1,0 +1,17 @@
+User-agent: *
+Disallow: /
+Allow: /scb/
+Allow: /eFile/
+Allow: /efile/
+Allow: /regional/bearfacts/
+Allow: /histdatacore/
+Allow: /fesac/
+Allow: /well-being/
+Allow: /api/
+Allow: /API/
+Allow: /international/factsheet/
+Allow: /industry/factsheet/
+Allow: /iTable/
+Allow: /itable/
+Allow: /regional/rims/rimsii/
+Allow: /surveys/

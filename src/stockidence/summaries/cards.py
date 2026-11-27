@@ -62,12 +62,12 @@ CARD_SCHEMA: dict[str, Any] = {
 @dataclass(frozen=True)
 class Card:
     story_key: str
-    source_url: str | None   # the page the card was read from; the lead's link for a fallback
+    source_url: str | None  # the page the card was read from; the lead's link for a fallback
     card: dict[str, Any]
-    status: str              # ok / fallback
-    model: str | None        # None when no model output was kept
+    status: str  # ok / fallback
+    model: str | None  # None when no model output was kept
     prompt_version: str
-    input_tokens: int        # all attempts
+    input_tokens: int  # all attempts
     output_tokens: int
     seconds: float
     created_at: datetime
@@ -75,6 +75,7 @@ class Card:
 
 
 # --- prompt and checks --------------------------------------------------------
+
 
 def card_prompt(story: StoryInput) -> str:
     text = story.texts[0]
@@ -92,16 +93,21 @@ def card_prompt(story: StoryInput) -> str:
 
 def tidy(card: dict[str, Any]) -> dict[str, Any]:
     """Whitespace trimmed and tickers upper-cased; nothing else changes."""
+
     def s(v: Any) -> str:
         return " ".join(str(v or "").split())
 
     return {
         "what": s(card.get("what")),
-        "companies": [{"ticker": s(c.get("ticker")).upper().lstrip("$"), "name": s(c.get("name"))}
-                      for c in card.get("companies") or []],
+        "companies": [
+            {"ticker": s(c.get("ticker")).upper().lstrip("$"), "name": s(c.get("name"))}
+            for c in card.get("companies") or []
+        ],
         "government": [s(g) for g in card.get("government") or [] if s(g)],
-        "figures": [{"label": s(f.get("label")), "value": s(f.get("value")), "unit": s(f.get("unit"))}
-                    for f in card.get("figures") or []],
+        "figures": [
+            {"label": s(f.get("label")), "value": s(f.get("value")), "unit": s(f.get("unit"))}
+            for f in card.get("figures") or []
+        ],
         "why_it_matters": s(card.get("why_it_matters")),
     }
 
@@ -123,8 +129,11 @@ def check_card(card: dict[str, Any], story: StoryInput, given: str) -> list[str]
     if bad := [f["value"] for f in card["figures"] if not any(ch.isdigit() for ch in f["value"])]:
         problems.append(f"figures without a number: {', '.join(bad)}")
     article = story.texts[0].text
-    if bad := [c["ticker"] for c in card["companies"]
-               if c["ticker"] and c["ticker"] not in story.tickers and not has_word(article, c["ticker"])]:
+    if bad := [
+        c["ticker"]
+        for c in card["companies"]
+        if c["ticker"] and c["ticker"] not in story.tickers and not has_word(article, c["ticker"])
+    ]:
         problems.append(f"tickers not in the story or the article: {', '.join(bad)}")
     return problems
 
@@ -159,21 +168,38 @@ def fallback_card(story: StoryInput) -> dict[str, Any]:
 
 # --- making one ---------------------------------------------------------------
 
+
 def make_card(llm: Ollama, story: StoryInput, now: datetime, key: str | None = None) -> Card:
     """Read the story's first readable page into a card; two attempts, then
     the fallback. Raises ModelUnavailable when the server is down."""
     key = key or story.key
     if not story.texts:
-        return Card(key, story.url, fallback_card(story), FALLBACK, None, PROMPT_VERSION,
-                    0, 0, 0.0, now, ("no readable article",))
+        return Card(
+            key,
+            story.url,
+            fallback_card(story),
+            FALLBACK,
+            None,
+            PROMPT_VERSION,
+            0,
+            0,
+            0.0,
+            now,
+            ("no readable article",),
+        )
     given = card_prompt(story)
     problems: list[str] = []
     tokens_in = tokens_out = 0
     seconds = 0.0
     for temperature in (None, 0.0):
         try:
-            reply = llm.chat(CARD_SYSTEM, given, max_output=MAX_OUTPUT,
-                             temperature=temperature, schema=CARD_SCHEMA)
+            reply = llm.chat(
+                CARD_SYSTEM,
+                given,
+                max_output=MAX_OUTPUT,
+                temperature=temperature,
+                schema=CARD_SCHEMA,
+            )
         except PromptTooLong as e:  # a capped article can't get here, but never cut it silently
             problems.append(str(e))
             break
@@ -190,14 +216,37 @@ def make_card(llm: Ollama, story: StoryInput, now: datetime, key: str | None = N
             continue
         found = check_card(card, story, given)
         if not found:
-            return Card(key, story.texts[0].url, card, OK, llm.model, PROMPT_VERSION,
-                        tokens_in, tokens_out, round(seconds, 1), now, tuple(problems))
+            return Card(
+                key,
+                story.texts[0].url,
+                card,
+                OK,
+                llm.model,
+                PROMPT_VERSION,
+                tokens_in,
+                tokens_out,
+                round(seconds, 1),
+                now,
+                tuple(problems),
+            )
         problems += found
-    return Card(key, story.url, fallback_card(story), FALLBACK, None, PROMPT_VERSION,
-                tokens_in, tokens_out, round(seconds, 1), now, tuple(problems))
+    return Card(
+        key,
+        story.url,
+        fallback_card(story),
+        FALLBACK,
+        None,
+        PROMPT_VERSION,
+        tokens_in,
+        tokens_out,
+        round(seconds, 1),
+        now,
+        tuple(problems),
+    )
 
 
 # --- which stories need one ---------------------------------------------------
+
 
 def cards_of(group: list[StoryInput], cards: dict[str, Card]) -> list[Card]:
     """The cards made for any story of the group, in pick order."""
@@ -205,8 +254,9 @@ def cards_of(group: list[StoryInput], cards: dict[str, Card]) -> list[Card]:
     return [cards[k] for k in keys]
 
 
-def cards_needed(groups: list[list[StoryInput]], cards: dict[str, Card],
-                 redo: bool = False) -> list[tuple[str, StoryInput]]:
+def cards_needed(
+    groups: list[list[StoryInput]], cards: dict[str, Card], redo: bool = False
+) -> list[tuple[str, StoryInput]]:
     """(card key, story to read) for each card to make: one for a group
     with none, and a new read of a fallback card when a readable page has
     arrived since it was made (a fetch retried later in the week). `redo`
@@ -228,6 +278,7 @@ def cards_needed(groups: list[list[StoryInput]], cards: dict[str, Card],
 
 # --- shown to the writers -----------------------------------------------------
 
+
 def render_card(card: Card, story: StoryInput, *, dated: bool = False) -> str:
     """A card as the daily and weekly prompts show it."""
     c = card.card
@@ -235,15 +286,19 @@ def render_card(card: Card, story: StoryInput, *, dated: bool = False) -> str:
     if dated:
         head = f"{story.published_at:%a %Y-%m-%d}: {head}"
     lines = [head, f"What: {c['what']}"]
-    companies = [f"{x['name']} ({x['ticker']})" if x["name"] and x["ticker"]
-                 else x["name"] or x["ticker"] for x in c["companies"]]
+    companies = [
+        f"{x['name']} ({x['ticker']})" if x["name"] and x["ticker"] else x["name"] or x["ticker"]
+        for x in c["companies"]
+    ]
     if companies := [x for x in companies if x]:
         lines.append(f"Companies: {', '.join(companies)}")
     if c["government"]:
         lines.append(f"Government: {', '.join(c['government'])}")
     if c["figures"]:
-        lines.append("Figures: " + "; ".join(
-            f"{f['label']} {f['value']} {f['unit']}".strip() for f in c["figures"]))
+        lines.append(
+            "Figures: "
+            + "; ".join(f"{f['label']} {f['value']} {f['unit']}".strip() for f in c["figures"])
+        )
     if c["why_it_matters"]:
         lines.append(f"Why it matters: {c['why_it_matters']}")
     return "\n".join(lines)

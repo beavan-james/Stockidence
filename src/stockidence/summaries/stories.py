@@ -31,13 +31,13 @@ class StoryInput:
     headline: str
     outlet: str | None
     feed_summary: str | None
-    url: str                      # the lead article's link
+    url: str  # the lead article's link
     published_at: datetime
     tickers: tuple[str, ...]
     categories: tuple[str, ...]
     score: float
     article_ids: tuple[str, ...]  # lead first, then the others earliest first
-    texts: tuple[Text, ...]       # readable pages, in the same order
+    texts: tuple[Text, ...]  # readable pages, in the same order
 
     @property
     def key(self) -> str:

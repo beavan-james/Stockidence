@@ -114,8 +114,13 @@ def test_gate_conditional_insider_sentiment(warehouse):
 
 
 def _filing(quarter, year, access_number, end_date):
-    return {"ticker": "AAPL", "quarter": quarter, "year": year,
-            "accessNumber": access_number, "endDate": f"{end_date} 00:00:00"}
+    return {
+        "ticker": "AAPL",
+        "quarter": quarter,
+        "year": year,
+        "accessNumber": access_number,
+        "endDate": f"{end_date} 00:00:00",
+    }
 
 
 def test_gate_conditional_financials_reported(warehouse):

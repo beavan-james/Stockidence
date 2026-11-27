@@ -22,13 +22,14 @@ connection open), land (write raw.news_article_pages).
 
 from __future__ import annotations
 
+import re
+import string
 import time
-import urllib.robotparser
 from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -130,6 +131,90 @@ def new_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
     )
 
 
+# --- robots.txt -------------------------------------------------------------
+
+_UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
+_PRINTABLE = "".join(map(chr, range(0x21, 0x7F)))  # ASCII without space or controls
+
+
+def _canonical(path: str) -> str:
+    """One spelling for a path, so a rule and a URL compare octet by octet:
+    non-ASCII and spaces percent-encoded, escaped unreserved characters
+    decoded, other escapes upper-cased (RFC 9309 section 2.2.2)."""
+
+    def unescape(m: re.Match[str]) -> str:
+        char = chr(int(m[0][1:], 16))
+        return char if char in _UNRESERVED else m[0].upper()
+
+    return re.sub(r"%[0-9A-Fa-f]{2}", unescape, quote(path, safe=_PRINTABLE))
+
+
+def _matches(pattern: str, path: str) -> bool:
+    """Whether path starts with pattern, where * matches any run of
+    characters and a final $ matches the end of the path. Tracks every
+    place in the path the pattern so far can end at, so a pattern full of
+    * can't make it backtrack."""
+    ends = [0]
+    for i, char in enumerate(pattern):
+        if char == "$" and i == len(pattern) - 1:
+            return ends[-1] == len(path)
+        if char == "*":
+            ends = list(range(ends[0], len(path) + 1))
+        else:
+            ends = [end + 1 for end in ends if path.startswith(char, end)]
+            if not ends:
+                return False
+    return True
+
+
+def _product_token(value: str) -> str:
+    """The crawler a user-agent line names: * or its leading letters, - and
+    _ (so Googlebot/2.1 names googlebot), lower-cased."""
+    if value.startswith("*"):
+        return "*"
+    return re.match(r"[A-Za-z_-]*", value)[0].lower()
+
+
+class Robots:
+    """A robots.txt, read as RFC 9309 says.
+
+    A crawler obeys every group that names its product token (in any case),
+    combined, or else the * group. Of those rules, the longest one that
+    matches the URL's path wins, and Allow wins a tie. A path no rule
+    matches is allowed.
+    """
+
+    def __init__(self, text: str = "") -> None:
+        self.groups: dict[str, list[tuple[bool, str]]] = {}  # crawler -> [(allow, pattern)]
+        agents: list[str] = []
+        in_rules = False  # a user-agent line after a rule starts a new group
+        for line in text.removeprefix("\ufeff").splitlines():
+            key, _, value = line.split("#", 1)[0].partition(":")
+            key, value = key.strip().lower(), value.strip()
+            if key == "user-agent":
+                if in_rules:
+                    agents, in_rules = [], False
+                agents.append(_product_token(value))
+                self.groups.setdefault(agents[-1], [])
+            elif key in ("allow", "disallow") and agents:
+                in_rules = True
+                if value:  # an empty Disallow blocks nothing
+                    for agent in agents:
+                        self.groups[agent].append((key == "allow", _canonical(value)))
+
+    def allows(self, agent: str, path: str) -> bool:
+        """Whether the crawler with this product token may fetch path (the
+        URL's path and query)."""
+        rules = self.groups.get(agent.lower(), self.groups.get("*", []))
+        path = _canonical(path)
+        matched = [(len(pattern), allow) for allow, pattern in rules if _matches(pattern, path)]
+        return max(matched)[1] if matched else True
+
+
+NO_RULES = Robots()
+KEEP_OUT = Robots("User-agent: *\nDisallow: /")
+
+
 class ArticleFetcher:
     """Fetches pages politely: robots.txt first (once per domain per run),
     one request at a time, SAME_DOMAIN_GAP seconds between requests to a
@@ -145,7 +230,7 @@ class ArticleFetcher:
         self.client = client or new_client()
         self._sleep = sleep
         self._clock = clock
-        self._robots: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+        self._robots: dict[str, Robots | None] = {}
         self._last: dict[str, float] = {}
         self.page_requests = 0
 
@@ -164,7 +249,7 @@ class ArticleFetcher:
             if gap > 0:
                 self._sleep(gap)
 
-    def _robots_for(self, scheme: str, host: str) -> urllib.robotparser.RobotFileParser | None:
+    def _robots_for(self, scheme: str, host: str) -> Robots | None:
         """The domain's robots.txt; None when it couldn't be read.
 
         401/403 means keep out; any other 4xx means there are no rules; a
@@ -173,35 +258,34 @@ class ArticleFetcher:
         key = f"{scheme}://{host}"
         if key in self._robots:
             return self._robots[key]
-        parser: urllib.robotparser.RobotFileParser | None = urllib.robotparser.RobotFileParser()
+        robots: Robots | None = None  # stays None on a 5xx or a failed request
         self._wait(host)
         try:
             resp = self.client.get(f"{key}/robots.txt",
                                    headers={"Accept": ROBOTS_ACCEPT, **self._agent(host)})
             if resp.status_code in (401, 403):
-                parser.disallow_all = True
+                robots = KEEP_OUT
             elif 400 <= resp.status_code < 500:
-                parser.allow_all = True
-            elif resp.status_code != 200:
-                parser = None
-            else:
-                parser.parse(resp.text.splitlines())
+                robots = NO_RULES
+            elif resp.status_code == 200:
+                robots = Robots(resp.text)
         except httpx.HTTPError:
-            parser = None
+            pass
         finally:
             self._last[host] = self._clock()
-        self._robots[key] = parser
-        return parser
+        self._robots[key] = robots
+        return robots
 
     def verdict(self, url: str) -> str:
         """What robots.txt says about reading this URL."""
         parts = urlsplit(url)
-        parser = self._robots_for(parts.scheme or "https", parts.netloc.lower())
-        if parser is None:
+        robots = self._robots_for(parts.scheme or "https", parts.netloc.lower())
+        if robots is None:
             return UNREACHABLE
-        if not parser.can_fetch(USER_AGENT, url):
+        path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+        if not robots.allows(PRODUCT_TOKEN, path):
             return DISALLOWED
-        if any(not parser.can_fetch(bot, url) for bot in AI_CRAWLERS):
+        if any(not robots.allows(bot, path) for bot in AI_CRAWLERS):
             return AI_OPTOUT
         return ALLOWED
 
@@ -214,7 +298,9 @@ class ArticleFetcher:
         try:
             status, final_url, html, error = self._download(host, url)
         except httpx.HTTPError as exc:
-            return Page(url, host, ALLOWED, requested=True, error=f"{type(exc).__name__}: {exc}"[:300])
+            return Page(
+                url, host, ALLOWED, requested=True, error=f"{type(exc).__name__}: {exc}"[:300]
+            )
         page = Page(url, host, ALLOWED, True, status, final_url, html, error)
         if html is None:
             return page
@@ -223,7 +309,9 @@ class ArticleFetcher:
         if final_host != host:
             elsewhere = self.verdict(final_url)
             if elsewhere != ALLOWED:
-                return replace(page, robots=elsewhere, html=None, error=f"redirected to {final_host}")
+                return replace(
+                    page, robots=elsewhere, html=None, error=f"redirected to {final_host}"
+                )
         return replace(page, words=extract_text(html, final_url).words)
 
     def _download(self, host: str, url: str) -> tuple[int, str, str | None, str | None]:
@@ -236,18 +324,29 @@ class ArticleFetcher:
                     return status, final_url, None, f"HTTP {status}"
                 content_type = resp.headers.get("content-type", "")
                 if "html" not in content_type.lower():
-                    return status, final_url, None, f"not HTML ({content_type or 'no content type'})"
+                    return (
+                        status,
+                        final_url,
+                        None,
+                        f"not HTML ({content_type or 'no content type'})",
+                    )
                 body = bytearray()
                 for chunk in resp.iter_bytes():
                     body.extend(chunk)
                     if len(body) > MAX_BYTES:
                         return status, final_url, None, f"page over {MAX_BYTES // 1_000_000} MB"
-                return status, final_url, body.decode(resp.charset_encoding or "utf-8", "replace"), None
+                return (
+                    status,
+                    final_url,
+                    body.decode(resp.charset_encoding or "utf-8", "replace"),
+                    None,
+                )
         finally:
             self._last[host] = self._clock()
 
 
 # --- plan -------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class StoryLinks:
@@ -272,14 +371,23 @@ def digests_to_read(built: Iterable[dict]) -> list[tuple[str, date]]:
     return list(dict.fromkeys(keys))
 
 
-def _due(robots: str | None, http_status: int | None, has_html: bool,
-         attempts: int | None, waited: bool | None) -> bool:
+def _due(
+    robots: str | None,
+    http_status: int | None,
+    has_html: bool,
+    attempts: int | None,
+    waited: bool | None,
+) -> bool:
     if robots is None:  # never tried
         return True
-    return (attempts or 0) < MAX_ATTEMPTS and bool(waited) and retryable(robots, http_status, has_html)
+    return (
+        (attempts or 0) < MAX_ATTEMPTS and bool(waited) and retryable(robots, http_status, has_html)
+    )
 
 
-def plan(warehouse: Warehouse, digests: Iterable[tuple[str, date]], now: datetime) -> list[StoryLinks]:
+def plan(
+    warehouse: Warehouse, digests: Iterable[tuple[str, date]], now: datetime
+) -> list[StoryLinks]:
     """Each picked story still without readable text, with the URLs worth
     trying now. A URL in two digests (a story picked on Tuesday and again
     for the week) is planned once."""
@@ -327,8 +435,10 @@ def plan(warehouse: Warehouse, digests: Iterable[tuple[str, date]], now: datetim
 
 # --- fetch and land ---------------------------------------------------------
 
-def fetch_stories(fetcher: ArticleFetcher, stories: Iterable[StoryLinks],
-                  max_requests: int = MAX_REQUESTS) -> list[Page]:
+
+def fetch_stories(
+    fetcher: ArticleFetcher, stories: Iterable[StoryLinks], max_requests: int = MAX_REQUESTS
+) -> list[Page]:
     """Try each story's URLs in order until one is readable, requesting at
     most TRIES_PER_STORY pages per story and max_requests in all."""
     pages: list[Page] = []
@@ -362,8 +472,10 @@ def land_pages(warehouse: Warehouse, pages: list[Page], now: datetime) -> int:
                 final_url = excluded.final_url, html = excluded.html, error = excluded.error,
                 attempts = news_article_pages.attempts + 1, last_tried_at = excluded.last_tried_at
             """,
-            [[p.url, p.domain, p.robots, p.http_status, p.final_url, p.html, p.error, now, now]
-             for p in pages],
+            [
+                [p.url, p.domain, p.robots, p.http_status, p.final_url, p.html, p.error, now, now]
+                for p in pages
+            ],
         )
     return len(pages)
 

@@ -23,10 +23,17 @@ def news_db(tmp_path, monkeypatch):
     wh.init_schema()
     with wh.connect() as con:
         for aid, title, ts in ARTICLES:
-            payload = {"title": title, "url": f"https://news/{aid}", "time_published": ts,
-                       "source": "Example", "ticker_sentiment": []}
-            con.execute("INSERT INTO raw.raw_news_articles VALUES (?, ?, current_timestamp)",
-                        [aid, json.dumps(payload)])
+            payload = {
+                "title": title,
+                "url": f"https://news/{aid}",
+                "time_published": ts,
+                "source": "Example",
+                "ticker_sentiment": [],
+            }
+            con.execute(
+                "INSERT INTO raw.raw_news_articles VALUES (?, ?, current_timestamp)",
+                [aid, json.dumps(payload)],
+            )
     monkeypatch.setenv("STOCKIDENCE_DB", str(tmp_path / "news.duckdb"))
     market._PATH = None
     yield

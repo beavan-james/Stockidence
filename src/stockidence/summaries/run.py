@@ -32,13 +32,19 @@ class CardRun:
 @dataclass(frozen=True)
 class SummaryRun:
     written: tuple[Summary, ...]
-    skipped: tuple[Digest, ...]     # already written from the same stories
-    empty: tuple[Digest, ...]       # no stories to write about
+    skipped: tuple[Digest, ...]  # already written from the same stories
+    empty: tuple[Digest, ...]  # no stories to write about
     error: str | None = None
 
 
-def make_cards(llm: Ollama, inputs: SummaryInputs, clock: Clock, *, redo: bool = False,
-               on_card: Callable[[Card], None] | None = None) -> CardRun:
+def make_cards(
+    llm: Ollama,
+    inputs: SummaryInputs,
+    clock: Clock,
+    *,
+    redo: bool = False,
+    on_card: Callable[[Card], None] | None = None,
+) -> CardRun:
     made: list[Card] = []
     groups = group_stories(list(inputs.stories))
     try:
@@ -60,14 +66,18 @@ def _done(existing: tuple[Summary, ...] | None, keys: list[str]) -> bool:
     return {k for s in existing for k in s.story_keys} == set(keys)
 
 
-def daily_cards(day: date, inputs: SummaryInputs, cards: dict[str, Card]) -> list[tuple[StoryInput, Card]]:
+def daily_cards(
+    day: date, inputs: SummaryInputs, cards: dict[str, Card]
+) -> list[tuple[StoryInput, Card]]:
     """The day's stories in rank order, each with its own card, or with the
     card of the story it joins up with in another digest."""
     groups = group_stories(list(inputs.stories))
     group_of = {id(s): g for g in groups for s in g}
     pairs = []
-    for story in sorted((s for s in inputs.stories if s.period == "daily" and s.digest_date == day),
-                        key=lambda s: s.rank):
+    for story in sorted(
+        (s for s in inputs.stories if s.period == "daily" and s.digest_date == day),
+        key=lambda s: s.rank,
+    ):
         own = [cards[a] for a in story.article_ids if a in cards]
         found = own or cards_of(group_of[id(story)], cards)
         if found:
@@ -78,13 +88,17 @@ def daily_cards(day: date, inputs: SummaryInputs, cards: dict[str, Card]) -> lis
 def week_stories(friday: date, inputs: SummaryInputs) -> list[StoryInput]:
     """The weekly digest's stories and those of the week's daily digests."""
     monday = friday - timedelta(days=4)
-    return [s for s in inputs.stories
-            if (s.period == "weekly" and s.digest_date == friday)
-            or (s.period == "daily" and monday <= s.digest_date <= friday)]
+    return [
+        s
+        for s in inputs.stories
+        if (s.period == "weekly" and s.digest_date == friday)
+        or (s.period == "daily" and monday <= s.digest_date <= friday)
+    ]
 
 
-def write_summaries(llm: Ollama, inputs: SummaryInputs, cards: dict[str, Card], clock: Clock,
-                    *, redo: bool = False) -> SummaryRun:
+def write_summaries(
+    llm: Ollama, inputs: SummaryInputs, cards: dict[str, Card], clock: Clock, *, redo: bool = False
+) -> SummaryRun:
     written: list[Summary] = []
     skipped: list[Digest] = []
     empty: list[Digest] = []
@@ -102,8 +116,12 @@ def write_summaries(llm: Ollama, inputs: SummaryInputs, cards: dict[str, Card], 
                 else:
                     written.append(write_daily(llm, day, pairs, clock(), market))
             else:
-                sections = plan_week(group_stories(week_stories(day, inputs)), cards,
-                                     inputs.sectors, llm.count_tokens)
+                sections = plan_week(
+                    group_stories(week_stories(day, inputs)),
+                    cards,
+                    inputs.sectors,
+                    llm.count_tokens,
+                )
                 keys = [k for s in sections for k in s.story_keys]
                 if not sections:
                     empty.append((period, day))

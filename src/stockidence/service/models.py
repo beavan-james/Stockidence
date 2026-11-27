@@ -34,7 +34,11 @@ class CategoryScore:
     weight: float
 
     def to_dict(self) -> dict:
-        return {"category": self.category.value, "score": round(self.score, 1), "weight": round(self.weight, 3)}
+        return {
+            "category": self.category.value,
+            "score": round(self.score, 1),
+            "weight": round(self.weight, 3),
+        }
 
 
 @dataclass(frozen=True)

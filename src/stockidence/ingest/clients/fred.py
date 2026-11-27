@@ -35,7 +35,9 @@ class FredClient(BaseClient):
             api_key=key,
             base_url="https://api.stlouisfed.org/fred",
             timeout=timeout,
-            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["fred"]),
+            min_interval_seconds=kwargs.pop(
+                "min_interval_seconds", settings.min_interval_seconds["fred"]
+            ),
             **kwargs,
         )
 

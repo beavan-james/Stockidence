@@ -28,9 +28,19 @@ import pandas as pd
 from stockidence import weekly
 
 SHORT = [
-    "return_1w", "return_4w", "rsi_14", "price_to_sma20", "price_to_sma50",
-    "stoch_k_14", "cci_20", "adx_14", "macd_hist_pct", "bb_pctb",
-    "volume_ratio_13w", "range_1w", "vol_ratio",
+    "return_1w",
+    "return_4w",
+    "rsi_14",
+    "price_to_sma20",
+    "price_to_sma50",
+    "stoch_k_14",
+    "cci_20",
+    "adx_14",
+    "macd_hist_pct",
+    "bb_pctb",
+    "volume_ratio_13w",
+    "range_1w",
+    "vol_ratio",
 ]
 # name -> (target column, horizon in weeks, inputs)
 VARIANTS = {
@@ -80,15 +90,19 @@ def main() -> None:
     df = pd.read_parquet(args.parquet)
     df["date"] = pd.to_datetime(df["date"])
     bench = df[df["ticker"] == weekly.BENCHMARK].set_index("date")[
-        ["target_return", "target_return_13w"]]
+        ["target_return", "target_return_13w"]
+    ]
 
     rows = []
     for name in args.variants.split(","):
         target, horizon, features = VARIANTS[name]
         md = weekly.training_frame(df, "target_return", features)
         scored = weekly.walk_forward(md, target, features, horizon)
-        scored = scored.merge(md[["date", "ticker", "target_return_13w"]], how="left") \
-            if "target_return_13w" not in scored else scored
+        scored = (
+            scored.merge(md[["date", "ticker", "target_return_13w"]], how="left")
+            if "target_return_13w" not in scored
+            else scored
+        )
         rows.append({"variant": name, **grade(scored, bench)})
         print(f"{name}: {rows[-1]['weeks']} weeks", flush=True)
 

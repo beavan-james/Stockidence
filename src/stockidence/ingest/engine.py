@@ -18,7 +18,7 @@ holds no per-endpoint response logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .clients.agencies import AgencyFeedClient
@@ -29,8 +29,7 @@ from .clients.sec_edgar import SecEdgarClient
 from .clients.twelve_data import TwelveDataClient
 from .endpoints import EndpointSpec, Provider, get_endpoint
 from .raw_mapping import MERGERS, normalize_for
-from .staleness import FetchDecision, StalenessGate
-from ..storage import Warehouse
+from .staleness import StalenessGate
 
 _PROVIDER_CLIENTS = {
     Provider.FINNHUB: FinnhubClient,
@@ -73,9 +72,9 @@ class IngestResult:
 
 def _utc(now: datetime | None) -> datetime:
     if now is None:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
     if now.tzinfo is None:
-        return now.replace(tzinfo=timezone.utc)
+        return now.replace(tzinfo=UTC)
     return now
 
 
@@ -102,7 +101,9 @@ class IngestEngine:
             raise ValueError(f"{spec.name}: DERIVED endpoints cannot be called via the API")
         return method(**kwargs)
 
-    def _call_kwargs(self, spec: EndpointSpec, dimension_key: str, now: datetime, watermark: Any) -> dict[str, Any]:
+    def _call_kwargs(
+        self, spec: EndpointSpec, dimension_key: str, now: datetime, watermark: Any
+    ) -> dict[str, Any]:
         """kwargs for the client method, derived from spec + dimension + state.
 
         dimension_key is "AAPL" for ticker-scoped endpoints, or the full grain
@@ -167,7 +168,9 @@ class IngestEngine:
             raise ValueError(f"sec_balance_sheets: no CIK on record for {ticker}")
         return row[0]
 
-    def _scheduled_kwargs(self, spec: EndpointSpec, now: datetime, params: dict[str, Any] | None) -> dict[str, Any]:
+    def _scheduled_kwargs(
+        self, spec: EndpointSpec, now: datetime, params: dict[str, Any] | None
+    ) -> dict[str, Any]:
         params = dict(params or {})
         if spec.provider == Provider.FRED:
             series = _FRED_SERIES.get(spec.name)
@@ -185,7 +188,10 @@ class IngestEngine:
                     if spec.name == "ipo_calendar"
                     else now.date().isoformat(),
                 )
-                params.setdefault("to_date", (now.date() + timedelta(days=_SCHEDULED_DEFAULT_WINDOW_DAYS)).isoformat())
+                params.setdefault(
+                    "to_date",
+                    (now.date() + timedelta(days=_SCHEDULED_DEFAULT_WINDOW_DAYS)).isoformat(),
+                )
             return params
         return params
 
@@ -206,11 +212,15 @@ class IngestEngine:
                 dimension_key=dimension_key if artifact in _SNAPSHOT_ARTIFACTS else None)
         return written
 
-    def _ingest(self, spec: EndpointSpec, dimension_key: str, kwargs: dict[str, Any], now: datetime) -> IngestResult:
+    def _ingest(
+        self, spec: EndpointSpec, dimension_key: str, kwargs: dict[str, Any], now: datetime
+    ) -> IngestResult:
         payload = self._call(spec, kwargs)
         rows = normalize_for(spec.name, payload, dimension_key, now)
         high_watermark = (
-            max(r["date"].isoformat() for r in rows["raw_prices_daily"]) if spec.name == "prices.daily" else None
+            max(r["date"].isoformat() for r in rows["raw_prices_daily"])
+            if spec.name == "prices.daily"
+            else None
         )
         written = self._land_rows(rows, now, high_watermark, dimension_key)
         return IngestResult(spec.name, dimension_key, True, "fetch complete", written, high_watermark)

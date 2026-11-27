@@ -56,9 +56,9 @@ _LIST_OR_HEADING = re.compile(r"^\s*(?:#|[-*•]\s|\d+[.)]\s)", re.MULTILINE)
 class Summary:
     period: str
     digest_date: date
-    part: int                # 0: the daily paragraph or the weekly overview; 1..n: sections
+    part: int  # 0: the daily paragraph or the weekly overview; 1..n: sections
     heading: str | None
-    body: str | None         # None when only the sources are shown
+    body: str | None  # None when only the sources are shown
     story_keys: tuple[str, ...]
     status: str
     model: str | None
@@ -81,8 +81,15 @@ def tidy_prose(text: str, paragraphs: bool) -> str:
     return "\n\n".join(b for b in blocks if b)
 
 
-def write(llm: Ollama, system: str, given: str, *, words: tuple[int, int], max_output: int,
-          paragraphs: bool) -> tuple[str | None, list[str]]:
+def write(
+    llm: Ollama,
+    system: str,
+    given: str,
+    *,
+    words: tuple[int, int],
+    max_output: int,
+    paragraphs: bool,
+) -> tuple[str | None, list[str]]:
     """Two attempts at a checked piece of prose: (text, problems). The text
     is None when neither passed. Raises ModelUnavailable when the server is down."""
     problems: list[str] = []
@@ -112,10 +119,30 @@ def write(llm: Ollama, system: str, given: str, *, words: tuple[int, int], max_o
     return None, problems
 
 
-def _summary(period: str, day: date, part: int, heading: str | None, text: str | None,
-             keys: list[str], llm: Ollama, now: datetime, problems: list[str]) -> Summary:
-    return Summary(period, day, part, heading, text, tuple(keys), OK if text else SOURCES_ONLY,
-                   llm.model if text else None, PROMPT_VERSION, now, tuple(problems))
+def _summary(
+    period: str,
+    day: date,
+    part: int,
+    heading: str | None,
+    text: str | None,
+    keys: list[str],
+    llm: Ollama,
+    now: datetime,
+    problems: list[str],
+) -> Summary:
+    return Summary(
+        period,
+        day,
+        part,
+        heading,
+        text,
+        tuple(keys),
+        OK if text else SOURCES_ONLY,
+        llm.model if text else None,
+        PROMPT_VERSION,
+        now,
+        tuple(problems),
+    )
 
 
 # --- daily --------------------------------------------------------------------
@@ -150,14 +177,21 @@ def write_daily(llm: Ollama, day: date, stories: list[tuple[StoryInput, Card]],
 
 # --- weekly -------------------------------------------------------------------
 
+
 def _week(friday: date) -> str:
     monday = friday - timedelta(days=4)
     return f"the week of {monday:%A %Y-%m-%d} to {friday:%A %Y-%m-%d}"
 
 
 def section_prompt(friday: date, section: Section, others: list[Section]) -> str:
-    lines = [f"Weekly market news article for {_week(friday)}.",
-             f"This section: {section.heading}", "", "Fact cards:", "", section.rendered()]
+    lines = [
+        f"Weekly market news article for {_week(friday)}.",
+        f"This section: {section.heading}",
+        "",
+        "Fact cards:",
+        "",
+        section.rendered(),
+    ]
     if others:
         lines += ["", "Other sections:"]
         lines += [f"- {o.heading}: {', '.join(names_in(o))}" for o in others]
@@ -182,10 +216,19 @@ def write_weekly(llm: Ollama, friday: date, sections: list[Section], now: dateti
     for n, section in enumerate(sections, start=1):
         others = [o for o in sections if o is not section]
         system = SECTION_SYSTEM.format(low=SECTION_WORDS[0], high=SECTION_WORDS[1])
-        text, problems = write(llm, system, section_prompt(friday, section, others),
-                               words=SECTION_WORDS, max_output=SECTION_OUTPUT, paragraphs=True)
-        parts.append(_summary("weekly", friday, n, section.heading, text, section.story_keys,
-                              llm, now, problems))
+        text, problems = write(
+            llm,
+            system,
+            section_prompt(friday, section, others),
+            words=SECTION_WORDS,
+            max_output=SECTION_OUTPUT,
+            paragraphs=True,
+        )
+        parts.append(
+            _summary(
+                "weekly", friday, n, section.heading, text, section.story_keys, llm, now, problems
+            )
+        )
     system = OVERVIEW_SYSTEM.format(low=OVERVIEW_WORDS[0], high=OVERVIEW_WORDS[1])
     text, problems = write(llm, system, overview_prompt(friday, sections, market),
                            words=OVERVIEW_WORDS, max_output=OVERVIEW_OUTPUT, paragraphs=False)

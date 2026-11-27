@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 from typing import TYPE_CHECKING
 
 from .config import repo_root
@@ -48,9 +49,19 @@ HORIZON_WEEKS = 1
 OUTCOME = "target_return"
 
 FEATURES = [
-    "price_to_sma200", "stddev_252", "max_drawdown_252", "atr_pct",
-    "return_3m", "return_12m", "distance_from_52wk_high",
-    "roe", "roa", "debt_equity", "current_ratio", "cash_to_assets", "fcf_to_assets",
+    "price_to_sma200",
+    "stddev_252",
+    "max_drawdown_252",
+    "atr_pct",
+    "return_3m",
+    "return_12m",
+    "distance_from_52wk_high",
+    "roe",
+    "roa",
+    "debt_equity",
+    "current_ratio",
+    "cash_to_assets",
+    "fcf_to_assets",
 ]
 
 # S&P 500 benchmark, bought at the same Monday open as the picks. Refreshed
@@ -60,9 +71,16 @@ BENCHMARK = "VOO"
 EXCLUDED = frozenset({"AMBP", "BE", "BRK.B", "CRM", "FI", "NBIS", BENCHMARK})
 
 PARAMS = {
-    "objective": "rank:ndcg", "tree_method": "hist",
-    "max_depth": 3, "eta": 0.05, "subsample": 0.8, "colsample_bytree": 0.8,
-    "reg_alpha": 0.1, "reg_lambda": 1.0, "seed": 42, "nthread": -1,
+    "objective": "rank:ndcg",
+    "tree_method": "hist",
+    "max_depth": 3,
+    "eta": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "seed": 42,
+    "nthread": -1,
 }
 N_ROUNDS = 150
 N_GRADES = 5
@@ -92,7 +110,7 @@ def snapshot_date(label) -> str:
     return str((pd.Timestamp(label) + pd.Timedelta(days=4)).date())
 
 
-def week_label(as_of) -> "pd.Timestamp":
+def week_label(as_of) -> pd.Timestamp:
     """Inverse of snapshot_date: Friday as_of -> the Monday row label."""
     import pandas as pd
 
@@ -129,11 +147,13 @@ def rebuild_weekly_dataset(now=None) -> dict:
     with Warehouse().connect(read_only=True) as con:
         newest = con.execute("SELECT MAX(date) FROM staging.stg_prices_daily").fetchone()[0]
         week = bd.last_closed_week(newest, now)
-        closes = dict(con.execute(
-            "SELECT ticker, MAX(date) FROM staging.stg_prices_daily"
-            " WHERE date >= ? AND date < ? GROUP BY ticker",
-            [week.date(), (week + pd.Timedelta(weeks=1)).date()],
-        ).fetchall())
+        closes = dict(
+            con.execute(
+                "SELECT ticker, MAX(date) FROM staging.stg_prices_daily"
+                " WHERE date >= ? AND date < ? GROUP BY ticker",
+                [week.date(), (week + pd.Timedelta(weeks=1)).date()],
+            ).fetchall()
+        )
     if not closes:
         raise RuntimeError(f"no price bars in the week of {week.date()}; nothing to score")
     week_close = max(closes.values())
@@ -156,7 +176,7 @@ def rebuild_weekly_dataset(now=None) -> dict:
     labeled.to_parquet(TRAIN_PARQUET, index=False)
     score.to_parquet(SCORE_PARQUET, index=False)
     return {
-        "rows": int(len(labeled)),
+        "rows": len(labeled),
         "tickers": int(labeled["ticker"].nunique()),
         "first_week": snapshot_date(labeled["date"].min()),
         "last_week": snapshot_date(labeled["date"].max()),
@@ -171,8 +191,9 @@ def rebuild_weekly_dataset(now=None) -> dict:
 # ── Model ───────────────────────────────────────────────────────────────────
 
 
-def training_frame(df: pd.DataFrame, target: str = TARGET,
-                   features: list[str] = FEATURES) -> pd.DataFrame:
+def training_frame(
+    df: pd.DataFrame, target: str = TARGET, features: list[str] = FEATURES
+) -> pd.DataFrame:
     """Rows the ranker can learn from: known target, every feature present,
     and a real cohort each week (MIN_COHORT tickers)."""
     md = df[~df["ticker"].isin(EXCLUDED)].dropna(subset=features + [target])
@@ -180,8 +201,9 @@ def training_frame(df: pd.DataFrame, target: str = TARGET,
     return md[sizes >= MIN_COHORT].reset_index(drop=True)
 
 
-def fit_ranker(rows: pd.DataFrame, target: str = TARGET,
-               features: list[str] = FEATURES) -> xgb.Booster:
+def fit_ranker(
+    rows: pd.DataFrame, target: str = TARGET, features: list[str] = FEATURES
+) -> xgb.Booster:
     """One rank:ndcg fit; each week is a query group graded into quintiles
     of its realized return (grades come from training rows only)."""
     import numpy as np
@@ -189,15 +211,23 @@ def fit_ranker(rows: pd.DataFrame, target: str = TARGET,
     import xgboost as xgb
 
     rows = rows.sort_values("date")
-    grades = rows.groupby("date")[target].transform(
-        lambda s: pd.qcut(s.rank(method="first"), N_GRADES, labels=False)).astype(int)
+    grades = (
+        rows.groupby("date")[target]
+        .transform(lambda s: pd.qcut(s.rank(method="first"), N_GRADES, labels=False))
+        .astype(int)
+    )
     dm = xgb.DMatrix(rows[features], label=grades)
     dm.set_group(np.bincount(rows["date"].astype("category").cat.codes.values))
     return xgb.train(PARAMS, dm, num_boost_round=N_ROUNDS)
 
 
-def walk_forward(md: pd.DataFrame, target: str = TARGET, features: list[str] = FEATURES,
-                 horizon_weeks: int = HORIZON_WEEKS, start: str = BACKTEST_START) -> pd.DataFrame:
+def walk_forward(
+    md: pd.DataFrame,
+    target: str = TARGET,
+    features: list[str] = FEATURES,
+    horizon_weeks: int = HORIZON_WEEKS,
+    start: str = BACKTEST_START,
+) -> pd.DataFrame:
     """Out-of-sample scores for every week since `start`.
 
     Refits once a quarter on rows whose outcome had closed by that quarter's
@@ -224,8 +254,7 @@ def walk_forward(md: pd.DataFrame, target: str = TARGET, features: list[str] = F
     return pd.concat(out, ignore_index=True)
 
 
-def weekly_results(scored: pd.DataFrame, bench: pd.Series,
-                   outcome: str = OUTCOME) -> pd.DataFrame:
+def weekly_results(scored: pd.DataFrame, bench: pd.Series, outcome: str = OUTCOME) -> pd.DataFrame:
     """Per week: top-10 and whole-list equal-weight `outcome`, the
     benchmark's, the cross-sectional rank IC and precision@10."""
     import pandas as pd
@@ -234,15 +263,17 @@ def weekly_results(scored: pd.DataFrame, bench: pd.Series,
     for d, g in scored.dropna(subset=[outcome]).groupby("date"):
         g = g.sort_values("pred", ascending=False)
         realized_top = g[outcome].rank(ascending=False, method="first") <= TOP_K
-        rows.append({
-            "date": d,
-            "n": len(g),
-            "top10": g[outcome].head(TOP_K).mean(),
-            "universe": g[outcome].mean(),
-            "spx": bench.get(d),
-            "ic": g["pred"].corr(g[outcome], method="spearman"),
-            "prec10": realized_top.head(TOP_K).mean(),
-        })
+        rows.append(
+            {
+                "date": d,
+                "n": len(g),
+                "top10": g[outcome].head(TOP_K).mean(),
+                "universe": g[outcome].mean(),
+                "spx": bench.get(d),
+                "ic": g["pred"].corr(g[outcome], method="spearman"),
+                "prec10": realized_top.head(TOP_K).mean(),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -254,7 +285,7 @@ def validation_summary(weeks: pd.DataFrame) -> dict:
     excess = weeks["top10"] - weeks["universe"]
     vs_spx = (weeks["top10"] - weeks["spx"]).dropna()
     return {
-        "weeks": int(len(weeks)),
+        "weeks": len(weeks),
         "test_rows": int(weeks["n"].sum()),
         "rank_ic": float(weeks["ic"].mean()),
         "top10_excess": float(excess.mean()),
@@ -277,8 +308,7 @@ def rank_cohort(bst: xgb.Booster, cohort: pd.DataFrame) -> pd.DataFrame:
     import xgboost as xgb
 
     cohort = _rankable(cohort)
-    ranked = cohort[["ticker", "sector"]].assign(
-        score=bst.predict(xgb.DMatrix(cohort[FEATURES])))
+    ranked = cohort[["ticker", "sector"]].assign(score=bst.predict(xgb.DMatrix(cohort[FEATURES])))
     ranked = ranked.sort_values("score", ascending=False).reset_index(drop=True)
     ranked["rank"] = range(1, len(ranked) + 1)
     return ranked
@@ -300,7 +330,10 @@ def feature_importance(bst: xgb.Booster, cohort: pd.DataFrame) -> dict[str, floa
 
 def _clean(v):
     """NaN -> None for DuckDB parameters."""
-    return None if v is None or v != v else float(v)
+    if v is None:
+        return None
+    f = float(v)
+    return None if math.isnan(f) else f
 
 
 def export_weekly(
@@ -323,11 +356,19 @@ def export_weekly(
     """
     import pandas as pd
 
-    rows = [(as_of, int(r.rank), r.ticker, r.sector, round(float(r.score), 6))
-            for r in ranked.itertuples()]
+    rows = [
+        (as_of, int(r.rank), r.ticker, r.sector, round(float(r.score), 6))
+        for r in ranked.itertuples()
+    ]
     backtest = [
-        (snapshot_date(w.date), "backtest", _clean(w.top10), _clean(w.universe),
-         _clean(w.spx), int(w.n))
+        (
+            snapshot_date(w.date),
+            "backtest",
+            _clean(w.top10),
+            _clean(w.universe),
+            _clean(w.spx),
+            int(w.n),
+        )
         for w in weeks.itertuples()
     ]
     realized = outcomes.set_index(["date", "ticker"])[OUTCOME]
@@ -337,16 +378,24 @@ def export_weekly(
         con.execute("DELETE FROM mart.weekly_rankings WHERE as_of = ?", [as_of])
         con.executemany(
             "INSERT INTO mart.weekly_rankings (as_of, rank, ticker, sector, score)"
-            " VALUES (?, ?, ?, ?, ?)", rows)
+            " VALUES (?, ?, ?, ?, ?)",
+            rows,
+        )
         con.execute("DELETE FROM mart.weekly_feature_importance WHERE as_of = ?", [as_of])
         con.executemany(
             "INSERT INTO mart.weekly_feature_importance (as_of, feature, mean_abs_contribution)"
-            " VALUES (?, ?, ?)", [(as_of, f, v) for f, v in importance.items()])
+            " VALUES (?, ?, ?)",
+            [(as_of, f, v) for f, v in importance.items()],
+        )
 
-        pending = [d for (d,) in con.execute(
-            "SELECT DISTINCT as_of FROM mart.weekly_rankings"
-            " WHERE realized_return IS NULL AND as_of < ? ORDER BY as_of", [as_of]
-        ).fetchall()]
+        pending = [
+            d
+            for (d,) in con.execute(
+                "SELECT DISTINCT as_of FROM mart.weekly_rankings"
+                " WHERE realized_return IS NULL AND as_of < ? ORDER BY as_of",
+                [as_of],
+            ).fetchall()
+        ]
         for d in pending:
             label = week_label(d)
             listed = con.execute(
@@ -357,29 +406,49 @@ def export_weekly(
                 continue  # that week hasn't closed yet
             con.executemany(
                 "UPDATE mart.weekly_rankings SET realized_return = ? WHERE as_of = ? AND ticker = ?",
-                [(_clean(v), d, t) for t, v in values.items()])
-            frame = pd.DataFrame(listed, columns=["ticker", "rank"]).assign(
-                ret=[_clean(values[t]) for t, _ in listed]).dropna(subset=["ret"])
-            con.execute("DELETE FROM mart.weekly_track_record WHERE week = ? AND source = 'live'", [d])
+                [(_clean(v), d, t) for t, v in values.items()],
+            )
+            frame = (
+                pd.DataFrame(listed, columns=["ticker", "rank"])
+                .assign(ret=[_clean(values[t]) for t, _ in listed])
+                .dropna(subset=["ret"])
+            )
+            con.execute(
+                "DELETE FROM mart.weekly_track_record WHERE week = ? AND source = 'live'", [d]
+            )
             con.execute(
                 "INSERT INTO mart.weekly_track_record"
                 " (week, source, top10_return, universe_return, spx_return, n_stocks)"
                 " VALUES (?, 'live', ?, ?, ?, ?)",
-                [d, float(frame[frame["rank"] <= TOP_K]["ret"].mean()),
-                 float(frame["ret"].mean()), _clean(bench.get(label)), len(frame)])
+                [
+                    d,
+                    float(frame[frame["rank"] <= TOP_K]["ret"].mean()),
+                    float(frame["ret"].mean()),
+                    _clean(bench.get(label)),
+                    len(frame),
+                ],
+            )
             graded.append(str(d))
 
         con.execute("DELETE FROM mart.weekly_track_record WHERE source = 'backtest'")
         con.executemany(
             "INSERT INTO mart.weekly_track_record"
             " (week, source, top10_return, universe_return, spx_return, n_stocks)"
-            " VALUES (?, ?, ?, ?, ?, ?)", backtest)
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            backtest,
+        )
 
-        v = {"run_at": pd.Timestamp.now(tz="UTC").tz_localize(None).to_pydatetime(),
-             "as_of": as_of, "target": TARGET, **validation}
+        v = {
+            "run_at": pd.Timestamp.now(tz="UTC").tz_localize(None).to_pydatetime(),
+            "as_of": as_of,
+            "target": TARGET,
+            **validation,
+        }
         con.execute(
             f"INSERT INTO mart.weekly_validation ({', '.join(v)})"
-            f" VALUES ({', '.join('?' * len(v))})", list(v.values()))
+            f" VALUES ({', '.join('?' * len(v))})",
+            list(v.values()),
+        )
     return {"ranked": len(rows), "backtest_weeks": len(backtest), "graded_lists": graded}
 
 
@@ -403,7 +472,7 @@ def train_and_rank() -> dict:
     importance = feature_importance(bst, cohort)
     as_of = snapshot_date(cohort["date"].iloc[0])
     validation |= {
-        "train_rows": int(len(md)),
+        "train_rows": len(md),
         "train_tickers": int(md["ticker"].nunique()),
         "train_first": snapshot_date(md["date"].min()),
         "train_last": snapshot_date(md["date"].max()),
@@ -411,13 +480,25 @@ def train_and_rank() -> dict:
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     bst.save_model(str(ARTIFACTS_DIR / f"{MODEL_NAME}.json"))
-    meta = {"model": MODEL_NAME, "objective": PARAMS["objective"], "target": TARGET,
-            "features": FEATURES, "excluded": sorted(EXCLUDED), "n_rounds": N_ROUNDS,
-            "params": PARAMS, "as_of": as_of, **validation}
+    meta = {
+        "model": MODEL_NAME,
+        "objective": PARAMS["objective"],
+        "target": TARGET,
+        "features": FEATURES,
+        "excluded": sorted(EXCLUDED),
+        "n_rounds": N_ROUNDS,
+        "params": PARAMS,
+        "as_of": as_of,
+        **validation,
+    }
     (ARTIFACTS_DIR / f"{MODEL_NAME}.meta.json").write_text(json.dumps(meta, indent=2))
 
     warehouse = Warehouse()
     warehouse.init_schema()
     exported = export_weekly(warehouse, as_of, ranked, importance, weeks, validation, train, bench)
-    return {"as_of": as_of, "top10": ranked["ticker"].head(TOP_K).tolist(),
-            **validation, **exported}
+    return {
+        "as_of": as_of,
+        "top10": ranked["ticker"].head(TOP_K).tolist(),
+        **validation,
+        **exported,
+    }
