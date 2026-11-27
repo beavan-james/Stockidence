@@ -3,3 +3,5 @@
 
 # style: format the codebase with ruff
 5e373933e10f17c73a241ee12b741da1dbcccbfe
+# style: format the #30/#31 code with ruff
+a49beab53b8a0a7387b5e09a770a9fe800514d68
