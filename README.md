@@ -235,7 +235,21 @@ Push-to-deploy over SSH is intentionally unsupported: port 22 allows one
 admin IP only, and Actions runners egress from unallowlistable Azure ranges.
 Instead the box polls itself — `scripts/auto-deploy.sh` on a 5-minute cron
 fast-forwards to `origin/master` and rebuilds + health-checks only when the
-commit moved (lock-guarded, logs to `auto-deploy.log`):
+commit moved (lock-guarded, logs to `auto-deploy.log`).
+
+It deploys a commit only once the `CI` workflow's push run for that exact
+commit has passed. `scripts/ci_gate.py` asks GitHub's public REST API over
+HTTPS, so the box needs outbound access but no token:
+
+| CI for the new commit | What the box does |
+| --- | --- |
+| passed | deploys |
+| queued, running or not started yet | waits quietly and asks again next run |
+| failed, cancelled or timed out | doesn't deploy, logs it once |
+| GitHub unreachable or answer unreadable | doesn't deploy, logs it every run |
+
+A commit pushed with `[skip ci]` never gets a run, so it waits for the next
+commit that does. Install the cron entry with:
 
 ```bash
 (crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/Stockidence/scripts/auto-deploy.sh >> $HOME/Stockidence/auto-deploy.log 2>&1") | crontab -
