@@ -50,8 +50,7 @@ def get_rating(ticker: str) -> dict:
     # listing isn't available (offline dev / fresh warehouse).
     if warehouse.ticker_exists(normalized) is False:
         raise ValueError(
-            f"{normalized} isn't in our coverage universe — "
-            "pick one of the suggested symbols."
+            f"{normalized} isn't in our coverage universe — pick one of the suggested symbols."
         )
 
     rating = warehouse.load_rating_from_warehouse(normalized)

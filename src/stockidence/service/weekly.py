@@ -19,8 +19,17 @@ def _week_of(as_of: date) -> str:
 
 
 def _empty() -> dict:
-    return {"as_of": None, "week_of": None, "universe_size": 0, "items": [], "weights": [],
-            "previous": None, "backtest": None, "live": None, "validation": None}
+    return {
+        "as_of": None,
+        "week_of": None,
+        "universe_size": 0,
+        "items": [],
+        "weights": [],
+        "previous": None,
+        "backtest": None,
+        "live": None,
+        "validation": None,
+    }
 
 
 def get_weekly() -> dict:
@@ -69,9 +78,12 @@ def _fetch_weekly() -> dict:
 
     with read_connect() as con:
         try:
-            dates = [d for (d,) in con.execute(
-                "SELECT DISTINCT as_of FROM mart.weekly_rankings ORDER BY as_of DESC LIMIT 2"
-            ).fetchall()]
+            dates = [
+                d
+                for (d,) in con.execute(
+                    "SELECT DISTINCT as_of FROM mart.weekly_rankings ORDER BY as_of DESC LIMIT 2"
+                ).fetchall()
+            ]
         except Exception as exc:
             if not _missing_table(exc):
                 raise
@@ -92,16 +104,24 @@ def _fetch_weekly() -> dict:
             [prev, latest],
         ).fetchall()
         weights = _weights(con, latest)
-        prev_items = con.execute(
-            "SELECT rank, ticker, sector, realized_return FROM mart.weekly_rankings"
-            " WHERE as_of = ? AND rank <= 10 ORDER BY rank",
-            [prev],
-        ).fetchall() if prev else []
-        prev_week = con.execute(
-            "SELECT top10_return, universe_return, spx_return FROM mart.weekly_track_record"
-            " WHERE week = ? AND source = 'live'",
-            [prev],
-        ).fetchone() if prev else None
+        prev_items = (
+            con.execute(
+                "SELECT rank, ticker, sector, realized_return FROM mart.weekly_rankings"
+                " WHERE as_of = ? AND rank <= 10 ORDER BY rank",
+                [prev],
+            ).fetchall()
+            if prev
+            else []
+        )
+        prev_week = (
+            con.execute(
+                "SELECT top10_return, universe_return, spx_return FROM mart.weekly_track_record"
+                " WHERE week = ? AND source = 'live'",
+                [prev],
+            ).fetchone()
+            if prev
+            else None
+        )
         track = con.execute(
             "SELECT week, source, top10_return, universe_return, spx_return"
             " FROM mart.weekly_track_record ORDER BY week"
@@ -109,8 +129,12 @@ def _fetch_weekly() -> dict:
         cur = con.execute("SELECT * FROM mart.weekly_validation ORDER BY run_at DESC LIMIT 1")
         row = cur.fetchone()
         validation = (
-            {c[0]: (_iso(v) if hasattr(v, "isoformat") else v) for c, v in zip(cur.description, row)}
-            if row else None
+            {
+                c[0]: (_iso(v) if hasattr(v, "isoformat") else v)
+                for c, v in zip(cur.description, row)
+            }
+            if row
+            else None
         )
 
     backtest = [r for r in track if r[1] == "backtest"]
@@ -120,9 +144,13 @@ def _fetch_weekly() -> dict:
         "week_of": _week_of(latest),
         "universe_size": len(items),
         "items": [
-            {"rank": int(rk), "ticker": t, "sector": s,
-             "score": round(float(sc), 4) if sc is not None else None,
-             "previous_rank": int(p) if p is not None else None}
+            {
+                "rank": int(rk),
+                "ticker": t,
+                "sector": s,
+                "score": round(float(sc), 4) if sc is not None else None,
+                "previous_rank": int(p) if p is not None else None,
+            }
             for rk, t, s, sc, p in items
         ],
         "weights": weights,
@@ -136,14 +164,18 @@ def _fetch_weekly() -> dict:
                 {"rank": int(rk), "ticker": t, "sector": s, "realized_return": ret}
                 for rk, t, s, ret in prev_items
             ],
-        } if prev else None,
+        }
+        if prev
+        else None,
         "backtest": {
             **_summary([r[2:] for r in backtest]),
             "track": [
                 {"week": _iso(w), "top10_return": t, "universe_return": u, "spx_return": s}
                 for w, _, t, u, s in backtest
             ],
-        } if backtest else None,
+        }
+        if backtest
+        else None,
         "live": _summary([r[2:] for r in live]) if live else None,
         "validation": validation,
     }

@@ -25,7 +25,9 @@ class AlphaVantageClient(BaseClient):
             api_key=key,
             base_url="https://www.alphavantage.co",
             timeout=timeout,
-            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["alpha_vantage"]),
+            min_interval_seconds=kwargs.pop(
+                "min_interval_seconds", settings.min_interval_seconds["alpha_vantage"]
+            ),
             # shared across all run processes so bulk enqueues can't stampede
             # the free-tier burst limit (see BaseClient._pace_shared)
             pace_file=kwargs.pop("pace_file", settings.alpha_vantage_pace_file or None),

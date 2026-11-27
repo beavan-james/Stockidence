@@ -69,6 +69,7 @@ def _resilient(fn=None, *, attempts: int = 3):
     everything into their documented fallbacks. Missing-DB / missing-duckdb
     (FileNotFoundError, ImportError) are never retried.
     """
+
     def decorate(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -372,13 +373,11 @@ def _fetch_recent_failures(days: int, limit: int) -> list[dict]:
             [days, limit],
         ).fetchall()
     return [
-            {
-                "job_name": r[0],
-                "failed_at": r[1].isoformat() if r[1] else "",
-                "failed_at_display": (
-                    r[1].strftime("%Y-%m-%d %H:%M") + " UTC" if r[1] else ""
-                ),
-                "error": (r[2] or "").splitlines()[0][:160],
-            }
-            for r in rows
-        ]
+        {
+            "job_name": r[0],
+            "failed_at": r[1].isoformat() if r[1] else "",
+            "failed_at_display": (r[1].strftime("%Y-%m-%d %H:%M") + " UTC" if r[1] else ""),
+            "error": (r[2] or "").splitlines()[0][:160],
+        }
+        for r in rows
+    ]

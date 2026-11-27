@@ -38,8 +38,8 @@ DEFAULT_URL = "http://localhost:11434"
 # Matches OLLAMA_CONTEXT_LENGTH in docker-compose.yml; sent with every call,
 # so the budget below and the server always agree.
 CONTEXT = 16384
-MARGIN = 0.10          # of the context, kept free for the chat template and miscounts
-MESSAGE_OVERHEAD = 8   # tokens the chat template adds per message
+MARGIN = 0.10  # of the context, kept free for the chat template and miscounts
+MESSAGE_OVERHEAD = 8  # tokens the chat template adds per message
 # The model card's settings for use without thinking.
 SAMPLING = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5}
 # A weekly section takes ~5 minutes on the server; a call this long means
@@ -61,6 +61,7 @@ class PromptTooLong(ValueError):
 
 
 # --- token counting ---------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TokenCounter:
@@ -94,19 +95,22 @@ def qwen_counter(path: Path | None = None) -> TokenCounter:
     from tokenizers import Tokenizer
 
     tokenizer = Tokenizer.from_file(str(path))
-    return TokenCounter(f"tokenizer {path.name}",
-                        lambda text: len(tokenizer.encode(text, add_special_tokens=False).ids))
+    return TokenCounter(
+        f"tokenizer {path.name}",
+        lambda text: len(tokenizer.encode(text, add_special_tokens=False).ids),
+    )
 
 
 # --- chat ---------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Reply:
     text: str
-    input_tokens: int   # as the server counted them
+    input_tokens: int  # as the server counted them
     output_tokens: int
     seconds: float
-    cut_off: bool       # stopped at the output limit, so the text is incomplete
+    cut_off: bool  # stopped at the output limit, so the text is incomplete
 
 
 class Ollama:
@@ -129,9 +133,11 @@ class Ollama:
 
     @classmethod
     def from_env(cls) -> Ollama:
-        return cls(os.environ.get("OLLAMA_URL", DEFAULT_URL),
-                   os.environ.get("OLLAMA_MODEL", MODEL),
-                   count_tokens=qwen_counter())
+        return cls(
+            os.environ.get("OLLAMA_URL", DEFAULT_URL),
+            os.environ.get("OLLAMA_MODEL", MODEL),
+            count_tokens=qwen_counter(),
+        )
 
     def input_budget(self, max_output: int) -> int:
         """Tokens left for the prompt: the context, less the margin and the
@@ -164,8 +170,7 @@ class Ollama:
             options["temperature"] = temperature
         body: dict[str, Any] = {
             "model": self.model,
-            "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": user}],
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "stream": False,
             "think": False,
             "options": options,
@@ -178,7 +183,9 @@ class Ollama:
         except httpx.HTTPError as e:  # connection refused, timeout, ...
             raise ModelUnavailable(f"{self.url}: {type(e).__name__}: {e}") from e
         if response.status_code != 200:
-            raise ModelUnavailable(f"{self.url}: HTTP {response.status_code}: {response.text[:300]}")
+            raise ModelUnavailable(
+                f"{self.url}: HTTP {response.status_code}: {response.text[:300]}"
+            )
         data = response.json()
         return Reply(
             text=(data.get("message") or {}).get("content", ""),

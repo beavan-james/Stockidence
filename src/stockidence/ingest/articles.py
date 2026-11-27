@@ -188,7 +188,9 @@ class ArticleFetcher:
         try:
             status, final_url, html, error = self._download(host, url)
         except httpx.HTTPError as exc:
-            return Page(url, host, ALLOWED, requested=True, error=f"{type(exc).__name__}: {exc}"[:300])
+            return Page(
+                url, host, ALLOWED, requested=True, error=f"{type(exc).__name__}: {exc}"[:300]
+            )
         page = Page(url, host, ALLOWED, True, status, final_url, html, error)
         if html is None:
             return page
@@ -197,7 +199,9 @@ class ArticleFetcher:
         if final_host != host:
             elsewhere = self.verdict(final_url)
             if elsewhere != ALLOWED:
-                return replace(page, robots=elsewhere, html=None, error=f"redirected to {final_host}")
+                return replace(
+                    page, robots=elsewhere, html=None, error=f"redirected to {final_host}"
+                )
         return replace(page, words=extract_text(html, final_url).words)
 
     def _download(self, host: str, url: str) -> tuple[int, str, str | None, str | None]:
@@ -210,18 +214,29 @@ class ArticleFetcher:
                     return status, final_url, None, f"HTTP {status}"
                 content_type = resp.headers.get("content-type", "")
                 if "html" not in content_type.lower():
-                    return status, final_url, None, f"not HTML ({content_type or 'no content type'})"
+                    return (
+                        status,
+                        final_url,
+                        None,
+                        f"not HTML ({content_type or 'no content type'})",
+                    )
                 body = bytearray()
                 for chunk in resp.iter_bytes():
                     body.extend(chunk)
                     if len(body) > MAX_BYTES:
                         return status, final_url, None, f"page over {MAX_BYTES // 1_000_000} MB"
-                return status, final_url, body.decode(resp.charset_encoding or "utf-8", "replace"), None
+                return (
+                    status,
+                    final_url,
+                    body.decode(resp.charset_encoding or "utf-8", "replace"),
+                    None,
+                )
         finally:
             self._last[host] = self._clock()
 
 
 # --- plan -------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class StoryLinks:
@@ -246,14 +261,23 @@ def digests_to_read(built: Iterable[dict]) -> list[tuple[str, date]]:
     return list(dict.fromkeys(keys))
 
 
-def _due(robots: str | None, http_status: int | None, has_html: bool,
-         attempts: int | None, waited: bool | None) -> bool:
+def _due(
+    robots: str | None,
+    http_status: int | None,
+    has_html: bool,
+    attempts: int | None,
+    waited: bool | None,
+) -> bool:
     if robots is None:  # never tried
         return True
-    return (attempts or 0) < MAX_ATTEMPTS and bool(waited) and retryable(robots, http_status, has_html)
+    return (
+        (attempts or 0) < MAX_ATTEMPTS and bool(waited) and retryable(robots, http_status, has_html)
+    )
 
 
-def plan(warehouse: Warehouse, digests: Iterable[tuple[str, date]], now: datetime) -> list[StoryLinks]:
+def plan(
+    warehouse: Warehouse, digests: Iterable[tuple[str, date]], now: datetime
+) -> list[StoryLinks]:
     """Each picked story still without readable text, with the URLs worth
     trying now. A URL in two digests (a story picked on Tuesday and again
     for the week) is planned once."""
@@ -301,8 +325,10 @@ def plan(warehouse: Warehouse, digests: Iterable[tuple[str, date]], now: datetim
 
 # --- fetch and land ---------------------------------------------------------
 
-def fetch_stories(fetcher: ArticleFetcher, stories: Iterable[StoryLinks],
-                  max_requests: int = MAX_REQUESTS) -> list[Page]:
+
+def fetch_stories(
+    fetcher: ArticleFetcher, stories: Iterable[StoryLinks], max_requests: int = MAX_REQUESTS
+) -> list[Page]:
     """Try each story's URLs in order until one is readable, requesting at
     most TRIES_PER_STORY pages per story and max_requests in all."""
     pages: list[Page] = []
@@ -336,8 +362,10 @@ def land_pages(warehouse: Warehouse, pages: list[Page], now: datetime) -> int:
                 final_url = excluded.final_url, html = excluded.html, error = excluded.error,
                 attempts = news_article_pages.attempts + 1, last_tried_at = excluded.last_tried_at
             """,
-            [[p.url, p.domain, p.robots, p.http_status, p.final_url, p.html, p.error, now, now]
-             for p in pages],
+            [
+                [p.url, p.domain, p.robots, p.http_status, p.final_url, p.html, p.error, now, now]
+                for p in pages
+            ],
         )
     return len(pages)
 

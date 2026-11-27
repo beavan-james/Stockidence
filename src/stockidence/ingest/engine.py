@@ -96,7 +96,9 @@ class IngestEngine:
             raise ValueError(f"{spec.name}: DERIVED endpoints cannot be called via the API")
         return method(**kwargs)
 
-    def _call_kwargs(self, spec: EndpointSpec, dimension_key: str, now: datetime, watermark: Any) -> dict[str, Any]:
+    def _call_kwargs(
+        self, spec: EndpointSpec, dimension_key: str, now: datetime, watermark: Any
+    ) -> dict[str, Any]:
         """kwargs for the client method, derived from spec + dimension + state.
 
         dimension_key is "AAPL" for ticker-scoped endpoints, or the full grain
@@ -160,7 +162,9 @@ class IngestEngine:
             raise ValueError(f"sec_balance_sheets: no CIK on record for {ticker}")
         return row[0]
 
-    def _scheduled_kwargs(self, spec: EndpointSpec, now: datetime, params: dict[str, Any] | None) -> dict[str, Any]:
+    def _scheduled_kwargs(
+        self, spec: EndpointSpec, now: datetime, params: dict[str, Any] | None
+    ) -> dict[str, Any]:
         params = dict(params or {})
         if spec.provider == Provider.FRED:
             series = _FRED_SERIES.get(spec.name)
@@ -178,7 +182,10 @@ class IngestEngine:
                     if spec.name == "ipo_calendar"
                     else now.date().isoformat(),
                 )
-                params.setdefault("to_date", (now.date() + timedelta(days=_SCHEDULED_DEFAULT_WINDOW_DAYS)).isoformat())
+                params.setdefault(
+                    "to_date",
+                    (now.date() + timedelta(days=_SCHEDULED_DEFAULT_WINDOW_DAYS)).isoformat(),
+                )
             return params
         return params
 
@@ -193,18 +200,28 @@ class IngestEngine:
             if not artifact_rows:
                 continue
             written += self.warehouse.land(
-                artifact, artifact_rows, fetched_at=now, high_watermark=high_watermark,
-                merge=MERGERS.get(artifact))
+                artifact,
+                artifact_rows,
+                fetched_at=now,
+                high_watermark=high_watermark,
+                merge=MERGERS.get(artifact),
+            )
         return written
 
-    def _ingest(self, spec: EndpointSpec, dimension_key: str, kwargs: dict[str, Any], now: datetime) -> IngestResult:
+    def _ingest(
+        self, spec: EndpointSpec, dimension_key: str, kwargs: dict[str, Any], now: datetime
+    ) -> IngestResult:
         payload = self._call(spec, kwargs)
         rows = normalize_for(spec.name, payload, dimension_key, now)
         high_watermark = (
-            max(r["date"].isoformat() for r in rows["raw_prices_daily"]) if spec.name == "prices.daily" else None
+            max(r["date"].isoformat() for r in rows["raw_prices_daily"])
+            if spec.name == "prices.daily"
+            else None
         )
         written = self._land_rows(rows, now, high_watermark)
-        return IngestResult(spec.name, dimension_key, True, "fetch complete", written, high_watermark)
+        return IngestResult(
+            spec.name, dimension_key, True, "fetch complete", written, high_watermark
+        )
 
     def ingest_on_demand(
         self,

@@ -34,7 +34,9 @@ class TwelveDataClient(BaseClient):
             api_key=key,
             base_url="https://api.twelvedata.com",
             timeout=timeout,
-            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["twelve_data"]),
+            min_interval_seconds=kwargs.pop(
+                "min_interval_seconds", settings.min_interval_seconds["twelve_data"]
+            ),
             **kwargs,
         )
 

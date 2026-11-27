@@ -24,7 +24,9 @@ class FinnhubClient(BaseClient):
             api_key=key,
             base_url="https://finnhub.io/api/v1",
             timeout=timeout,
-            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["finnhub"]),
+            min_interval_seconds=kwargs.pop(
+                "min_interval_seconds", settings.min_interval_seconds["finnhub"]
+            ),
             **kwargs,
         )
 
@@ -61,17 +63,23 @@ class FinnhubClient(BaseClient):
         return self._query("/stock/financials-reported", symbol=symbol, freq=freq)
 
     def eps_surprises(self, symbol: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        payload = self.request("GET", "/stock/earnings", params=build_query({"symbol": symbol, "limit": limit}))
+        payload = self.request(
+            "GET", "/stock/earnings", params=build_query({"symbol": symbol, "limit": limit})
+        )
         self._raise_for_api_error(payload, path="/stock/earnings")
         if not isinstance(payload, list):
             raise InvalidResponseError("/stock/earnings: expected array")
         return payload
 
     def insider_sentiment(self, symbol: str, *, from_date: str, to_date: str) -> dict[str, Any]:
-        return self._query("/stock/insider-sentiment", **{"symbol": symbol, "from": from_date, "to": to_date})
+        return self._query(
+            "/stock/insider-sentiment", **{"symbol": symbol, "from": from_date, "to": to_date}
+        )
 
     def recommendation_trends(self, symbol: str) -> list[dict[str, Any]]:
-        payload = self.request("GET", "/stock/recommendation", params=build_query({"symbol": symbol}))
+        payload = self.request(
+            "GET", "/stock/recommendation", params=build_query({"symbol": symbol})
+        )
         self._raise_for_api_error(payload, path="/stock/recommendation")
         if not isinstance(payload, list):
             raise InvalidResponseError("/stock/recommendation: expected array")

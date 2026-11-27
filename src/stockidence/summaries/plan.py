@@ -114,8 +114,9 @@ def heading_for(thread: list[Item], sectors: dict[str, str]) -> str:
     return sectors.get(top.lead_ticker or "", ALSO)
 
 
-def _split(heading: str, chunk_threads: list[list[Item]],
-           size: Callable[[list[Item]], int]) -> list[Section]:
+def _split(
+    heading: str, chunk_threads: list[list[Item]], size: Callable[[list[Item]], int]
+) -> list[Section]:
     """Whole threads per part while they fit; a thread too big on its own
     is split by item."""
     parts: list[list[Item]] = [[]]
@@ -152,8 +153,9 @@ def plan_week(
         return sum(i.score for t in by_heading[heading] for i in t)
 
     topics = [h for h, _ in TOPICS if h in by_heading]
-    sector_names = sorted((h for h in by_heading if h not in dict(TOPICS) and h != ALSO),
-                          key=lambda h: -summed(h))
+    sector_names = sorted(
+        (h for h in by_heading if h not in dict(TOPICS) and h != ALSO), key=lambda h: -summed(h)
+    )
     kept, folded = [], list(by_heading.get(ALSO, []))
     for heading in [*topics, *sector_names]:
         if n_items(heading) >= MIN_STORIES:

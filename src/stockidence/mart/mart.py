@@ -112,6 +112,7 @@ def rebuild_advanced_analytics(warehouse: Warehouse, ticker: str) -> int:
 
 # ------------------------------------------------------- recursive indicators
 
+
 def ema(values: list[float], span: int) -> list[float | None]:
     """Exponential moving average seeded with the first value (standard)."""
     if not values:
@@ -140,15 +141,17 @@ def rsi(closes: list[float], period: int = 14) -> list[float | None]:
     return out
 
 
-def atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float | None]:
+def atr(
+    highs: list[float], lows: list[float], closes: list[float], period: int = 14
+) -> list[float | None]:
     """Wilder-smoothed average true range. None until `period` true ranges."""
     if len(highs) < period + 1:
         return [None] * len(highs)
     trs: list[float] = []
     for i in range(1, len(highs)):
-        trs.append(max(highs[i] - lows[i],
-                       abs(highs[i] - closes[i - 1]),
-                       abs(lows[i] - closes[i - 1])))
+        trs.append(
+            max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        )
     seed = sum(trs[:period]) / period
     out: list[float | None] = [None] * (period + 1)
     out.append(seed)
@@ -158,7 +161,9 @@ def atr(highs: list[float], lows: list[float], closes: list[float], period: int 
     return out
 
 
-def adx(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float | None]:
+def adx(
+    highs: list[float], lows: list[float], closes: list[float], period: int = 14
+) -> list[float | None]:
     """Wilder ADX. None for the first 2*period - 1 bars (DM/ATR smoothing
     seeds at bar `period`, then DX needs `period` values to seed ADX)."""
     _, _, _, dx = _dm_components(highs, lows, closes, period)
@@ -182,7 +187,10 @@ def adx(highs: list[float], lows: list[float], closes: list[float], period: int 
 
 
 def directional_indexes(
-    highs: list[float], lows: list[float], closes: list[float], period: int = 14,
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    period: int = 14,
 ) -> tuple[list[float | None], list[float | None]]:
     """+DI / -DI series: Wilder-smoothed directional movement over smoothed
     ATR, scaled to 100. None before bar `period`."""
@@ -198,7 +206,10 @@ def directional_indexes(
 
 
 def _dm_components(
-    highs: list[float], lows: list[float], closes: list[float], period: int,
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    period: int,
 ) -> tuple[list[float], list[float], list[float], list[float]]:
     """Smoothed ATR, +DM, -DM and the DX series (shared by ADX/+DI/-DI).
 
@@ -214,9 +225,9 @@ def _dm_components(
     minus_dm = [d if (d > u and d > 0) else 0.0 for u, d in zip(up, down)]
     trs: list[float] = []
     for i in range(1, n):
-        trs.append(max(highs[i] - lows[i],
-                       abs(highs[i] - closes[i - 1]),
-                       abs(lows[i] - closes[i - 1])))
+        trs.append(
+            max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        )
 
     def wilder(series: list[float]) -> list[float]:
         seed = sum(series[:period]) / period
@@ -236,26 +247,31 @@ def _dm_components(
 
 
 def stoch(
-    highs: list[float], lows: list[float], closes: list[float],
-    k_period: int = 14, d_period: int = 3,
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    k_period: int = 14,
+    d_period: int = 3,
 ) -> tuple[list[float | None], list[float | None]]:
     """Stochastic %K / %D. %K = where close sits in the last k_period
     (high-low) range; %D = SMA over d_period of %K. None before k_period."""
     n = len(highs)
     k_out: list[float | None] = [None] * (k_period - 1)
     for i in range(k_period - 1, n):
-        window_high = max(highs[i - k_period + 1: i + 1])
-        window_low = min(lows[i - k_period + 1: i + 1])
+        window_high = max(highs[i - k_period + 1 : i + 1])
+        window_low = min(lows[i - k_period + 1 : i + 1])
         rng = window_high - window_low
         k_out.append(50.0 if rng == 0 else 100.0 * (closes[i] - window_low) / rng)
     d_out: list[float | None] = [None] * (k_period + d_period - 2)
     for i in range(k_period + d_period - 2, n):
-        window = k_out[i - d_period + 1: i + 1]
+        window = k_out[i - d_period + 1 : i + 1]
         d_out.append(sum(v for v in window if v is not None) / d_period)
     return k_out, d_out
 
 
-def cci(highs: list[float], lows: list[float], closes: list[float], period: int = 20) -> list[float | None]:
+def cci(
+    highs: list[float], lows: list[float], closes: list[float], period: int = 20
+) -> list[float | None]:
     """Commodity Channel Index. 0.0 where the mean deviation is zero."""
     n = len(highs)
     if n < period:
@@ -263,7 +279,7 @@ def cci(highs: list[float], lows: list[float], closes: list[float], period: int 
     tp = [(h + l + c) / 3.0 for h, l, c in zip(highs, lows, closes)]
     out: list[float | None] = [None] * (period - 1)
     for i in range(period - 1, n):
-        window = tp[i - period + 1: i + 1]
+        window = tp[i - period + 1 : i + 1]
         sma = sum(window) / period
         mdev = sum(abs(x - sma) for x in window) / period
         out.append(0.0 if mdev == 0 else (tp[i] - sma) / (0.015 * mdev))
@@ -281,24 +297,29 @@ def sma(values: list[float], period: int) -> list[float | None]:
     return out
 
 
-def _bbands(closes: list[float], period: int = 20, k: float = 2.0) -> tuple[list[float | None], ...]:
+def _bbands(
+    closes: list[float], period: int = 20, k: float = 2.0
+) -> tuple[list[float | None], ...]:
     """Bollinger bands (mid = SMA, width = k * population stddev)."""
     mid = sma(closes, period)
     upper: list[float | None] = [None] * len(closes)
     lower: list[float | None] = [None] * len(closes)
     for i in range(period - 1, len(closes)):
-        window = closes[i - period + 1: i + 1]
+        window = closes[i - period + 1 : i + 1]
         m = mid[i]
         assert m is not None
         var = sum((x - m) ** 2 for x in window) / period
-        band = k * var ** 0.5
+        band = k * var**0.5
         upper[i] = m + band
         lower[i] = m - band
     return upper, mid, lower
 
 
 def _obv_and_ad(
-    closes: list[float], highs: list[float], lows: list[float], volumes: list[float],
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    volumes: list[float],
 ) -> tuple[list[float], list[float]]:
     """Cumulative On-Balance Volume and Accumulation/Distribution for ordered bars."""
     obv: list[float] = [0.0]
@@ -311,7 +332,11 @@ def _obv_and_ad(
         else:
             obv.append(obv[-1])
         range_ = highs[i] - lows[i]
-        mf = volumes[i] if range_ == 0 else volumes[i] * ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range_
+        mf = (
+            volumes[i]
+            if range_ == 0
+            else volumes[i] * ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range_
+        )
         money.append(money[-1] + mf)
     return obv, money
 
@@ -321,15 +346,19 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
     trading day → mart. Computed for every bar; None before the warm-up period.
     The recursive/Wilder series and the cumulative/summation series are all
     computed here from stg_prices_daily bars and inserted in one pass."""
-    row = warehouse.connect(read_only=True).execute(
-        """
+    row = (
+        warehouse.connect(read_only=True)
+        .execute(
+            """
         SELECT date, open, high, low, close, volume
         FROM staging.stg_prices_daily
         WHERE ticker = ?
         ORDER BY date
         """,
-        [ticker],
-    ).fetchall()
+            [ticker],
+        )
+        .fetchall()
+    )
     if not row:
         with warehouse.connect() as con:
             con.execute("DELETE FROM mart.m_technical_indicators WHERE ticker = ?", [ticker])
@@ -355,11 +384,33 @@ def rebuild_technical_indicators(warehouse: Warehouse, ticker: str) -> int:
     bb_upper, bb_mid, bb_lower = _bbands(closes)
 
     rows = [
-        [ticker, dates[i], sma_20[i], sma_50[i], sma_200[i], ema_12[i], ema_26[i],
-         macd[i], macd_signal[i],
-         macd[i] - macd_signal[i] if macd[i] is not None and macd_signal[i] is not None else None,
-         r[i], a[i], dx_[i], plus_di[i], minus_di[i], k[i], d[i], ch[i],
-         money[i], obv[i], bb_upper[i], bb_mid[i], bb_lower[i]]
+        [
+            ticker,
+            dates[i],
+            sma_20[i],
+            sma_50[i],
+            sma_200[i],
+            ema_12[i],
+            ema_26[i],
+            macd[i],
+            macd_signal[i],
+            macd[i] - macd_signal[i]
+            if macd[i] is not None and macd_signal[i] is not None
+            else None,
+            r[i],
+            a[i],
+            dx_[i],
+            plus_di[i],
+            minus_di[i],
+            k[i],
+            d[i],
+            ch[i],
+            money[i],
+            obv[i],
+            bb_upper[i],
+            bb_mid[i],
+            bb_lower[i],
+        ]
         for i in range(len(dates))
     ]
     with warehouse.connect() as con:

@@ -24,7 +24,12 @@ def test_definitions_expose_jobs_schedules_assets(defs):
     assert {"monthly_ingest", "weekdays_ingest", "overnight_ingest", "daily_ingest"} <= job_names
 
     schedule_names = {s.name for s in defs.schedules}
-    assert {"monthly_schedule", "weekdays_schedule", "overnight_schedule", "daily_schedule"} <= schedule_names
+    assert {
+        "monthly_schedule",
+        "weekdays_schedule",
+        "overnight_schedule",
+        "daily_schedule",
+    } <= schedule_names
 
     assert any("ticker_data" in str(k) for k in defs.resolve_asset_graph().get_all_asset_keys())
 
@@ -150,8 +155,7 @@ def test_full_ticker_run_executes_green_for_partition(tmp_path):
 
     wh = Warehouse(tmp_path / "test.duckdb")
     wh.init_schema()
-    for seed in (_seed_bars, _seed_fundamentals, _seed_profile,
-                 _seed_sentiment):
+    for seed in (_seed_bars, _seed_fundamentals, _seed_profile, _seed_sentiment):
         seed(wh, "UND1")
     _seed_quotes(wh, "UND1", price=319.5)  # last bar close of the ramp
 
@@ -169,8 +173,15 @@ def test_full_ticker_run_executes_green_for_partition(tmp_path):
     instance.add_dynamic_partitions("ticker", ["UND1"])
     with partition_loading_context(dynamic_partitions_store=instance):
         result = materialize(
-            [ticker_data, stg_prices_daily, m_prices_weekly, m_prices_monthly,
-             m_advanced_analytics, m_technical_indicators, ticker_score],
+            [
+                ticker_data,
+                stg_prices_daily,
+                m_prices_weekly,
+                m_prices_monthly,
+                m_advanced_analytics,
+                m_technical_indicators,
+                ticker_score,
+            ],
             resources={"engine": FakeEngine()},
             partition_key="UND1",
             instance=instance,
@@ -178,13 +189,17 @@ def test_full_ticker_run_executes_green_for_partition(tmp_path):
         )
     assert result.success
 
-    row = wh.connect(read_only=True).execute(
-        "SELECT rating, confidence_score FROM mart.m_confidence_ratings "
-        "WHERE ticker = 'UND1'"
-    ).fetchone()
+    row = (
+        wh.connect(read_only=True)
+        .execute(
+            "SELECT rating, confidence_score FROM mart.m_confidence_ratings WHERE ticker = 'UND1'"
+        )
+        .fetchone()
+    )
     assert row is not None
     assert row[0] in ("Buy", "Strong Buy")
     assert 55.0 <= row[1] <= 85.0
+
 
 def test_scheduled_and_retrain_ops_share_the_warehouse_pool(defs):
     """Every op a schedule or a retrain runs claims the one-slot warehouse
@@ -222,7 +237,9 @@ def test_the_engine_resource_never_opens_the_warehouse(tmp_path, monkeypatch):
     assert not path.exists()
 
     with engine.warehouse.connect(read_only=True) as con:  # the op's first connection
-        tables = {t for (t,) in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+        tables = {
+            t for (t,) in con.execute("SELECT table_name FROM information_schema.tables").fetchall()
+        }
     assert {"raw_gainers_losers", "watermarks", "news_summaries"} <= tables
 
 
@@ -250,8 +267,13 @@ def test_a_failed_schema_bootstrap_is_tried_again(tmp_path, monkeypatch):
 def test_digest_jobs_end_with_the_summaries(defs):
     for name in ("daily_digest", "weekly_digest"):
         nodes = list(defs.get_job_def(name).graph.node_dict)
-        assert nodes[-5:] == ["read_summary_inputs_op", "write_story_cards_op", "save_story_cards_op",
-                              "write_summaries_op", "save_summaries_op"]
+        assert nodes[-5:] == [
+            "read_summary_inputs_op",
+            "write_story_cards_op",
+            "save_story_cards_op",
+            "write_summaries_op",
+            "save_summaries_op",
+        ]
 
 
 def _summary_job(tmp_path, llm):
@@ -269,12 +291,18 @@ def _summary_job(tmp_path, llm):
             "INSERT INTO mart.news_digest_stories (period, digest_date, rank, headline, summary, url,"
             " published_at, tickers, n_articles, n_outlets, coverage, reaction, category, on_site, score)"
             " VALUES ('daily', '2026-11-20', 1, 'Nvidia beats', 'Nvidia topped estimates.',"
-            " 'https://a.example/1', '2026-11-19 21:00', ['NVDA'], 1, 1, 0, 0, 0, 0, 0.5)")
+            " 'https://a.example/1', '2026-11-19 21:00', ['NVDA'], 1, 1, 0, 0, 0, 0, 0.5)"
+        )
         con.execute("INSERT INTO mart.news_digest_articles VALUES ('daily', '2026-11-20', 1, 'a1')")
-        con.execute("INSERT INTO staging.stg_news_articles (article_id, published_at, headline, url)"
-                    " VALUES ('a1', '2026-11-19 21:00', 'Nvidia beats', 'https://a.example/1')")
-        con.execute("INSERT INTO staging.stg_news_article_text VALUES ('https://a.example/1', ?, 200,"
-                    " false, 'x', '2026-11-20 12:00:00+00')", [" ".join(["Nvidia revenue rose."] * 70)])
+        con.execute(
+            "INSERT INTO staging.stg_news_articles (article_id, published_at, headline, url)"
+            " VALUES ('a1', '2026-11-19 21:00', 'Nvidia beats', 'https://a.example/1')"
+        )
+        con.execute(
+            "INSERT INTO staging.stg_news_article_text VALUES ('https://a.example/1', ?, 200,"
+            " false, 'x', '2026-11-20 12:00:00+00')",
+            [" ".join(["Nvidia revenue rose."] * 70)],
+        )
 
     class FakeEngine:
         warehouse = wh
@@ -283,8 +311,12 @@ def _summary_job(tmp_path, llm):
     def built_digest() -> dict:
         return {"digests": [{"period": "daily", "digest_date": "2026-11-20"}]}
 
-    @job(resource_defs={"engine": ResourceDefinition.hardcoded_resource(FakeEngine()),
-                        "llm": ResourceDefinition.hardcoded_resource(llm)})
+    @job(
+        resource_defs={
+            "engine": ResourceDefinition.hardcoded_resource(FakeEngine()),
+            "llm": ResourceDefinition.hardcoded_resource(llm),
+        }
+    )
     def summaries_only():
         _summarize(built_digest())
 
@@ -302,9 +334,15 @@ def test_summary_ops_run_after_a_digest(tmp_path):
 
         def chat(self, system, user, *, max_output, temperature=None, schema=None):
             if schema:
-                text = json.dumps({"what": "Nvidia revenue rose.", "why_it_matters": "",
-                                   "companies": [{"ticker": "NVDA", "name": "Nvidia"}],
-                                   "government": [], "figures": []})
+                text = json.dumps(
+                    {
+                        "what": "Nvidia revenue rose.",
+                        "why_it_matters": "",
+                        "companies": [{"ticker": "NVDA", "name": "Nvidia"}],
+                        "government": [],
+                        "figures": [],
+                    }
+                )
             else:
                 text = "Nvidia (NVDA) reported that revenue rose. " + "Traders took note. " * 55
             return Reply(text, 10, 10, 1.0, False)
@@ -329,10 +367,13 @@ def test_a_model_outage_saves_the_cards_then_fails(tmp_path):
             raise ModelUnavailable("connection refused")
 
     wh, summaries_only = _summary_job(tmp_path, Down())
-    result = summaries_only.execute_in_process(instance=DagsterInstance.ephemeral(), raise_on_error=False)
+    result = summaries_only.execute_in_process(
+        instance=DagsterInstance.ephemeral(), raise_on_error=False
+    )
     assert not result.success
     assert [e.step_key for e in result.all_events if e.event_type_value == "STEP_FAILURE"] == [
-        "save_story_cards_op"]
+        "save_story_cards_op"
+    ]
     with wh.connect(read_only=True) as con:
         assert con.execute("SELECT COUNT(*) FROM mart.news_story_cards").fetchone()[0] == 0
 

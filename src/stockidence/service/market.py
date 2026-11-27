@@ -145,9 +145,30 @@ def get_technicals(ticker: str) -> dict | None:
     )
     if not rows:
         return None
-    (date, sma_20, sma_50, sma_200, ema_12, ema_26, macd, macd_signal,
-     macd_hist, rsi, atr, adx, plus_di, minus_di, stoch_k, stoch_d, cci,
-     ad, obv, bb_upper, bb_mid, bb_lower) = rows[0]
+    (
+        date,
+        sma_20,
+        sma_50,
+        sma_200,
+        ema_12,
+        ema_26,
+        macd,
+        macd_signal,
+        macd_hist,
+        rsi,
+        atr,
+        adx,
+        plus_di,
+        minus_di,
+        stoch_k,
+        stoch_d,
+        cci,
+        ad,
+        obv,
+        bb_upper,
+        bb_mid,
+        bb_lower,
+    ) = rows[0]
     ctx = _read(
         """
         SELECT max_252, min_252, stddev_252, max_drawdown_252
@@ -274,8 +295,7 @@ def get_macro_metrics() -> list[dict]:
         if indicator == "inflation" and _series_stale(series, cpi_series):
             derived = _inflation_from_cpi()
             if derived:
-                series, detail, derived_from_cpi = (
-                    derived, "Derived from CPI YoY", True)
+                series, detail, derived_from_cpi = (derived, "Derived from CPI YoY", True)
         latest = series[-1] if series else None
         if latest is None or indicator not in live:
             continue  # untouched indicator: let the demo fill the grid
@@ -288,8 +308,17 @@ def get_macro_metrics() -> list[dict]:
         # our pipeline landed it. Derived inflation credits CPI's fetch time.
         fetched_key = "cpi" if derived_from_cpi else indicator
         fetched = _fmt_fetched((live.get(fetched_key) or (None,) * 4)[3])
-        out.append({"label": label, "value": value, "unit": unit, "detail": detail,
-                    "as_of": latest["date"], "series": series, "fetched": fetched})
+        out.append(
+            {
+                "label": label,
+                "value": value,
+                "unit": unit,
+                "detail": detail,
+                "as_of": latest["date"],
+                "series": series,
+                "fetched": fetched,
+            }
+        )
     if out:
         return out
     return _DEMO_MACRO
@@ -312,13 +341,15 @@ def get_commodities() -> list[dict]:
     out = []
     for nominal, date, price in rows:
         price = _num(price)
-        out.append({
-            "label": "Gold" if nominal == "GOLD" else "Silver",
-            "nominal": nominal,
-            "price": round(price, 2) if price is not None else None,
-            "unit": "USD/oz",
-            "timestamp": date,
-        })
+        out.append(
+            {
+                "label": "Gold" if nominal == "GOLD" else "Silver",
+                "nominal": nominal,
+                "price": round(price, 2) if price is not None else None,
+                "unit": "USD/oz",
+                "timestamp": date,
+            }
+        )
     return out
 
 
@@ -381,15 +412,27 @@ def get_market_movers() -> dict:
             "metadata": "Top gainers, losers, and most actively traded US tickers (demo)",
             "last_updated": _now() + " US/Eastern",
             "movers_as_of": "",
-            **{bucket: _decorate(_rank_movers(bucket, items)) for bucket, items in _DEMO_MOVERS.items()},
+            **{
+                bucket: _decorate(_rank_movers(bucket, items))
+                for bucket, items in _DEMO_MOVERS.items()
+            },
         }
-    movers: dict[str, list[dict]] = {"top_gainers": [], "top_losers": [], "most_actively_traded": []}
+    movers: dict[str, list[dict]] = {
+        "top_gainers": [],
+        "top_losers": [],
+        "most_actively_traded": [],
+    }
     for ticker, bucket, _day, price, change_amount, change_percentage, volume in rows:
         if bucket in movers and price is not None:
-            movers[bucket].append({
-                "ticker": ticker, "price": price, "change_amount": change_amount,
-                "change_percentage": change_percentage, "volume": volume,
-            })
+            movers[bucket].append(
+                {
+                    "ticker": ticker,
+                    "price": price,
+                    "change_amount": change_amount,
+                    "change_percentage": change_percentage,
+                    "volume": volume,
+                }
+            )
     return {
         "metadata": "Top gainers, losers, and most actively traded US tickers",
         "last_updated": _now() + " US/Eastern",
@@ -405,16 +448,18 @@ def _decorate(rows: list[dict]) -> list[dict]:
         volume = row.get("volume")
         amount = _num(row["change_amount"])
         pct = _num(signed)
-        out.append({
-            **row,
-            "is_gain": signed != "" and "-" not in signed,
-            "volume_display": f"{int(float(volume)):,}" if volume else None,
-            "change_display": (
-                f"{amount:+.2f} ({pct:+.2f}%)"
-                if amount is not None and pct is not None
-                else f"{row['change_amount']} ({row['change_percentage']})"
-            ),
-        })
+        out.append(
+            {
+                **row,
+                "is_gain": signed != "" and "-" not in signed,
+                "volume_display": f"{int(float(volume)):,}" if volume else None,
+                "change_display": (
+                    f"{amount:+.2f} ({pct:+.2f}%)"
+                    if amount is not None and pct is not None
+                    else f"{row['change_amount']} ({row['change_percentage']})"
+                ),
+            }
+        )
     return out
 
 
@@ -431,21 +476,24 @@ def get_ipo_calendar(limit: int = 10) -> list[dict]:
     if not rows:
         return _DEMO_IPO
     import json
+
     out = []
     for (payload,) in rows:
         p = json.loads(payload) if isinstance(payload, str) else payload
         if p is None or not isinstance(p, dict):
             continue
-        out.append({
-            "date": p.get("date"),
-            "exchange": p.get("exchange"),
-            "name": p.get("name"),
-            "numberOfShares": _fmt_int(p.get("numberOfShares")),
-            "price": p.get("price") or None,
-            "status": p.get("status"),
-            "symbol": p.get("symbol"),
-            "totalSharesValue": _fmt_int(p.get("totalSharesValue")),
-        })
+        out.append(
+            {
+                "date": p.get("date"),
+                "exchange": p.get("exchange"),
+                "name": p.get("name"),
+                "numberOfShares": _fmt_int(p.get("numberOfShares")),
+                "price": p.get("price") or None,
+                "status": p.get("status"),
+                "symbol": p.get("symbol"),
+                "totalSharesValue": _fmt_int(p.get("totalSharesValue")),
+            }
+        )
     return out if out else _DEMO_IPO
 
 
@@ -471,25 +519,30 @@ def get_earnings_calendar(limit: int = 10) -> list[dict]:
     if not rows:
         return _DEMO_EARNINGS
     import json
+
     out = []
     for (payload,) in rows:
         p = json.loads(payload) if isinstance(payload, str) else payload
         if p is None or not isinstance(p, dict):
             continue
-        out.append({
-            "date": p.get("date"),
-            "symbol": p.get("symbol"),
-            "quarter": p.get("quarter"),
-            "year": p.get("year"),
-            "hour": p.get("hour"),
-            "eps_estimate": _num(p.get("epsEstimate")),
-            "eps_actual": _num(p.get("epsActual")),
-            "eps_actual_display": f"${p['epsActual']:.2f}" if p.get("epsActual") is not None else None,
-            "revenue_estimate": _num(p.get("revenueEstimate")),
-            "revenue_estimate_display": _fmt_money(p.get("revenueEstimate")),
-            "revenue_actual": _num(p.get("revenueActual")),
-            "revenue_actual_display": _fmt_money(p.get("revenueActual")),
-        })
+        out.append(
+            {
+                "date": p.get("date"),
+                "symbol": p.get("symbol"),
+                "quarter": p.get("quarter"),
+                "year": p.get("year"),
+                "hour": p.get("hour"),
+                "eps_estimate": _num(p.get("epsEstimate")),
+                "eps_actual": _num(p.get("epsActual")),
+                "eps_actual_display": f"${p['epsActual']:.2f}"
+                if p.get("epsActual") is not None
+                else None,
+                "revenue_estimate": _num(p.get("revenueEstimate")),
+                "revenue_estimate_display": _fmt_money(p.get("revenueEstimate")),
+                "revenue_actual": _num(p.get("revenueActual")),
+                "revenue_actual_display": _fmt_money(p.get("revenueActual")),
+            }
+        )
     return out if out else _DEMO_EARNINGS
 
 
@@ -504,6 +557,7 @@ def _fmt_money(v) -> str | None:
 
 def _parse_news_row(payload) -> dict | None:
     import json
+
     p = json.loads(payload) if isinstance(payload, str) else payload
     if p is None or not isinstance(p, dict):
         return None
@@ -517,7 +571,9 @@ def _parse_news_row(payload) -> dict | None:
         "source": p.get("source"),
         "overall_sentiment_score": _num(p.get("overall_sentiment_score")),
         "overall_sentiment_label": p.get("overall_sentiment_label"),
-        "sentiment_tickers": ", ".join(t.get("ticker") for t in tickers if t.get("ticker")) if tickers else "",
+        "sentiment_tickers": ", ".join(t.get("ticker") for t in tickers if t.get("ticker"))
+        if tickers
+        else "",
     }
 
 
@@ -575,13 +631,16 @@ def get_news_page(
         }
     total = total_rows[0][0] or 0
     offset = (max(page, 1) - 1) * page_size
-    rows = _read(
-        f"""SELECT payload FROM raw.raw_news_articles
+    rows = (
+        _read(
+            f"""SELECT payload FROM raw.raw_news_articles
             WHERE {where}
             ORDER BY payload->>'time_published' DESC
             LIMIT ? OFFSET ?""",
-        [*params, page_size, offset],
-    ) or []
+            [*params, page_size, offset],
+        )
+        or []
+    )
     items = [parsed for (payload,) in rows if (parsed := _parse_news_row(payload))]
     return {
         "items": items,
@@ -607,18 +666,81 @@ def _str_list(v) -> list[str]:
 # --- deterministic demo placeholders (kept in sync with API.md schemas) ---
 
 _DEMO_MACRO = [
-    {"label": "Inflation", "value": 2.95, "unit": "%", "detail": "YoY annual rate", "as_of": "2026-07-01", "fetched": "",
-     "series": [{"date": "2024-01-01", "value": 2.95}, {"date": "2025-01-01", "value": 3.41}, {"date": "2026-01-01", "value": 2.85}, {"date": "2026-07-01", "value": 2.62}]},
-    {"label": "CPI", "value": 333.918, "unit": "index", "detail": "Consumer price index", "as_of": "2026-07-01", "fetched": "",
-     "series": [{"date": "2025-01-01", "value": 318.2}, {"date": "2026-01-01", "value": 329.1}, {"date": "2026-07-01", "value": 333.9}]},
-    {"label": "Unemployment Rate", "value": 4.1, "unit": "%", "detail": "Seasonally adjusted", "as_of": "2026-07-01", "fetched": "",
-     "series": [{"date": "2025-07-01", "value": 4.3}, {"date": "2026-01-01", "value": 4.2}, {"date": "2026-07-01", "value": 4.1}]},
-    {"label": "Federal Funds Rate", "value": 3.63, "unit": "%", "detail": "Effective rate", "as_of": "2026-07-01", "fetched": "",
-     "series": [{"date": "2025-01-01", "value": 4.33}, {"date": "2026-01-01", "value": 3.84}, {"date": "2026-07-01", "value": 3.63}]},
-    {"label": "Real GDP per Capita", "value": 88698, "unit": "$", "detail": "Quarterly, USD", "as_of": "2026-06-30", "fetched": "",
-     "series": [{"date": "2025-06-30", "value": 86410}, {"date": "2026-06-30", "value": 88698}]},
-    {"label": "Natural Gas", "value": 2.89, "unit": "$/MMBtu", "detail": "Henry Hub spot price", "as_of": "2026-07-01", "fetched": "",
-     "series": [{"date": "2025-11-01", "value": 3.28}, {"date": "2026-03-01", "value": 2.54}, {"date": "2026-07-01", "value": 2.89}]},
+    {
+        "label": "Inflation",
+        "value": 2.95,
+        "unit": "%",
+        "detail": "YoY annual rate",
+        "as_of": "2026-07-01",
+        "fetched": "",
+        "series": [
+            {"date": "2024-01-01", "value": 2.95},
+            {"date": "2025-01-01", "value": 3.41},
+            {"date": "2026-01-01", "value": 2.85},
+            {"date": "2026-07-01", "value": 2.62},
+        ],
+    },
+    {
+        "label": "CPI",
+        "value": 333.918,
+        "unit": "index",
+        "detail": "Consumer price index",
+        "as_of": "2026-07-01",
+        "fetched": "",
+        "series": [
+            {"date": "2025-01-01", "value": 318.2},
+            {"date": "2026-01-01", "value": 329.1},
+            {"date": "2026-07-01", "value": 333.9},
+        ],
+    },
+    {
+        "label": "Unemployment Rate",
+        "value": 4.1,
+        "unit": "%",
+        "detail": "Seasonally adjusted",
+        "as_of": "2026-07-01",
+        "fetched": "",
+        "series": [
+            {"date": "2025-07-01", "value": 4.3},
+            {"date": "2026-01-01", "value": 4.2},
+            {"date": "2026-07-01", "value": 4.1},
+        ],
+    },
+    {
+        "label": "Federal Funds Rate",
+        "value": 3.63,
+        "unit": "%",
+        "detail": "Effective rate",
+        "as_of": "2026-07-01",
+        "fetched": "",
+        "series": [
+            {"date": "2025-01-01", "value": 4.33},
+            {"date": "2026-01-01", "value": 3.84},
+            {"date": "2026-07-01", "value": 3.63},
+        ],
+    },
+    {
+        "label": "Real GDP per Capita",
+        "value": 88698,
+        "unit": "$",
+        "detail": "Quarterly, USD",
+        "as_of": "2026-06-30",
+        "fetched": "",
+        "series": [{"date": "2025-06-30", "value": 86410}, {"date": "2026-06-30", "value": 88698}],
+    },
+    {
+        "label": "Natural Gas",
+        "value": 2.89,
+        "unit": "$/MMBtu",
+        "detail": "Henry Hub spot price",
+        "as_of": "2026-07-01",
+        "fetched": "",
+        "series": [
+            {"date": "2025-11-01", "value": 3.28},
+            {"date": "2026-03-01", "value": 2.54},
+            {"date": "2026-07-01", "value": 2.89},
+        ],
+    },
 ]
 
 _DEMO_COMMODITIES = [
@@ -628,42 +750,124 @@ _DEMO_COMMODITIES = [
 
 _DEMO_MOVERS = {
     "top_gainers": [
-        {"ticker": "WETO", "price": "8.22", "change_amount": "4.61", "change_percentage": "127.70%", "volume": "58226265"},
-        {"ticker": "MYSEW", "price": "0.003", "change_amount": "0.0014", "change_percentage": "87.50%", "volume": "45772"},
+        {
+            "ticker": "WETO",
+            "price": "8.22",
+            "change_amount": "4.61",
+            "change_percentage": "127.70%",
+            "volume": "58226265",
+        },
+        {
+            "ticker": "MYSEW",
+            "price": "0.003",
+            "change_amount": "0.0014",
+            "change_percentage": "87.50%",
+            "volume": "45772",
+        },
     ],
     "top_losers": [
-        {"ticker": "NVO.E", "price": "0.05", "change_amount": "-3.50", "change_percentage": "-41.18%", "volume": "120000"},
-        {"ticker": "ABCD", "price": "0.42", "change_amount": "-0.28", "change_percentage": "-40.00%", "volume": "803112"},
+        {
+            "ticker": "NVO.E",
+            "price": "0.05",
+            "change_amount": "-3.50",
+            "change_percentage": "-41.18%",
+            "volume": "120000",
+        },
+        {
+            "ticker": "ABCD",
+            "price": "0.42",
+            "change_amount": "-0.28",
+            "change_percentage": "-40.00%",
+            "volume": "803112",
+        },
     ],
     "most_actively_traded": [
-        {"ticker": "NVDA", "price": "152.44", "change_amount": "2.88", "change_percentage": "1.93%", "volume": "182342345"},
-        {"ticker": "AAPL", "price": "232.50", "change_amount": "-1.16", "change_percentage": "-0.50%", "volume": "81234567"},
+        {
+            "ticker": "NVDA",
+            "price": "152.44",
+            "change_amount": "2.88",
+            "change_percentage": "1.93%",
+            "volume": "182342345",
+        },
+        {
+            "ticker": "AAPL",
+            "price": "232.50",
+            "change_amount": "-1.16",
+            "change_percentage": "-0.50%",
+            "volume": "81234567",
+        },
     ],
 }
 
 _DEMO_IPO = [
-    {"date": "2026-08-20", "exchange": "NASDAQ", "name": "NovaGrid Energy", "numberOfShares": "15,000,000",
-     "price": "18.00 - 20.00", "status": "expected", "symbol": "NGRE", "totalSharesValue": "285,000,000"},
-    {"date": "2026-08-21", "exchange": "NYSE", "name": "Cobalt Cloud Systems", "numberOfShares": "12,000,000",
-     "price": "24.00 - 28.00", "status": "expected", "symbol": "CCLD", "totalSharesValue": "312,000,000"},
+    {
+        "date": "2026-08-20",
+        "exchange": "NASDAQ",
+        "name": "NovaGrid Energy",
+        "numberOfShares": "15,000,000",
+        "price": "18.00 - 20.00",
+        "status": "expected",
+        "symbol": "NGRE",
+        "totalSharesValue": "285,000,000",
+    },
+    {
+        "date": "2026-08-21",
+        "exchange": "NYSE",
+        "name": "Cobalt Cloud Systems",
+        "numberOfShares": "12,000,000",
+        "price": "24.00 - 28.00",
+        "status": "expected",
+        "symbol": "CCLD",
+        "totalSharesValue": "312,000,000",
+    },
 ]
 
 _DEMO_EARNINGS = [
-    {"date": "2026-08-20", "symbol": "AAPL", "quarter": 3, "year": 2026, "hour": "amc",
-     "eps_estimate": 2.53, "eps_actual": None, "revenue_estimate": 104200000000, "revenue_actual": None},
-    {"date": "2026-08-25", "symbol": "COST", "quarter": 4, "year": 2026, "hour": "bmo",
-     "eps_estimate": 5.31, "eps_actual": None, "revenue_estimate": 62000000000, "revenue_actual": None},
+    {
+        "date": "2026-08-20",
+        "symbol": "AAPL",
+        "quarter": 3,
+        "year": 2026,
+        "hour": "amc",
+        "eps_estimate": 2.53,
+        "eps_actual": None,
+        "revenue_estimate": 104200000000,
+        "revenue_actual": None,
+    },
+    {
+        "date": "2026-08-25",
+        "symbol": "COST",
+        "quarter": 4,
+        "year": 2026,
+        "hour": "bmo",
+        "eps_estimate": 5.31,
+        "eps_actual": None,
+        "revenue_estimate": 62000000000,
+        "revenue_actual": None,
+    },
 ]
 
 _DEMO_NEWS = [
-    {"title": "NVIDIA climbs as data-center demand stays ahead of supply",
-     "url": "https://example.com/nvidia", "time_published": "20260814T121500",
-     "authors": ["Market Wire"], "summary": "NVIDIA's data-center segment continues to outpace supply.",
-     "source": "Market Wire", "overall_sentiment_score": 0.42,
-     "overall_sentiment_label": "Bullish", "sentiment_tickers": "NVDA, AMD"},
-    {"title": "Treasury yields slip after cooler CPI print",
-     "url": "https://example.com/cpi", "time_published": "20260813T141000",
-     "authors": ["Fixed Income Desk"], "summary": "The 10-year yield fell after the CPI report came in below consensus.",
-     "source": "Fixed Income Desk", "overall_sentiment_score": 0.31,
-     "overall_sentiment_label": "Somewhat-Bullish", "sentiment_tickers": ""},
+    {
+        "title": "NVIDIA climbs as data-center demand stays ahead of supply",
+        "url": "https://example.com/nvidia",
+        "time_published": "20260814T121500",
+        "authors": ["Market Wire"],
+        "summary": "NVIDIA's data-center segment continues to outpace supply.",
+        "source": "Market Wire",
+        "overall_sentiment_score": 0.42,
+        "overall_sentiment_label": "Bullish",
+        "sentiment_tickers": "NVDA, AMD",
+    },
+    {
+        "title": "Treasury yields slip after cooler CPI print",
+        "url": "https://example.com/cpi",
+        "time_published": "20260813T141000",
+        "authors": ["Fixed Income Desk"],
+        "summary": "The 10-year yield fell after the CPI report came in below consensus.",
+        "source": "Fixed Income Desk",
+        "overall_sentiment_score": 0.31,
+        "overall_sentiment_label": "Somewhat-Bullish",
+        "sentiment_tickers": "",
+    },
 ]

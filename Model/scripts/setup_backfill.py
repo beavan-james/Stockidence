@@ -49,8 +49,10 @@ def main() -> None:
     summary = refresh_tickers(engine, universe, full_backfill=True)
 
     # 3. Summary
-    print(f"\nDone. {summary['processed']} tickers refreshed, "
-          f"{summary['api_calls']} API calls, {summary['rows_written']} rows.")
+    print(
+        f"\nDone. {summary['processed']} tickers refreshed, "
+        f"{summary['api_calls']} API calls, {summary['rows_written']} rows."
+    )
     if summary["errors"]:
         print(f"{len(summary['errors'])} errors:")
         for err in summary["errors"]:

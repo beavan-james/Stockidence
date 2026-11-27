@@ -54,7 +54,7 @@ from zoneinfo import ZoneInfo
 from ..storage import Warehouse
 
 NEW_YORK = ZoneInfo("America/New_York")
-CUTOFF = time(7, 0)                   # the digest day turns over here, NY time
+CUTOFF = time(7, 0)  # the digest day turns over here, NY time
 SESSION = (time(9, 30), time(16, 0))  # regular US session, NY time
 
 # ---------------------------------------------------------------------------
@@ -75,11 +75,11 @@ class Period:
     has more outlets per story and bigger moves than a day, so it needs
     more of both for full marks."""
 
-    name: str                # the mart key
-    size: int                # stories kept
-    coverage_full_at: int    # outlets
+    name: str  # the mart key
+    size: int  # stories kept
+    coverage_full_at: int  # outlets
     reaction_full_at: float  # absolute return over the period
-    reserved: int = 0        # places kept for RESERVED_CATEGORIES stories
+    reserved: int = 0  # places kept for RESERVED_CATEGORIES stories
 
 
 DAILY = Period("daily", size=10, coverage_full_at=8, reaction_full_at=0.10, reserved=2)
@@ -105,93 +105,162 @@ MAX_STORY_TICKERS = 5
 
 _AMOUNT = r"\$[\d.,]+ ?(?:[kmb]|thousand|million|billion)?"
 _NOT_NEWS: dict[str, re.Pattern[str]] = {
-    "routine": re.compile("|".join((
-        # fund holdings: "X LLC Takes Position in Y", "Has $1.2 Million Stake in Y $Y"
-        rf"\b(?:takes?|acquires?|initiates?|purchases?|buys|opens?) (?:a )?(?:new )?(?:{_AMOUNT} )?(?:position|stake) in\b",
-        rf"\b(?:has|holds) {_AMOUNT} (?:stock )?(?:position|stake|holdings) in\b",
-        rf"\b(?:invests|makes (?:a )?new (?:{_AMOUNT} )?investment) in\b",
-        (r"\b(?:increases|decreases|raises|lowers|reduces|trims|boosts|lifts|cuts|grows) "
-        r"(?:its )?(?:holdings|position|stake) in\b"),
-        r"\bshares (?:(?:of|in) .+ )?(?:bought|sold|purchased|acquired) by\b",
-        r"\b(?:buys|sells|acquires|purchases|trims|boosts|raises|lowers|cuts) (?:[\d,]+ |new )?shares (?:of|in)\b",
-        # insider and congressional trades: "CFO Sells 16,524 Shares", "RSU
-        # Vesting", "Insider Sells $206,189 in Stock", "Rep. X Acquires Y Stock"
-        r"\b(?:rsus?|10b5-1|form 4|restricted stock units?)\b",
-        (r"\b(?:director|ceo|cfo|coo|cmo|cto|officer|insider|evp|svp|rep\.|sen\.|senator)\b.*"
-        r"\b(?:sells|sold|buys|bought|purchases|acquires|exercises|donates|gifts|receives|unloads|cashes)\b.*"
-        r"\b(?:shares|stock|options)\b"),
-        rf"\b(?:sells|buys|acquires|purchases) {_AMOUNT} (?:in|of|worth of) (?:stock|shares)\b",
-        # "Nancy Pelosi Congressional Trade on Jul. 24", "Donald Trump - Salesforce Inc. Trump Trade on Jun. 18"
-        r"\b(?:congressional|trump) trade on\b",
-        # analyst housekeeping: target moves and unchanged ratings
-        r"\bprice target\b",
-        r"\b(?:reiterates|maintains|reaffirms|keeps)\b.*\b(?:rating|overweight|underweight|outperform|buy|hold)\b",
-        # investor-relations calendar: conferences, call dates, dividends
-        r"\bto (?:present|participate|speak) at\b|\b(?:conference call|webcast)\b",
-        r"\bto (?:report|announce|release)\b.*\bresults on\b|\bdeclares\b.*\bdividend\b",
-        r"\bsets (?:the )?date\b",
-        # templated price recaps: "X stock underperforms Tuesday when compared
-        # to competitors", "X (Y) Stock Sinks As Market Gains: Key Facts"
-        r"\bstock (?:under|out)performs (?:\w+ )?(?:when compared to )?competitors\b",
-        (r"\b(?:as|while|despite) (?:the )?(?:broader )?(?:stock )?market "
-        r"(?:gains|rises|climbs|dips|slips|falls|drops|declines|upswing|downturn|slip|dip)\b"),
-        r"\b(?:higher|lower) than (?:the )?(?:broader )?market\b",
-        r"\b(?:laps|trails|beats|outpaces|lags) (?:the )?stock market\b",
-        # "X stock hits 52-week low at 35.31 USD", "X stock may move 6.2% on
-        # Sept. 10 earnings release": one template, a different stock each
-        r"\bhits? (?:a )?(?:new )?52-week (?:high|low)\b",
-        r"\bmay move [\d.]+% on\b",
-        # law-firm solicitations: "Bronstein, Gewirtz & Grossman Urges X
-        # Investors to Act", "Shareholder Alert", "Lead Plaintiff Deadline"
-        r"\b(?:urges|reminds|encourages|alerts|notifies)\b.*\b(?:investors|shareholders)\b",
-        r"\b(?:shareholder|investor)s? (?:alert|notice|reminder)\b|\blead plaintiff\b",
-    )), re.IGNORECASE),
-    "commentary": re.compile("|".join((
-        r"\?['\"’”]?\s*$",  # "Is X a Buy?", "Can It Deliver?"
-        r"^(?:here'?s|here’s|prediction:|forget|should you|is it time|why i)\b",
-        r"\b(?:jim )?cramer\b|\bfinal trades\b",
-        r"\b(?:stocks?|shares) to (?:buy|watch|own|avoid|hold)\b",
-        r"\bbetter (?:\w+ )?(?:stock|buy)\b",
-    )), re.IGNORECASE),
+    "routine": re.compile(
+        "|".join(
+            (
+                # fund holdings: "X LLC Takes Position in Y", "Has $1.2 Million Stake in Y $Y"
+                rf"\b(?:takes?|acquires?|initiates?|purchases?|buys|opens?) (?:a )?(?:new )?(?:{_AMOUNT} )?(?:position|stake) in\b",
+                rf"\b(?:has|holds) {_AMOUNT} (?:stock )?(?:position|stake|holdings) in\b",
+                rf"\b(?:invests|makes (?:a )?new (?:{_AMOUNT} )?investment) in\b",
+                (
+                    r"\b(?:increases|decreases|raises|lowers|reduces|trims|boosts|lifts|cuts|grows) "
+                    r"(?:its )?(?:holdings|position|stake) in\b"
+                ),
+                r"\bshares (?:(?:of|in) .+ )?(?:bought|sold|purchased|acquired) by\b",
+                r"\b(?:buys|sells|acquires|purchases|trims|boosts|raises|lowers|cuts) (?:[\d,]+ |new )?shares (?:of|in)\b",
+                # insider and congressional trades: "CFO Sells 16,524 Shares", "RSU
+                # Vesting", "Insider Sells $206,189 in Stock", "Rep. X Acquires Y Stock"
+                r"\b(?:rsus?|10b5-1|form 4|restricted stock units?)\b",
+                (
+                    r"\b(?:director|ceo|cfo|coo|cmo|cto|officer|insider|evp|svp|rep\.|sen\.|senator)\b.*"
+                    r"\b(?:sells|sold|buys|bought|purchases|acquires|exercises|donates|gifts|receives|unloads|cashes)\b.*"
+                    r"\b(?:shares|stock|options)\b"
+                ),
+                rf"\b(?:sells|buys|acquires|purchases) {_AMOUNT} (?:in|of|worth of) (?:stock|shares)\b",
+                # "Nancy Pelosi Congressional Trade on Jul. 24", "Donald Trump - Salesforce Inc. Trump Trade on Jun. 18"
+                r"\b(?:congressional|trump) trade on\b",
+                # analyst housekeeping: target moves and unchanged ratings
+                r"\bprice target\b",
+                r"\b(?:reiterates|maintains|reaffirms|keeps)\b.*\b(?:rating|overweight|underweight|outperform|buy|hold)\b",
+                # investor-relations calendar: conferences, call dates, dividends
+                r"\bto (?:present|participate|speak) at\b|\b(?:conference call|webcast)\b",
+                r"\bto (?:report|announce|release)\b.*\bresults on\b|\bdeclares\b.*\bdividend\b",
+                r"\bsets (?:the )?date\b",
+                # templated price recaps: "X stock underperforms Tuesday when compared
+                # to competitors", "X (Y) Stock Sinks As Market Gains: Key Facts"
+                r"\bstock (?:under|out)performs (?:\w+ )?(?:when compared to )?competitors\b",
+                (
+                    r"\b(?:as|while|despite) (?:the )?(?:broader )?(?:stock )?market "
+                    r"(?:gains|rises|climbs|dips|slips|falls|drops|declines|upswing|downturn|slip|dip)\b"
+                ),
+                r"\b(?:higher|lower) than (?:the )?(?:broader )?market\b",
+                r"\b(?:laps|trails|beats|outpaces|lags) (?:the )?stock market\b",
+                # "X stock hits 52-week low at 35.31 USD", "X stock may move 6.2% on
+                # Sept. 10 earnings release": one template, a different stock each
+                r"\bhits? (?:a )?(?:new )?52-week (?:high|low)\b",
+                r"\bmay move [\d.]+% on\b",
+                # law-firm solicitations: "Bronstein, Gewirtz & Grossman Urges X
+                # Investors to Act", "Shareholder Alert", "Lead Plaintiff Deadline"
+                r"\b(?:urges|reminds|encourages|alerts|notifies)\b.*\b(?:investors|shareholders)\b",
+                r"\b(?:shareholder|investor)s? (?:alert|notice|reminder)\b|\blead plaintiff\b",
+            )
+        ),
+        re.IGNORECASE,
+    ),
+    "commentary": re.compile(
+        "|".join(
+            (
+                r"\?['\"’”]?\s*$",  # "Is X a Buy?", "Can It Deliver?"
+                r"^(?:here'?s|here’s|prediction:|forget|should you|is it time|why i)\b",
+                r"\b(?:jim )?cramer\b|\bfinal trades\b",
+                r"\b(?:stocks?|shares) to (?:buy|watch|own|avoid|hold)\b",
+                r"\bbetter (?:\w+ )?(?:stock|buy)\b",
+            )
+        ),
+        re.IGNORECASE,
+    ),
 }
 
 CATEGORIES: dict[str, re.Pattern[str]] = {
     "deal": re.compile(
-        r"\b(?:acquir\w*|acquisition|mergers?|merge[sd]?|buyout|takeover|spin-?off|to buy|bid for)\b", re.IGNORECASE),
+        r"\b(?:acquir\w*|acquisition|mergers?|merge[sd]?|buyout|takeover|spin-?off|to buy|bid for)\b",
+        re.IGNORECASE,
+    ),
     "earnings": re.compile(
-        r"\b(?:earnings|results|revenue|profit|guidance|outlook|eps|q[1-4])\b", re.IGNORECASE),
+        r"\b(?:earnings|results|revenue|profit|guidance|outlook|eps|q[1-4])\b", re.IGNORECASE
+    ),
     # Not "fed up". Not a bare "rate hike" either: that is as often a
     # utility's or a tax rate, and a Fed story also says "Fed" or "interest rate".
     "macro": re.compile(
         r"\b(?:fed(?! up\b)|federal reserve|fomc|powell|interest rates?|inflation|cpi|pce"
-        r"|payrolls|jobs report|unemployment|gdp|recession|tariffs?|treasury yields?)\b", re.IGNORECASE),
+        r"|payrolls|jobs report|unemployment|gdp|recession|tariffs?|treasury yields?)\b",
+        re.IGNORECASE,
+    ),
     # Government action: regulators and prosecutors, Congress, the White
     # House, sanctions and export controls. Tariffs are macro.
-    "policy": re.compile("|".join((
-        # the SEC acting, not a company's filing with it ("Apple Inc. SEC
-        # Filing (Aug 11, 2026)", "Files 10-Q with the U.S. SEC")
-        (r"(?<!files )(?<!with )(?<!with the )(?<!with u\.s\. )(?<!with the u\.s\. )"
-         r"\b(?:sec|securities and exchange commission)\b(?! (?:\d+-?[kq] )?(?:filings?|forms?|reports?)\b)"),
-        r"\b(?:ftc|federal trade commission|doj|justice department|department of justice|antitrust)\b",
-        # Congress, not a medical one ("ESC Congress 2026"), Bill Ackman or
-        # the tax bill on an executive's vested shares
-        r"\bcongress(?= (?:pass|approv|vot|clear|reject|block|weigh|debat|stall|fail|probe|investigat))",
-        r"\b(?:before|to|in) (?:the )?(?:u\.?s\.? )?congress\b(?! \d)",
-        r"\bcongressional (?:hearing|probe|investigation|committee|panel|testimony|leaders?)\b",
-        r"\b(?:senate|senators?|lawmakers?|legislation|legislators?|legislative|legislature)\b",
-        r"\bhouse (?:bill|vote|passes|panel|committee|republicans|democrats|speaker|lawmakers)\b",
-        r"\b(?:spending|funding|stopgap|appropriations|budget|house|senate) bills?\b",
-        r"\b(?:passes|passed|signs|signed|vetoes|vetoed) (?:a |the )?(?:\w+ )?bill\b",
-        # the White House, not Trump Media or his family's ventures
-        r"\b(?:white house|executive orders?|oval office)\b",
-        r"(?<!eric )\btrump\b(?!(?:'s|’s)? media|-backed|-linked| jr)",
-        r"\b(?:sanction(?:s|ed|ing)?|entity list)\b",
-        r"\bexport (?:controls?|curbs?|restrictions?|bans?|licen[cs]es?|rules?|limits?)\b",
-    )), re.IGNORECASE),
+    "policy": re.compile(
+        "|".join(
+            (
+                # the SEC acting, not a company's filing with it ("Apple Inc. SEC
+                # Filing (Aug 11, 2026)", "Files 10-Q with the U.S. SEC")
+                (
+                    r"(?<!files )(?<!with )(?<!with the )(?<!with u\.s\. )(?<!with the u\.s\. )"
+                    r"\b(?:sec|securities and exchange commission)\b(?! (?:\d+-?[kq] )?(?:filings?|forms?|reports?)\b)"
+                ),
+                r"\b(?:ftc|federal trade commission|doj|justice department|department of justice|antitrust)\b",
+                # Congress, not a medical one ("ESC Congress 2026"), Bill Ackman or
+                # the tax bill on an executive's vested shares
+                r"\bcongress(?= (?:pass|approv|vot|clear|reject|block|weigh|debat|stall|fail|probe|investigat))",
+                r"\b(?:before|to|in) (?:the )?(?:u\.?s\.? )?congress\b(?! \d)",
+                r"\bcongressional (?:hearing|probe|investigation|committee|panel|testimony|leaders?)\b",
+                r"\b(?:senate|senators?|lawmakers?|legislation|legislators?|legislative|legislature)\b",
+                r"\bhouse (?:bill|vote|passes|panel|committee|republicans|democrats|speaker|lawmakers)\b",
+                r"\b(?:spending|funding|stopgap|appropriations|budget|house|senate) bills?\b",
+                r"\b(?:passes|passed|signs|signed|vetoes|vetoed) (?:a |the )?(?:\w+ )?bill\b",
+                # the White House, not Trump Media or his family's ventures
+                r"\b(?:white house|executive orders?|oval office)\b",
+                r"(?<!eric )\btrump\b(?!(?:'s|’s)? media|-backed|-linked| jr)",
+                r"\b(?:sanction(?:s|ed|ing)?|entity list)\b",
+                r"\bexport (?:controls?|curbs?|restrictions?|bans?|licen[cs]es?|rules?|limits?)\b",
+            )
+        ),
+        re.IGNORECASE,
+    ),
 }
 
 _STOPWORDS = frozenset(
-    ["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have", "in", "into", "is", "it", "its", "of", "on", "or", "over", "says", "said", "than", "that", "the", "their", "this", "to", "up", "was", "were", "will", "with", "after", "amid", "new", "how", "why", "what"]
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "has",
+        "have",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "over",
+        "says",
+        "said",
+        "than",
+        "that",
+        "the",
+        "their",
+        "this",
+        "to",
+        "up",
+        "was",
+        "were",
+        "will",
+        "with",
+        "after",
+        "amid",
+        "new",
+        "how",
+        "why",
+        "what",
+    ]
 )
 # "$KIM", "(NASDAQ: TILE)": tags, not words of the headline
 _TICKER_TAG = re.compile(r"\$[a-z.]+|\((?:nasdaq|nyse|amex|otc)[a-z]*\s*:\s*[a-z.]+\)")
@@ -202,6 +271,7 @@ _DOMAIN = re.compile(r"\.(?:com|ca|co\.uk|co|net|org|in|au)\b")
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class Article:
@@ -305,7 +375,9 @@ def word_weights(articles: list[Article]) -> dict[str, float]:
     return {w: math.log((1 + n) / (1 + k)) + 1 for w, k in df.items()}
 
 
-def similarity(a: frozenset[str], b: frozenset[str], weights: dict[str, float] | None = None) -> float:
+def similarity(
+    a: frozenset[str], b: frozenset[str], weights: dict[str, float] | None = None
+) -> float:
     """Jaccard overlap of two headlines' words, IDF-weighted when given weights."""
     if not weights:
         union = len(a | b)
@@ -349,8 +421,14 @@ def group_stories(articles: list[Article]) -> list[list[Article]]:
     for article in sorted(articles, key=lambda a: (a.published_at, a.article_id)):
         keys = [*article.words, *(f"${t}" for t in article.tickers[:1])]
         candidates = sorted(set().union(*(index.get(k, ()) for k in keys)))
-        home = next((i for i in candidates
-                     if any(same_story(article, member, weights) for member in stories[i])), None)
+        home = next(
+            (
+                i
+                for i in candidates
+                if any(same_story(article, member, weights) for member in stories[i])
+            ),
+            None,
+        )
         if home is None:
             home = len(stories)
             stories.append([])
@@ -363,9 +441,11 @@ def group_stories(articles: list[Article]) -> list[list[Article]]:
 def lead_article(articles: list[Article]) -> Article:
     """The member whose headline is most like the others', so it best stands
     for the story; ties go to one with a summary, then the earliest."""
+
     def key(a: Article) -> tuple:
         overlap = sum(similarity(a.words, b.words) for b in articles if b is not a)
         return (overlap, a.summary is not None, -a.published_at.timestamp())
+
     return max(articles, key=key)
 
 
@@ -392,16 +472,23 @@ def score_story(
     move_return = moves[move_ticker] if move_ticker else None
     inputs = {
         "coverage": min(1.0, math.log2(n_outlets) / math.log2(period.coverage_full_at)),
-        "reaction": (min(1.0, abs(move_return) / period.reaction_full_at)
-                     if move_return is not None else 0.0),
+        "reaction": (
+            min(1.0, abs(move_return) / period.reaction_full_at) if move_return is not None else 0.0
+        ),
         "category": 1.0 if cats else 0.0,
         "on_site": 1.0 if ranked.intersection(tickers) else 0.0,
     }
     score = sum(IMPORTANCE_WEIGHTS[k] * v for k, v in inputs.items())
     return Story(
         articles=tuple(sorted(articles, key=lambda a: a.published_at)),
-        lead=lead, tickers=tickers, categories=cats, n_outlets=n_outlets,
-        move_ticker=move_ticker, move_return=move_return, inputs=inputs, score=score,
+        lead=lead,
+        tickers=tickers,
+        categories=cats,
+        n_outlets=n_outlets,
+        move_ticker=move_ticker,
+        move_return=move_return,
+        inputs=inputs,
+        score=score,
     )
 
 
@@ -411,8 +498,15 @@ def rank_stories(
     """Highest score first; ties go to the story with more articles, then
     the more recent one."""
     stories = [score_story(g, moves, ranked, period) for g in groups]
-    return sorted(stories, key=lambda s: (-s.score, -len(s.articles),
-                                          -s.lead.published_at.timestamp(), s.lead.article_id))
+    return sorted(
+        stories,
+        key=lambda s: (
+            -s.score,
+            -len(s.articles),
+            -s.lead.published_at.timestamp(),
+            s.lead.article_id,
+        ),
+    )
 
 
 def reserved_kind(story: Story) -> bool:
@@ -427,13 +521,14 @@ def pick_stories(ranked: list[Story], period: Period = DAILY) -> list[Story]:
     RESERVED_MIN_SCORE take the places of the lowest-ranked others. A
     reserved pick scored below every story it joins, so the picks stay in
     score order with it at the bottom."""
-    top = ranked[:period.size]
+    top = ranked[: period.size]
     missing = period.reserved - sum(map(reserved_kind, top))
-    extra = [s for s in ranked[period.size:]
-             if reserved_kind(s) and s.score >= RESERVED_MIN_SCORE][:max(missing, 0)]
+    extra = [
+        s for s in ranked[period.size :] if reserved_kind(s) and s.score >= RESERVED_MIN_SCORE
+    ][: max(missing, 0)]
     if not extra:
         return top
-    dropped = {s.lead.article_id for s in [s for s in top if not reserved_kind(s)][-len(extra):]}
+    dropped = {s.lead.article_id for s in [s for s in top if not reserved_kind(s)][-len(extra) :]}
     return [s for s in top if s.lead.article_id not in dropped] + extra
 
 
@@ -451,6 +546,7 @@ def session_gap_minutes(published: list[datetime], session_date: date) -> int:
 # Warehouse IO
 # ---------------------------------------------------------------------------
 
+
 def _load_articles(con, start: datetime, end: datetime) -> list[Article]:
     rows = con.execute(
         """
@@ -461,9 +557,17 @@ def _load_articles(con, start: datetime, end: datetime) -> list[Article]:
         [start, end],
     ).fetchall()
     return [
-        Article(article_id=aid, published_at=ts, source=src, headline=h, summary=s,
-                url=u, tickers=tuple(tk or ()), words=headline_words(h),
-                categories=categories_of(h))
+        Article(
+            article_id=aid,
+            published_at=ts,
+            source=src,
+            headline=h,
+            summary=s,
+            url=u,
+            tickers=tuple(tk or ()),
+            words=headline_words(h),
+            categories=categories_of(h),
+        )
         for aid, ts, src, h, s, u, tk in rows
     ]
 
@@ -537,8 +641,9 @@ def _build(
         news = [a for a in articles if not_news(a.headline) is None]
         groups = group_stories(news)
         tickers = {t for a in news for t in a.tickers}
-        stories = pick_stories(rank_stories(groups, moves(con, tickers), _ranked(con, ranked_before),
-                                            period), period)
+        stories = pick_stories(
+            rank_stories(groups, moves(con, tickers), _ranked(con, ranked_before), period), period
+        )
         published = [a.published_at for a in articles]
         summary = {
             "period": period.name,
@@ -562,9 +667,18 @@ def _build(
                 routine_dropped, commentary_dropped, stories, outlets, session_gap_minutes, built_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [*key, start, end, summary["articles"], summary["routine_dropped"],
-             summary["commentary_dropped"], summary["stories"], summary["outlets"],
-             summary["session_gap_minutes"], datetime.now(UTC)],
+            [
+                *key,
+                start,
+                end,
+                summary["articles"],
+                summary["routine_dropped"],
+                summary["commentary_dropped"],
+                summary["stories"],
+                summary["outlets"],
+                summary["session_gap_minutes"],
+                datetime.now(UTC),
+            ],
         )
         for rank, s in enumerate(stories, start=1):
             con.execute(
@@ -574,10 +688,26 @@ def _build(
                     move_ticker, move_return, coverage, reaction, category, on_site, score)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [*key, rank, s.lead.headline, s.lead.summary, s.lead.url, s.lead.source,
-                 s.lead.published_at, list(s.tickers), list(s.categories), len(s.articles),
-                 s.n_outlets, s.move_ticker, s.move_return, s.inputs["coverage"],
-                 s.inputs["reaction"], s.inputs["category"], s.inputs["on_site"], s.score],
+                [
+                    *key,
+                    rank,
+                    s.lead.headline,
+                    s.lead.summary,
+                    s.lead.url,
+                    s.lead.source,
+                    s.lead.published_at,
+                    list(s.tickers),
+                    list(s.categories),
+                    len(s.articles),
+                    s.n_outlets,
+                    s.move_ticker,
+                    s.move_return,
+                    s.inputs["coverage"],
+                    s.inputs["reaction"],
+                    s.inputs["category"],
+                    s.inputs["on_site"],
+                    s.score,
+                ],
             )
             con.executemany(
                 "INSERT INTO mart.news_digest_articles (period, digest_date, rank, article_id)"
@@ -595,8 +725,13 @@ def build_daily_digest(warehouse: Warehouse, digest_date: date) -> dict:
         raise ValueError(f"{digest_date} is a weekend; daily digests are dated Monday to Friday")
     session = previous_weekday(digest_date)
     return _build(
-        warehouse, DAILY, digest_date, digest_window(digest_date), [session],
-        lambda con, tickers: _moves(con, tickers, session, digest_date), digest_date,
+        warehouse,
+        DAILY,
+        digest_date,
+        digest_window(digest_date),
+        [session],
+        lambda con, tickers: _moves(con, tickers, session, digest_date),
+        digest_date,
     )
 
 
@@ -608,7 +743,11 @@ def build_weekly_digest(warehouse: Warehouse, friday: date) -> dict:
         raise ValueError(f"{friday} is not a Friday; weekly digests are dated by the week's Friday")
     sessions = week_sessions(friday)
     return _build(
-        warehouse, WEEKLY, friday, weekly_window(friday), sessions,
+        warehouse,
+        WEEKLY,
+        friday,
+        weekly_window(friday),
+        sessions,
         lambda con, tickers: _week_moves(con, tickers, sessions[0], sessions[-1]),
         friday + timedelta(days=1),
     )

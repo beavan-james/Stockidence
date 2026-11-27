@@ -20,7 +20,9 @@ from .base import BaseClient
 
 
 class SecEdgarClient(BaseClient):
-    def __init__(self, *, user_agent: str | None = None, timeout: float = 60.0, **kwargs: Any) -> None:
+    def __init__(
+        self, *, user_agent: str | None = None, timeout: float = 60.0, **kwargs: Any
+    ) -> None:
         from ...config import load_settings
 
         settings = load_settings()
@@ -32,7 +34,9 @@ class SecEdgarClient(BaseClient):
             api_key="",
             base_url="https://data.sec.gov",
             timeout=timeout,
-            min_interval_seconds=kwargs.pop("min_interval_seconds", settings.min_interval_seconds["sec"]),
+            min_interval_seconds=kwargs.pop(
+                "min_interval_seconds", settings.min_interval_seconds["sec"]
+            ),
             **kwargs,
         )
 

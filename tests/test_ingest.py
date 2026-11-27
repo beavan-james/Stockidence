@@ -18,11 +18,29 @@ QUOTE = {"c": 250.1, "h": 251.0, "l": 249.0, "o": 249.5, "pc": 247.0}
 PRICES = {
     "status": "ok",
     "values": [
-        {"datetime": "2026-08-14", "open": "1.0", "high": "1.1", "low": "0.9", "close": "1.05", "volume": "100"},
-        {"datetime": "2026-08-17", "open": "1.05", "high": "1.2", "low": "1.0", "close": "1.15", "volume": "200"},
+        {
+            "datetime": "2026-08-14",
+            "open": "1.0",
+            "high": "1.1",
+            "low": "0.9",
+            "close": "1.05",
+            "volume": "100",
+        },
+        {
+            "datetime": "2026-08-17",
+            "open": "1.05",
+            "high": "1.2",
+            "low": "1.0",
+            "close": "1.15",
+            "volume": "200",
+        },
     ],
 }
-MACRO = {"name": "Inflation", "interval": "monthly", "data": [{"date": "2026-07-01", "value": "3.2"}]}
+MACRO = {
+    "name": "Inflation",
+    "interval": "monthly",
+    "data": [{"date": "2026-07-01", "value": "3.2"}],
+}
 FINANCIALS = {
     "symbol": "AAPL",
     "data": [
@@ -38,7 +56,10 @@ TRANSCRIPT = {
     "symbol": "AAPL",
     "quarter": 4,
     "year": 2025,
-    "transcript": [{"speaker": "CEO", "title": "CEO", "content": "hi"}, {"speaker": "CFO", "title": "CFO", "content": "hey"}],
+    "transcript": [
+        {"speaker": "CEO", "title": "CEO", "content": "hi"},
+        {"speaker": "CFO", "title": "CFO", "content": "hey"},
+    ],
 }
 NEWS = [
     {
@@ -153,8 +174,7 @@ def test_prices_daily_incremental_start_date(engine):
     # first fetch backfills ~15 years so SMA200 scoring/backtests have depth
     assert td.calls[0] == (
         "time_series",
-        {"symbol": "AAPL",
-         "start_date": (NOW.date() - timedelta(days=5500)).isoformat()},
+        {"symbol": "AAPL", "start_date": (NOW.date() - timedelta(days=5500)).isoformat()},
     )
 
     # TTL is 1 day; same-day request reuses the cache instead of re-calling
@@ -205,7 +225,11 @@ def test_scheduled_macro_lands_rows(engine):
     wh, eng = engine
     result = eng.ingest_scheduled("macro.inflation", now=NOW)
     assert result.fetched and result.rows_written == 1
-    rows = wh.connect(read_only=True).execute("SELECT indicator, date FROM raw.raw_macro_indicators").fetchall()
+    rows = (
+        wh.connect(read_only=True)
+        .execute("SELECT indicator, date FROM raw.raw_macro_indicators")
+        .fetchall()
+    )
     assert rows == [("inflation", date(2026, 7, 1))]
 
 
@@ -218,7 +242,9 @@ def test_scheduled_calendar_uses_default_window(engine):
     assert kwargs["from_date"] == "2026-08-10"  # today - 7 (recently priced backfill)
     assert kwargs["to_date"] == "2026-10-01"  # today + 45 days
 
-    result2 = eng.ingest_scheduled("ipo_calendar", now=NOW, params={"from_date": "2026-01-01", "to_date": "2026-02-01"})
+    result2 = eng.ingest_scheduled(
+        "ipo_calendar", now=NOW, params={"from_date": "2026-01-01", "to_date": "2026-02-01"}
+    )
     assert result2.fetched and result2.rows_written == 0  # no IPOs inside the custom window
 
 
@@ -245,8 +271,18 @@ def test_ticker_news_refreshes_monthly(engine):
         ("company_news", {"symbol": "AAPL", "from_date": "2025-08-17", "to_date": "2026-08-17"}),
     ]
     with wh.connect(read_only=True) as con:
-        assert con.execute("SELECT COUNT(*) FROM raw.news_ticker_sentiment WHERE ticker = 'AAPL'").fetchone()[0] == 1
-        assert con.execute("SELECT COUNT(*) FROM raw.ticker_news_fetches WHERE ticker = 'AAPL'").fetchone()[0] == 1
+        assert (
+            con.execute(
+                "SELECT COUNT(*) FROM raw.news_ticker_sentiment WHERE ticker = 'AAPL'"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            con.execute(
+                "SELECT COUNT(*) FROM raw.ticker_news_fetches WHERE ticker = 'AAPL'"
+            ).fetchone()[0]
+            == 1
+        )
 
     # inside the TTL the gate refuses
     second = eng.ingest_on_demand("ticker_news", "AAPL", now=NOW + timedelta(days=29))

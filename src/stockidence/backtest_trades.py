@@ -45,14 +45,13 @@ class PlanParams:
     reproduce the live scoring.BUY_PLAN behavior exactly.
     """
 
-    mos: float | None = None           # margin of safety (default 0.15)
-    atr_scale: float = 1.0             # scales the style's ATR multiple
-    stop_floor: float | None = None    # floor as fraction of buy price (0.6)
-    target_mode: str = "captured"      # "captured" or "fv" (= fair value)
+    mos: float | None = None  # margin of safety (default 0.15)
+    atr_scale: float = 1.0  # scales the style's ATR multiple
+    stop_floor: float | None = None  # floor as fraction of buy price (0.6)
+    target_mode: str = "captured"  # "captured" or "fv" (= fair value)
 
 
-def apply_plan_params(rows: list[BacktestRow],
-                      p: PlanParams) -> list[BacktestRow]:
+def apply_plan_params(rows: list[BacktestRow], p: PlanParams) -> list[BacktestRow]:
     """Rebuild each row's plan geometry under PlanParams (pure)."""
     out: list[BacktestRow] = []
     for r in rows:
@@ -74,13 +73,20 @@ def apply_plan_params(rows: list[BacktestRow],
         else:
             target = src.get("target_price")
         new = dict(src)
-        new.update({"buy_price": buy, "stop_loss": stop,
-                    "target_price": target})
-        out.append(BacktestRow(
-            ticker=r.ticker, as_of=r.as_of, rating=r.rating,
-            confidence=r.confidence, volatility=r.volatility,
-            category_scores=r.category_scores, fwd_returns=r.fwd_returns,
-            fwd_vols=r.fwd_vols, plan=new))
+        new.update({"buy_price": buy, "stop_loss": stop, "target_price": target})
+        out.append(
+            BacktestRow(
+                ticker=r.ticker,
+                as_of=r.as_of,
+                rating=r.rating,
+                confidence=r.confidence,
+                volatility=r.volatility,
+                category_scores=r.category_scores,
+                fwd_returns=r.fwd_returns,
+                fwd_vols=r.fwd_vols,
+                plan=new,
+            )
+        )
     return out
 
 
@@ -92,16 +98,22 @@ class Trade:
     entry_price: float | None
     exit_date: object | None
     exit_price: float | None
-    net_return: float | None        # after costs; None while open/unfilled
+    net_return: float | None  # after costs; None while open/unfilled
     days_held: int | None
-    exit_reason: str                # "stop" | "target" | "timeout" | "eod" | "unfilled"
+    exit_reason: str  # "stop" | "target" | "timeout" | "eod" | "unfilled"
     holding_style: str | None = None
 
 
-def _simulate_one(ticker: str, signals: list[BacktestRow],
-                  bars: list[tuple], *, entry_ratings: tuple[str, ...],
-                  entry_window: int, max_hold: int,
-                  cost_bps: float) -> list[Trade]:
+def _simulate_one(
+    ticker: str,
+    signals: list[BacktestRow],
+    bars: list[tuple],
+    *,
+    entry_ratings: tuple[str, ...],
+    entry_window: int,
+    max_hold: int,
+    cost_bps: float,
+) -> list[Trade]:
     """bars: chronological (date, open, high, low, close)."""
     date_idx = {b[0]: i for i, b in enumerate(bars)}
     trades: list[Trade] = []
@@ -114,7 +126,7 @@ def _simulate_one(ticker: str, signals: list[BacktestRow],
     while i < len(bars) and s < len(pending):
         sig = pending[s]
         sb = date_idx[sig.as_of]
-        if sb < i:          # signal already passed while we were positioned
+        if sb < i:  # signal already passed while we were positioned
             s += 1
             continue
         if sig.rating not in entry_ratings or not _plan_ok(sig):
@@ -135,8 +147,20 @@ def _simulate_one(ticker: str, signals: list[BacktestRow],
                 filled_at = (k, limit)
                 break
         if filled_at is None:
-            trades.append(Trade(ticker, sig.as_of, None, None, None, None,
-                                None, None, "unfilled", plan["holding_style"]))
+            trades.append(
+                Trade(
+                    ticker,
+                    sig.as_of,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "unfilled",
+                    plan["holding_style"],
+                )
+            )
             s += 1
             i = sb + 1
             continue
@@ -175,11 +199,22 @@ def _simulate_one(ticker: str, signals: list[BacktestRow],
 
         gross = exit_px / entry - 1.0
         net = gross - cost_bps / 10_000.0
-        trades.append(Trade(ticker, sig.as_of, bars[ek][0], entry,
-                            bars[exit_day][0], exit_px, net,
-                            exit_day - ek, reason, plan["holding_style"]))
+        trades.append(
+            Trade(
+                ticker,
+                sig.as_of,
+                bars[ek][0],
+                entry,
+                bars[exit_day][0],
+                exit_px,
+                net,
+                exit_day - ek,
+                reason,
+                plan["holding_style"],
+            )
+        )
         s += 1
-        i = exit_day + 1     # no re-entry until the day after the exit
+        i = exit_day + 1  # no re-entry until the day after the exit
     return trades
 
 
@@ -188,12 +223,16 @@ def _plan_ok(row: BacktestRow) -> bool:
     return bool(p and p.get("buy_price") and p.get("stop_loss"))
 
 
-def simulate(warehouse: Warehouse, rows: list[BacktestRow], *,
-             entry_ratings: tuple[str, ...] = DEFAULT_ENTRY_RATINGS,
-             entry_window: int = DEFAULT_ENTRY_WINDOW,
-             max_hold: int = DEFAULT_MAX_HOLD,
-             cost_bps: float = 5.0,
-             plan_params: PlanParams | None = None) -> list[Trade]:
+def simulate(
+    warehouse: Warehouse,
+    rows: list[BacktestRow],
+    *,
+    entry_ratings: tuple[str, ...] = DEFAULT_ENTRY_RATINGS,
+    entry_window: int = DEFAULT_ENTRY_WINDOW,
+    max_hold: int = DEFAULT_MAX_HOLD,
+    cost_bps: float = 5.0,
+    plan_params: PlanParams | None = None,
+) -> list[Trade]:
     """Resolve cached signals against stored OHLC bars, ticker by ticker."""
     if plan_params is not None:
         rows = apply_plan_params(rows, plan_params)
@@ -212,20 +251,25 @@ def simulate(warehouse: Warehouse, rows: list[BacktestRow], *,
                 """,
                 [ticker],
             ).fetchall()
-            trades.extend(_simulate_one(
-                ticker, sigs, bars,
-                entry_ratings=entry_ratings, entry_window=entry_window,
-                max_hold=max_hold, cost_bps=cost_bps))
-    return [t for t in trades if t.entry_price is not None
-            or t.exit_reason == "unfilled"]
+            trades.extend(
+                _simulate_one(
+                    ticker,
+                    sigs,
+                    bars,
+                    entry_ratings=entry_ratings,
+                    entry_window=entry_window,
+                    max_hold=max_hold,
+                    cost_bps=cost_bps,
+                )
+            )
+    return [t for t in trades if t.entry_price is not None or t.exit_reason == "unfilled"]
 
 
 def render_trades(trades: list[Trade]) -> str:
     lines: list[str] = []
     filled = [t for t in trades if t.net_return is not None]
     unfilled = [t for t in trades if t.exit_reason == "unfilled"]
-    lines.append(f"signals={len(trades)} filled={len(filled)} "
-                 f"unfilled={len(unfilled)}")
+    lines.append(f"signals={len(trades)} filled={len(filled)} unfilled={len(unfilled)}")
     if not filled:
         lines.append("no filled trades")
         return "\n".join(lines)
@@ -240,15 +284,20 @@ def render_trades(trades: list[Trade]) -> str:
     lines.append(
         f"trades={len(filled)} win_rate={wins / len(filled):.0%} "
         f"avg={statistics.fmean(rets):+.2%} median={statistics.median(rets):+.2%} "
-        f"best={max(rets):+.2%} worst={min(rets):+.2%}")
-    lines.append(f"compounded x{compounded:.3f} "
-                 f"avg_days_held={statistics.fmean(t.days_held for t in filled):.0f} "
-                 f"exits={reasons} cost_bps_round_trip_deducted")
+        f"best={max(rets):+.2%} worst={min(rets):+.2%}"
+    )
+    lines.append(
+        f"compounded x{compounded:.3f} "
+        f"avg_days_held={statistics.fmean(t.days_held for t in filled):.0f} "
+        f"exits={reasons} cost_bps_round_trip_deducted"
+    )
     lines.append("per-ticker:")
     for tkr in sorted({t.ticker for t in filled}):
         rs = [t.net_return for t in filled if t.ticker == tkr]
-        lines.append(f"  {tkr:<6} n={len(rs):>2} avg={statistics.fmean(rs):+.2%} "
-                     f"wins={sum(r > 0 for r in rs)}/{len(rs)}")
+        lines.append(
+            f"  {tkr:<6} n={len(rs):>2} avg={statistics.fmean(rs):+.2%} "
+            f"wins={sum(r > 0 for r in rs)}/{len(rs)}"
+        )
     return "\n".join(lines)
 
 
@@ -256,31 +305,48 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("rows_json", help="replay rows saved by backtest --save")
     parser.add_argument("--db", default=None, help="warehouse path override")
-    parser.add_argument("--entry", default=",".join(DEFAULT_ENTRY_RATINGS),
-                        help="ratings that trigger an entry, e.g. 'Strong Buy,Buy'")
+    parser.add_argument(
+        "--entry",
+        default=",".join(DEFAULT_ENTRY_RATINGS),
+        help="ratings that trigger an entry, e.g. 'Strong Buy,Buy'",
+    )
     parser.add_argument("--entry-window", type=int, default=DEFAULT_ENTRY_WINDOW)
     parser.add_argument("--max-hold", type=int, default=DEFAULT_MAX_HOLD)
-    parser.add_argument("--cost-bps", type=float, default=5.0,
-                        help="round-trip transaction cost in basis points")
-    parser.add_argument("--mos", type=float, default=None,
-                        help="margin-of-safety override (default 0.15)")
-    parser.add_argument("--atr-scale", type=float, default=1.0,
-                        help="scale the style's ATR stop multiple")
-    parser.add_argument("--stop-floor", type=float, default=None,
-                        help="stop floor as fraction of buy price (0.6)")
-    parser.add_argument("--target-mode", choices=("captured", "fv"),
-                        default="captured",
-                        help="exit target: model's target price or fair value")
+    parser.add_argument(
+        "--cost-bps", type=float, default=5.0, help="round-trip transaction cost in basis points"
+    )
+    parser.add_argument(
+        "--mos", type=float, default=None, help="margin-of-safety override (default 0.15)"
+    )
+    parser.add_argument(
+        "--atr-scale", type=float, default=1.0, help="scale the style's ATR stop multiple"
+    )
+    parser.add_argument(
+        "--stop-floor", type=float, default=None, help="stop floor as fraction of buy price (0.6)"
+    )
+    parser.add_argument(
+        "--target-mode",
+        choices=("captured", "fv"),
+        default="captured",
+        help="exit target: model's target price or fair value",
+    )
     args = parser.parse_args()
     warehouse = Warehouse(args.db)
     ratings = tuple(r.strip() for r in args.entry.split(",") if r.strip())
-    trades = simulate(warehouse, load_rows(args.rows_json),
-                      entry_ratings=ratings, entry_window=args.entry_window,
-                      max_hold=args.max_hold, cost_bps=args.cost_bps,
-                      plan_params=PlanParams(
-                          mos=args.mos, atr_scale=args.atr_scale,
-                          stop_floor=args.stop_floor,
-                          target_mode=args.target_mode))
+    trades = simulate(
+        warehouse,
+        load_rows(args.rows_json),
+        entry_ratings=ratings,
+        entry_window=args.entry_window,
+        max_hold=args.max_hold,
+        cost_bps=args.cost_bps,
+        plan_params=PlanParams(
+            mos=args.mos,
+            atr_scale=args.atr_scale,
+            stop_floor=args.stop_floor,
+            target_mode=args.target_mode,
+        ),
+    )
     print(render_trades(trades))
 
 

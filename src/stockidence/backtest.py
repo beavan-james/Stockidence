@@ -57,8 +57,9 @@ class Summary:
     median_return: float
 
 
-def _trading_bars(con: Any, ticker: str,
-                  start: date | None, end: date | None) -> list[tuple[date, float]]:
+def _trading_bars(
+    con: Any, ticker: str, start: date | None, end: date | None
+) -> list[tuple[date, float]]:
     """Chronological [(date, close)] bars, optionally windowed."""
     rows = con.execute(
         """
@@ -95,19 +96,22 @@ def run_backtest(
         for ticker in tickers:
             bars = _trading_bars(con, ticker, start, end)
             eligible = [
-                i for i in range(len(bars))
-                if i >= min_bars and i + need_future < len(bars)
+                i for i in range(len(bars)) if i >= min_bars and i + need_future < len(bars)
             ]
-            print(f"[{ticker}] {len(bars)} bars, "
-                  f"{len(eligible)} replay dates (min_bars={min_bars}, "
-                  f"need_future={need_future})")
+            print(
+                f"[{ticker}] {len(bars)} bars, "
+                f"{len(eligible)} replay dates (min_bars={min_bars}, "
+                f"need_future={need_future})"
+            )
             for i in eligible[::step_days]:
                 as_of = bars[i][0]
-                result = score_ticker(warehouse, ticker, as_of=as_of,
-                                      now=datetime(as_of.year, as_of.month,
-                                                   as_of.day,
-                                                   tzinfo=UTC),
-                                      persist=False)
+                result = score_ticker(
+                    warehouse,
+                    ticker,
+                    as_of=as_of,
+                    now=datetime(as_of.year, as_of.month, as_of.day, tzinfo=UTC),
+                    persist=False,
+                )
                 fwd = {}
                 fvol = {}
                 for h in horizons:
@@ -116,8 +120,7 @@ def run_backtest(
                     # realized forward volatility: stdev of the daily returns
                     # inside the horizon window (per-bar; scale-invariant to
                     # annualization, which correlation ignores anyway)
-                    rets = [bars[i + k + 1][1] / bars[i + k][1] - 1.0
-                            for k in range(h)]
+                    rets = [bars[i + k + 1][1] / bars[i + k][1] - 1.0 for k in range(h)]
                     fvol[h] = statistics.pstdev(rets) if h > 1 else 0.0
                 plan = None
                 if result.buy_plan:
@@ -131,23 +134,23 @@ def run_backtest(
                         "atr_14": result.buy_plan.get("atr_14"),
                         "fair_value": result.fair_value,
                     }
-                rows.append(BacktestRow(
-                    ticker=ticker,
-                    as_of=as_of,
-                    rating=result.rating,
-                    confidence=result.confidence_score,
-                    volatility=result.volatility_score,
-                    category_scores={c.name: c.score
-                                     for c in result.categories},
-                    fwd_returns=fwd,
-                    fwd_vols=fvol,
-                    plan=plan,
-                ))
+                rows.append(
+                    BacktestRow(
+                        ticker=ticker,
+                        as_of=as_of,
+                        rating=result.rating,
+                        confidence=result.confidence_score,
+                        volatility=result.volatility_score,
+                        category_scores={c.name: c.score for c in result.categories},
+                        fwd_returns=fwd,
+                        fwd_vols=fvol,
+                        plan=plan,
+                    )
+                )
     return rows
 
 
-def summarize(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)
-              ) -> list[Summary]:
+def summarize(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)) -> list[Summary]:
     """Directional accuracy + realized return per (rating, horizon).
 
     Directional expectation is defined by the product framing: Buy-rated
@@ -166,14 +169,16 @@ def summarize(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)
             rets = [r.fwd_returns[horizon] for r in group]
             want_up = rating in BULLISH
             hits = sum(1 for x in rets if (x > 0) == want_up)
-            out.append(Summary(
-                horizon=horizon,
-                rating=rating,
-                n=len(rets),
-                directional_accuracy=hits / len(rets),
-                mean_return=statistics.fmean(rets),
-                median_return=statistics.median(rets),
-            ))
+            out.append(
+                Summary(
+                    horizon=horizon,
+                    rating=rating,
+                    n=len(rets),
+                    directional_accuracy=hits / len(rets),
+                    mean_return=statistics.fmean(rets),
+                    median_return=statistics.median(rets),
+                )
+            )
     return out
 
 
@@ -181,23 +186,25 @@ def render(rows: list[BacktestRow], horizons: tuple[int, ...] = (5, 20, 60)) -> 
     """Plain-text report suitable for pasting into a tuning discussion."""
     lines: list[str] = []
     total = len(rows)
-    span = (min((r.as_of for r in rows), default=None),
-            max((r.as_of for r in rows), default=None))
-    lines.append(f"replays={total} span={span[0]}..{span[1]} "
-                 f"tickers={len({r.ticker for r in rows})}")
+    span = (min((r.as_of for r in rows), default=None), max((r.as_of for r in rows), default=None))
+    lines.append(
+        f"replays={total} span={span[0]}..{span[1]} tickers={len({r.ticker for r in rows})}"
+    )
     if not rows:
-        lines.append("no eligible replay dates (need min_bars before and "
-                     "max horizon after each as_of)")
+        lines.append(
+            "no eligible replay dates (need min_bars before and max horizon after each as_of)"
+        )
         return "\n".join(lines)
     conf = [r.confidence for r in rows]
-    lines.append(f"confidence mean={statistics.fmean(conf):.1f} "
-                 f"stdev={statistics.pstdev(conf):.1f} "
-                 f"min={min(conf):.1f} max={max(conf):.1f}")
+    lines.append(
+        f"confidence mean={statistics.fmean(conf):.1f} "
+        f"stdev={statistics.pstdev(conf):.1f} "
+        f"min={min(conf):.1f} max={max(conf):.1f}"
+    )
     counts = {}
     for r in rows:
         counts[r.rating] = counts.get(r.rating, 0) + 1
-    lines.append("rating mix: " + ", ".join(
-        f"{k}={v}" for k, v in sorted(counts.items())))
+    lines.append("rating mix: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     header = f"{'rating':<12}{'n':>5}"
     for h in horizons:
         header += f"   {'acc ' + str(h) + 'd':>9}{'ret ' + str(h) + 'd':>10}"
@@ -224,6 +231,7 @@ def save_rows(rows: list[BacktestRow], path: str) -> None:
     """Persist replay rows as JSON so diagnostics/tuning iterate without
     re-running the (expensive) score replays."""
     import json
+
     payload = [
         {
             "ticker": r.ticker,
@@ -244,6 +252,7 @@ def save_rows(rows: list[BacktestRow], path: str) -> None:
 
 def load_rows(path: str) -> list[BacktestRow]:
     import json
+
     with open(path) as f:
         payload = json.load(f)
     return [
@@ -264,21 +273,22 @@ def load_rows(path: str) -> list[BacktestRow]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    parser.add_argument("--tickers", required=True,
-                        help="comma-separated tickers, e.g. AAPL,MSFT")
+    parser.add_argument("--tickers", required=True, help="comma-separated tickers, e.g. AAPL,MSFT")
     parser.add_argument("--start", type=date.fromisoformat, default=None)
     parser.add_argument("--end", type=date.fromisoformat, default=None)
-    parser.add_argument("--step-days", type=int, default=7,
-                        help="replay every Nth eligible trading bar")
+    parser.add_argument(
+        "--step-days", type=int, default=7, help="replay every Nth eligible trading bar"
+    )
     parser.add_argument("--db", default=None, help="warehouse path override")
-    parser.add_argument("--save", default=None,
-                        help="write replay rows to this JSON path")
+    parser.add_argument("--save", default=None, help="write replay rows to this JSON path")
     args = parser.parse_args()
     warehouse = Warehouse(args.db)
     rows = run_backtest(
         warehouse,
         [t.strip().upper() for t in args.tickers.split(",") if t.strip()],
-        start=args.start, end=args.end, step_days=args.step_days,
+        start=args.start,
+        end=args.end,
+        step_days=args.step_days,
     )
     print(render(rows))
     if args.save:

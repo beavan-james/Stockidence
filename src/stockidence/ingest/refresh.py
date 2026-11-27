@@ -80,8 +80,10 @@ def refresh_tickers(
     emit(f"resynced {resync['watermarks']} ticker watermarks from landed rows")
     gapped = resync["gapped_tickers"]
     if gapped:
-        emit(f"{len(gapped)} tickers have holes in their price history and will re-pull "
-             f"full history: {', '.join(gapped[:30])}{' ...' if len(gapped) > 30 else ''}")
+        emit(
+            f"{len(gapped)} tickers have holes in their price history and will re-pull "
+            f"full history: {', '.join(gapped[:30])}{' ...' if len(gapped) > 30 else ''}"
+        )
 
     total_calls = total_rows = 0
     errors: list[dict[str, str]] = []
@@ -93,8 +95,7 @@ def refresh_tickers(
         if full_backfill:
             with warehouse.connect() as con:
                 con.execute(
-                    "DELETE FROM control.watermarks "
-                    "WHERE endpoint = ? AND dimension_key = ?",
+                    "DELETE FROM control.watermarks WHERE endpoint = ? AND dimension_key = ?",
                     ["raw.raw_prices_daily", ticker],
                 )
 
@@ -107,12 +108,15 @@ def refresh_tickers(
             for attempt in range(1, max_attempts + 1):
                 try:
                     result = engine.ingest_on_demand(
-                        ep.name, ticker, now=now, force=ep.name in force_endpoints)
+                        ep.name, ticker, now=now, force=ep.name in force_endpoints
+                    )
                     last_error = None
                     break
                 except Exception as exc:  # record and retry
                     last_error = str(exc)
-                    emit(f"  {ep.name:30s} attempt {attempt}/{max_attempts} failed: {last_error[:100]}")
+                    emit(
+                        f"  {ep.name:30s} attempt {attempt}/{max_attempts} failed: {last_error[:100]}"
+                    )
                     if attempt < max_attempts:
                         time.sleep(RETRY_BACKOFF_SECONDS * attempt)
             if last_error is not None:

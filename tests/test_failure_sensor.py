@@ -19,10 +19,7 @@ def test_init_schema_creates_pipeline_failures(tmp_path):
     tables = {
         row[0]
         for row in wh.connect(read_only=True)
-        .execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'control'"
-        )
+        .execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'control'")
         .fetchall()
     }
     assert "pipeline_failures" in tables
@@ -36,9 +33,11 @@ def test_record_failure_inserts_and_dedups_on_run_id(tmp_path):
     # re-fire for the same run (e.g. sensor re-evaluation) must not duplicate
     record_failure(wh, "run-1", "daily_ingest", now, "boom")
 
-    rows = wh.connect(read_only=True).execute(
-        "SELECT run_id, job_name, error_message FROM control.pipeline_failures"
-    ).fetchall()
+    rows = (
+        wh.connect(read_only=True)
+        .execute("SELECT run_id, job_name, error_message FROM control.pipeline_failures")
+        .fetchall()
+    )
     assert rows == [("run-1", "daily_ingest", "boom")]
 
 
@@ -50,7 +49,8 @@ def test_record_failure_prunes_past_retention(tmp_path):
     record_failure(wh, "fresh", "weekdays_ingest", now - timedelta(days=2))
 
     remaining = [
-        r[0] for r in wh.connect(read_only=True)
+        r[0]
+        for r in wh.connect(read_only=True)
         .execute("SELECT run_id FROM control.pipeline_failures")
         .fetchall()
     ]

@@ -42,12 +42,16 @@ def _single(artifact: str, rows: list[dict[str, Any]]) -> dict[str, list[dict[st
     return {artifact: rows}
 
 
-def normalize_quote(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_quote(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Finnhub /quote: one ticker row, payload kept whole."""
     return _single("raw_quotes", [{"ticker": symbol, "payload": payload}])
 
 
-def normalize_prices_daily(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_prices_daily(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Twelve Data /time_series: one row per bar, keyed (ticker, date)."""
     rows = [
         {"ticker": symbol, "date": _as_date(bar["datetime"]), "payload": bar}
@@ -57,12 +61,16 @@ def normalize_prices_daily(payload: dict[str, Any], symbol: str, now: datetime) 
     return _single("raw_prices_daily", rows)
 
 
-def normalize_company_profile2(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_company_profile2(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     ticker = payload.get("ticker") or symbol
     return _single("raw_company_profile", [{"ticker": ticker, "payload": payload}])
 
 
-def normalize_basic_financials(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_basic_financials(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Finnhub /stock/metrics: flatten the annual + quarterly series.
 
     The API returns `series` keyed by frequency, then by metric name, then a
@@ -113,7 +121,9 @@ def normalize_basic_financials(payload: dict[str, Any], symbol: str, now: dateti
     return _single("raw_basic_financials", rows)
 
 
-def normalize_financials_reported(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_financials_reported(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Finnhub /stock/financials-reported: one row per filing report."""
     ticker = payload.get("symbol") or symbol
     rows = [
@@ -165,7 +175,9 @@ def keep_filled_report_sections(incoming: dict[str, Any], stored: dict[str, Any]
 SEC_LOOKBACK_DAYS = 3 * 365
 
 
-def normalize_sec_balance_sheets(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_sec_balance_sheets(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """SEC /api/xbrl/companyfacts: one row per filing, holding its balance
     sheet as filed (every us-gaap USD point-in-time fact on its balance-sheet
     date).
@@ -185,7 +197,8 @@ def normalize_sec_balance_sheets(payload: dict[str, Any], symbol: str, now: date
             if "start" in fact or not fact.get("accn") or (fact.get("filed") or "") < cutoff:
                 continue
             filing = filings.setdefault(
-                fact["accn"], {"form": fact.get("form"), "filed": fact.get("filed"), "facts": []})
+                fact["accn"], {"form": fact.get("form"), "filed": fact.get("filed"), "facts": []}
+            )
             filing["facts"].append((concept, fact["end"], fact.get("val"), body.get("label")))
 
     rows = []
@@ -196,23 +209,29 @@ def normalize_sec_balance_sheets(payload: dict[str, Any], symbol: str, now: date
         for concept, end, value, label in filing["facts"]:
             if end == as_of and concept not in seen:
                 seen.add(concept)
-                bs.append({"concept": f"us-gaap_{concept}", "unit": "usd", "label": label, "value": value})
-        rows.append({
-            "ticker": symbol,
-            "accession_number": accn,
-            "payload": {
-                "cik": payload.get("cik"),
-                "accessNumber": accn,
-                "form": filing["form"],
-                "filedDate": filing["filed"],
-                "endDate": as_of,
-                "bs": bs,
-            },
-        })
+                bs.append(
+                    {"concept": f"us-gaap_{concept}", "unit": "usd", "label": label, "value": value}
+                )
+        rows.append(
+            {
+                "ticker": symbol,
+                "accession_number": accn,
+                "payload": {
+                    "cik": payload.get("cik"),
+                    "accessNumber": accn,
+                    "form": filing["form"],
+                    "filedDate": filing["filed"],
+                    "endDate": as_of,
+                    "bs": bs,
+                },
+            }
+        )
     return _single("raw_sec_balance_sheets", rows)
 
 
-def normalize_eps_surprises(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_eps_surprises(
+    payload: list[dict[str, Any]], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     rows = [
         {
             "ticker": entry.get("symbol") or symbol,
@@ -226,7 +245,9 @@ def normalize_eps_surprises(payload: list[dict[str, Any]], symbol: str, now: dat
     return _single("raw_eps_surprises", rows)
 
 
-def normalize_earnings_call_transcript(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_earnings_call_transcript(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Alpha Vantage EARNINGS_CALL_TRANSCRIPT: one row per speaker segment.
 
     AV returns entries chronologically; speaker_sequence is their index in the
@@ -240,7 +261,9 @@ def normalize_earnings_call_transcript(payload: dict[str, Any], symbol: str, now
         if len(dims) >= 3:
             ticker, quarter, year = dims[0], int(dims[1]), int(dims[2])
         else:
-            raise ValueError("earnings_call_transcript: missing quarter/year in payload or dimension")
+            raise ValueError(
+                "earnings_call_transcript: missing quarter/year in payload or dimension"
+            )
     rows = [
         {
             "ticker": ticker,
@@ -254,17 +277,26 @@ def normalize_earnings_call_transcript(payload: dict[str, Any], symbol: str, now
     return _single("raw_transcript_segments", rows)
 
 
-def normalize_insider_sentiment(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_insider_sentiment(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     ticker = payload.get("symbol") or symbol
     rows = [
-        {"ticker": entry.get("symbol") or ticker, "year": entry["year"], "month": entry["month"], "payload": entry}
+        {
+            "ticker": entry.get("symbol") or ticker,
+            "year": entry["year"],
+            "month": entry["month"],
+            "payload": entry,
+        }
         for entry in payload.get("data", [])
         if entry.get("year") is not None and entry.get("month") is not None
     ]
     return _single("raw_insider_sentiment", rows)
 
 
-def normalize_recommendation_trends(payload: list[dict[str, Any]] | dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_recommendation_trends(
+    payload: list[dict[str, Any]] | dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     entries = payload if isinstance(payload, list) else payload.get("data", [])
     ticker = payload.get("symbol") if isinstance(payload, dict) else None
     rows = [
@@ -275,12 +307,18 @@ def normalize_recommendation_trends(payload: list[dict[str, Any]] | dict[str, An
     return _single("raw_recommendation_trends", rows)
 
 
-def normalize_peers(payload: list[str], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_peers(
+    payload: list[str], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     return _single("raw_peers", [{"ticker": symbol, "payload": {"peers": payload}}])
 
 
-def _macro_name(indicator: str) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
-    def normalize(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def _macro_name(
+    indicator: str,
+) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+    def normalize(
+        payload: dict[str, Any], symbol: str, now: datetime
+    ) -> dict[str, list[dict[str, Any]]]:
         rows = [
             {"indicator": indicator, "date": _as_date(entry["date"]), "payload": entry}
             for entry in payload.get("data", [])
@@ -291,7 +329,9 @@ def _macro_name(indicator: str) -> Callable[[dict[str, Any], str, datetime], dic
     return normalize
 
 
-def _fred_series(series: str) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+def _fred_series(
+    series: str,
+) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
     """FRED /fred/series/observations: one row per observation, keyed (series, date).
 
     FRED returns observations oldest-first with `value` as a string; "." is the
@@ -299,7 +339,9 @@ def _fred_series(series: str) -> Callable[[dict[str, Any], str, datetime], dict[
     row keeps the observation fragment whole (realtime start/end included).
     """
 
-    def normalize(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+    def normalize(
+        payload: list[dict[str, Any]], symbol: str, now: datetime
+    ) -> dict[str, list[dict[str, Any]]]:
         rows = [
             {"series": series, "date": _as_date(entry["date"]), "payload": entry}
             for entry in payload
@@ -310,8 +352,12 @@ def _fred_series(series: str) -> Callable[[dict[str, Any], str, datetime], dict[
     return normalize
 
 
-def _commodity_name(nominal: str) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
-    def normalize(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def _commodity_name(
+    nominal: str,
+) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+    def normalize(
+        payload: dict[str, Any], symbol: str, now: datetime
+    ) -> dict[str, list[dict[str, Any]]]:
         rows = [
             {"nominal": nominal, "date": _as_date(entry["date"]), "payload": entry}
             for entry in payload.get("data", [])
@@ -322,7 +368,9 @@ def _commodity_name(nominal: str) -> Callable[[dict[str, Any], str, datetime], d
     return normalize
 
 
-def normalize_stock_symbols(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_stock_symbols(
+    payload: list[dict[str, Any]], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     rows = [
         {"mic": entry.get("mic", ""), "symbol": entry["symbol"], "payload": entry}
         for entry in payload
@@ -331,7 +379,9 @@ def normalize_stock_symbols(payload: list[dict[str, Any]], symbol: str, now: dat
     return _single("raw_stock_symbols", rows)
 
 
-def normalize_gainers_losers(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_gainers_losers(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Alpha Vantage TOP_GAINERS_LOSERS: one row per mover entry.
 
     `date` is the session the list describes, from the response's own
@@ -345,10 +395,16 @@ def normalize_gainers_losers(payload: dict[str, Any], symbol: str, now: datetime
     try:
         session = date.fromisoformat(last_updated[:10])
     except ValueError:
-        raise ValueError(f"top_gainers_losers: no session date in last_updated={last_updated!r}") from None
+        raise ValueError(
+            f"top_gainers_losers: no session date in last_updated={last_updated!r}"
+        ) from None
     rows = [
-        {"ticker": entry["ticker"], "date": session, "bucket": bucket,
-         "payload": {**entry, "bucket": bucket, "last_updated": last_updated}}
+        {
+            "ticker": entry["ticker"],
+            "date": session,
+            "bucket": bucket,
+            "payload": {**entry, "bucket": bucket, "last_updated": last_updated},
+        }
         for bucket in ("top_gainers", "top_losers", "most_actively_traded")
         for entry in payload.get(bucket, [])
         if entry.get("ticker")
@@ -356,7 +412,9 @@ def normalize_gainers_losers(payload: dict[str, Any], symbol: str, now: datetime
     return _single("raw_gainers_losers", rows)
 
 
-def normalize_ipo_calendar(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_ipo_calendar(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     rows = [
         {"symbol": entry["symbol"], "date": _as_date(entry["date"]), "payload": entry}
         for entry in payload.get("ipoCalendar", [])
@@ -365,16 +423,27 @@ def normalize_ipo_calendar(payload: dict[str, Any], symbol: str, now: datetime) 
     return _single("raw_ipo_calendar", rows)
 
 
-def normalize_earnings_calendar(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_earnings_calendar(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     rows = [
-        {"symbol": entry["symbol"], "quarter": entry["quarter"], "year": entry["year"], "payload": entry}
+        {
+            "symbol": entry["symbol"],
+            "quarter": entry["quarter"],
+            "year": entry["year"],
+            "payload": entry,
+        }
         for entry in payload.get("earningsCalendar", [])
-        if entry.get("symbol") and entry.get("quarter") is not None and entry.get("year") is not None
+        if entry.get("symbol")
+        and entry.get("quarter") is not None
+        and entry.get("year") is not None
     ]
     return _single("raw_earnings_calendar", rows)
 
 
-def _news_rows(items: list[dict[str, Any]], symbol: str | None = None) -> dict[str, list[dict[str, Any]]]:
+def _news_rows(
+    items: list[dict[str, Any]], symbol: str | None = None
+) -> dict[str, list[dict[str, Any]]]:
     """Finnhub news items: fan out to articles + ticker links.
 
     The stored payload keeps Finnhub's fields and adds the three keys the
@@ -394,27 +463,35 @@ def _news_rows(items: list[dict[str, Any]], symbol: str | None = None) -> dict[s
         tickers = [t.strip() for t in (item.get("related") or "").split(",") if t.strip()]
         if symbol and symbol not in tickers:
             tickers.append(symbol)
-        articles.append({
-            "article_id": article_id,
-            "payload": {
-                **item,
-                "title": item.get("headline"),
-                "time_published": datetime.fromtimestamp(published, UTC).strftime("%Y%m%dT%H%M%S"),
-                "ticker_sentiment": [{"ticker": t} for t in tickers],
-            },
-        })
+        articles.append(
+            {
+                "article_id": article_id,
+                "payload": {
+                    **item,
+                    "title": item.get("headline"),
+                    "time_published": datetime.fromtimestamp(published, UTC).strftime(
+                        "%Y%m%dT%H%M%S"
+                    ),
+                    "ticker_sentiment": [{"ticker": t} for t in tickers],
+                },
+            }
+        )
         ticker_rows.extend(
             {"article_id": article_id, "ticker": t, "payload": {"ticker": t}} for t in tickers
         )
     return {"raw_news_articles": articles, "news_ticker_sentiment": ticker_rows}
 
 
-def normalize_market_news(payload: list[dict[str, Any]], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_market_news(
+    payload: list[dict[str, Any]], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Finnhub /news?category=general (dimension key is the endpoint name, not a ticker)."""
     return _news_rows(payload)
 
 
-def normalize_ticker_news(payload: dict[str, Any], symbol: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_ticker_news(
+    payload: dict[str, Any], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Per-ticker deep-history pull: same fan-out as market_news, plus the
     one-row fetch marker that serves as the ticker_news watermark. The marker
     leads the dict so it lands before the fan-out tables: once the response
@@ -461,7 +538,9 @@ MERGERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] =
 }
 
 
-def normalize_for(endpoint: str, payload: Any, dimension_key: str, now: datetime) -> dict[str, list[dict[str, Any]]]:
+def normalize_for(
+    endpoint: str, payload: Any, dimension_key: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
     """Normalize a raw response into artifact rows for one endpoint."""
     try:
         normalizer = NORMALIZERS[endpoint]
@@ -477,4 +556,6 @@ def validate_rows(endpoint: str, rows: dict[str, list[dict[str, Any]]]) -> None:
         for row in artifact_rows:
             missing = keys - row.keys()
             if missing:
-                raise ValueError(f"{endpoint} → {artifact}: rows missing key columns {sorted(missing)}")
+                raise ValueError(
+                    f"{endpoint} → {artifact}: rows missing key columns {sorted(missing)}"
+                )

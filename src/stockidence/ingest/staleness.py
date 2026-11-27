@@ -97,7 +97,9 @@ def decide(
     return FetchDecision(False, f"{spec.name}: no fetch policy (scheduled/derived)")
 
 
-def next_filing_due(newest_period_end: date, newest_quarter: int, grace_days: int = FILING_GRACE_DAYS) -> date:
+def next_filing_due(
+    newest_period_end: date, newest_quarter: int, grace_days: int = FILING_GRACE_DAYS
+) -> date:
     """Date by which the 10-Q after the newest filing held should exist.
 
     Counts from the company's own period end, so off-calendar fiscal years
@@ -251,7 +253,7 @@ class StalenessGate:
         conds = " AND ".join(f'"{c}" = ?' for c in prefix)
         with self.warehouse.connect(read_only=True) as con:
             row = con.execute(
-                f"SELECT COUNT(*), MAX(fetched_at) FROM raw.\"{spec.artifacts[0]}\" WHERE {conds}",
+                f'SELECT COUNT(*), MAX(fetched_at) FROM raw."{spec.artifacts[0]}" WHERE {conds}',
                 parts,
             ).fetchone()
         if row[0] == 0:
@@ -261,7 +263,9 @@ class StalenessGate:
             fetched_at = (fetched_at or datetime.now(UTC)).replace(tzinfo=UTC)
         return Watermark(spec.name, dimension_key, fetched_at)
 
-    def should_fetch(self, endpoint_name: str, dimension_key: str, now: datetime | None = None) -> FetchDecision:
+    def should_fetch(
+        self, endpoint_name: str, dimension_key: str, now: datetime | None = None
+    ) -> FetchDecision:
         """Decide whether (endpoint, dimension) needs a fresh API call."""
         spec = REGISTRY.get(endpoint_name) or get_endpoint(endpoint_name)
         if spec.provider == Provider.DERIVED:

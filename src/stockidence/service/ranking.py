@@ -179,9 +179,7 @@ def _detail_payload(
         "sector_size": int(sector_n),
         "score": float(score) if score is not None else None,
         "base_score": float(base) if base is not None else None,
-        "previous": (
-            {"as_of": prev[0].isoformat(), "rank": int(prev[1])} if prev else None
-        ),
+        "previous": ({"as_of": prev[0].isoformat(), "rank": int(prev[1])} if prev else None),
         "features": [
             {
                 "feature": f,
@@ -202,14 +200,18 @@ def get_model_overview() -> dict:
 
     with read_connect() as con:
         try:
-            latest = con.execute(
-                "SELECT MAX(as_of) FROM mart.model_feature_importance"
-            ).fetchone()[0]
-            weights = con.execute(
-                "SELECT feature, mean_abs_contribution FROM mart.model_feature_importance"
-                " WHERE as_of = ? ORDER BY mean_abs_contribution DESC",
-                [latest],
-            ).fetchall() if latest else []
+            latest = con.execute("SELECT MAX(as_of) FROM mart.model_feature_importance").fetchone()[
+                0
+            ]
+            weights = (
+                con.execute(
+                    "SELECT feature, mean_abs_contribution FROM mart.model_feature_importance"
+                    " WHERE as_of = ? ORDER BY mean_abs_contribution DESC",
+                    [latest],
+                ).fetchall()
+                if latest
+                else []
+            )
             track = con.execute(
                 "SELECT quarter, top20_return, universe_return, spx_return, n_stocks, source"
                 " FROM mart.model_track_record ORDER BY quarter"
@@ -232,8 +234,11 @@ def get_model_overview() -> dict:
         }
         for q, t, u, s, n, src in track
     ]
-    vs_spx = [q["top20_return"] - q["spx_return"] for q in quarters
-              if q["top20_return"] is not None and q["spx_return"] is not None]
+    vs_spx = [
+        q["top20_return"] - q["spx_return"]
+        for q in quarters
+        if q["top20_return"] is not None and q["spx_return"] is not None
+    ]
     return {
         "as_of": latest.isoformat() if latest else None,
         "weights": [{"feature": f, "share": w / total} for f, w in weights],
@@ -251,9 +256,7 @@ def _latest_validation(con) -> dict | None:
     """Most recent retrain's mart.model_validation row; None before the first
     retrain that records it (or before the table exists)."""
     try:
-        cur = con.execute(
-            "SELECT * FROM mart.model_validation ORDER BY run_at DESC LIMIT 1"
-        )
+        cur = con.execute("SELECT * FROM mart.model_validation ORDER BY run_at DESC LIMIT 1")
         row = cur.fetchone()
     except Exception as exc:
         if not _missing_table(exc):
@@ -262,7 +265,4 @@ def _latest_validation(con) -> dict | None:
     if row is None:
         return None
     cols = [d[0] for d in cur.description]
-    return {
-        c: (v.isoformat() if hasattr(v, "isoformat") else v)
-        for c, v in zip(cols, row)
-    }
+    return {c: (v.isoformat() if hasattr(v, "isoformat") else v) for c, v in zip(cols, row)}
