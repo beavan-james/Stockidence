@@ -24,31 +24,148 @@ from stockidence.storage import Warehouse
 
 ALL_TICKERS = [
     # Financials
-    "BAC", "MS", "C", "USB", "PNC", "SCHW", "BX", "MA", "CME", "MET", "PRU", "ALL", "TRV", "AIG",
+    "BAC",
+    "MS",
+    "C",
+    "USB",
+    "PNC",
+    "SCHW",
+    "BX",
+    "MA",
+    "CME",
+    "MET",
+    "PRU",
+    "ALL",
+    "TRV",
+    "AIG",
     # Healthcare
-    "ABBV", "MRK", "TMO", "DHR", "BMY", "AMGN", "GILD", "ISRG", "MDT", "ELV", "CI", "CVS", "VRTX", "ZTS",
+    "ABBV",
+    "MRK",
+    "TMO",
+    "DHR",
+    "BMY",
+    "AMGN",
+    "GILD",
+    "ISRG",
+    "MDT",
+    "ELV",
+    "CI",
+    "CVS",
+    "VRTX",
+    "ZTS",
     # Industrials
-    "RTX", "LMT", "GE", "UPS", "FDX", "GD", "NOC", "WM", "RSG", "ETN", "ITW", "EMR", "UNP",
+    "RTX",
+    "LMT",
+    "GE",
+    "UPS",
+    "FDX",
+    "GD",
+    "NOC",
+    "WM",
+    "RSG",
+    "ETN",
+    "ITW",
+    "EMR",
+    "UNP",
     # Consumer
-    "MCD", "SBUX", "TGT", "LOW", "TJX", "KMB", "KDP", "MDLZ", "YUM", "MAR", "HLT", "EBAY",
+    "MCD",
+    "SBUX",
+    "TGT",
+    "LOW",
+    "TJX",
+    "KMB",
+    "KDP",
+    "MDLZ",
+    "YUM",
+    "MAR",
+    "HLT",
+    "EBAY",
     # Tech
-    "AMD", "AVGO", "ADBE", "ORCL", "IBM", "NOW", "ANET", "MU", "PANW", "INTU", "ADP", "CTAS", "FI",
+    "AMD",
+    "AVGO",
+    "ADBE",
+    "ORCL",
+    "IBM",
+    "NOW",
+    "ANET",
+    "MU",
+    "PANW",
+    "INTU",
+    "ADP",
+    "CTAS",
+    "FI",
     # Energy
-    "OXY", "EOG", "SLB", "HAL", "BKR", "MPC", "PSX", "VLO", "KMI", "WMB", "DVN",
+    "OXY",
+    "EOG",
+    "SLB",
+    "HAL",
+    "BKR",
+    "MPC",
+    "PSX",
+    "VLO",
+    "KMI",
+    "WMB",
+    "DVN",
     # Materials
-    "NEM", "DOW", "APD", "ECL", "PPG", "NUE", "VMC", "MLM",
+    "NEM",
+    "DOW",
+    "APD",
+    "ECL",
+    "PPG",
+    "NUE",
+    "VMC",
+    "MLM",
     # REITs
-    "O", "SPG", "EQIX", "WELL", "PSA",
+    "O",
+    "SPG",
+    "EQIX",
+    "WELL",
+    "PSA",
     # Utilities
-    "SO", "AEP", "EXC", "XEL", "SRE", "D",
+    "SO",
+    "AEP",
+    "EXC",
+    "XEL",
+    "SRE",
+    "D",
     # Comm/Media
-    "T", "VZ", "CMCSA", "NFLX",
+    "T",
+    "VZ",
+    "CMCSA",
+    "NFLX",
     # Batch 1 — diverse new coverage (airlines, homebuilders, autos, agri, intermedia, restaurants)
-    "DAL", "UAL", "PEP", "DHI", "TSLA", "GM", "ADM", "LEN", "MCO", "CMG",
+    "DAL",
+    "UAL",
+    "PEP",
+    "DHI",
+    "TSLA",
+    "GM",
+    "ADM",
+    "LEN",
+    "MCO",
+    "CMG",
     # Batch 2 — geography + sector diversity (4 foreign issuers, tobacco, insurance, managed care, retail, gaming)
-    "TD", "RY", "VALE", "ERIC", "PM", "MO", "BBY", "CB", "HUM", "CZR",
+    "TD",
+    "RY",
+    "VALE",
+    "ERIC",
+    "PM",
+    "MO",
+    "BBY",
+    "CB",
+    "HUM",
+    "CZR",
     # Batch 3 — semis-equipment (incl. foreign) + payments + consumer internet platforms
-    "ASML", "AMAT", "LRCX", "KLAC", "UBER", "ABNB", "SHOP", "PYPL", "SQ", "GPN",
+    "ASML",
+    "AMAT",
+    "LRCX",
+    "KLAC",
+    "UBER",
+    "ABNB",
+    "SHOP",
+    "PYPL",
+    "SQ",
+    "GPN",
 ]
 
 # Skip the hot-path quote endpoint — not needed for backfill.
@@ -68,8 +185,7 @@ def main() -> None:
     wh.init_schema()
     engine = IngestEngine(wh)
 
-    endpoints = [ep for ep in on_demand_endpoints()
-                 if ep.name not in SKIP_ENDPOINTS]
+    endpoints = [ep for ep in on_demand_endpoints() if ep.name not in SKIP_ENDPOINTS]
 
     print(f"Ingesting {len(ALL_TICKERS)} tickers × {len(endpoints)} endpoints")
     print(f"Price backfill: {_PRICE_BACKFILL_DAYS} days lookback\n")
@@ -87,8 +203,7 @@ def main() -> None:
         # table when any one ticker is processed, so we must clear it.
         with wh.connect() as con:
             con.execute(
-                "DELETE FROM control.watermarks "
-                "WHERE endpoint = ? AND dimension_key = ?",
+                "DELETE FROM control.watermarks WHERE endpoint = ? AND dimension_key = ?",
                 ["raw.raw_prices_daily", ticker],
             )
 
@@ -116,8 +231,10 @@ def main() -> None:
                 if "rate limit" in error_msg.lower() or "RateLimitError" in type(e).__name__:
                     print(f"\n  → RATE LIMITED on {ticker}/{ep.name}. Stopping run per policy.")
                     print(f"    {error_msg}")
-                    print(f"    {len(errors)-1} prior errors | {total_api_calls} API calls done"
-                          f" | {len(ALL_TICKERS[:i])} of {len(ALL_TICKERS)} tickers processed")
+                    print(
+                        f"    {len(errors) - 1} prior errors | {total_api_calls} API calls done"
+                        f" | {len(ALL_TICKERS[:i])} of {len(ALL_TICKERS)} tickers processed"
+                    )
                     raise SystemExit(1)
 
         total_api_calls += ticker_calls
@@ -133,7 +250,7 @@ def main() -> None:
         if i < len(ALL_TICKERS):
             time.sleep(2)
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Ingestion complete: {total_api_calls} API calls, {total_rows} rows")
     if errors:
         print(f"\n{len(errors)} errors:")

@@ -17,6 +17,8 @@ from stockidence.mart.mart import rebuild_prices_daily, rebuild_technical_indica
 from stockidence.mart.scoring import score_ticker
 from stockidence.storage import Warehouse
 
+pytestmark = pytest.mark.integration
+
 DAY0 = date(2025, 1, 1)
 
 
@@ -24,12 +26,17 @@ def _seed_path(warehouse: Warehouse, ticker: str, closes: list[float]) -> None:
     """Land a custom close path and rebuild the staging/mart layers."""
     bars = []
     for i, c in enumerate(closes):
-        bars.append({
-            "ticker": ticker,
-            "date": DAY0 + timedelta(days=i),
-            "open": str(c * 0.99), "high": str(c * 1.01),
-            "low": str(c * 0.98), "close": str(c), "volume": "100",
-        })
+        bars.append(
+            {
+                "ticker": ticker,
+                "date": DAY0 + timedelta(days=i),
+                "open": str(c * 0.99),
+                "high": str(c * 1.01),
+                "low": str(c * 0.98),
+                "close": str(c),
+                "volume": "100",
+            }
+        )
     warehouse.land("raw_prices_daily", bars)
     rebuild_prices_daily(warehouse, ticker)
     rebuild_technical_indicators(warehouse, ticker)
@@ -47,15 +54,14 @@ def _snapshot_rows(wh: Warehouse, sql: str, args: list) -> int:
 
 
 def _realized_vol(result) -> float:
-    return next(x.value for x in result.volatility_components
-                if x.name == "realized_vol")
+    return next(x.value for x in result.volatility_components if x.name == "realized_vol")
 
 
 def test_as_of_scoring_has_no_lookahead(wh):
     # 200-bar calm uptrend into a 60-day crash; a point-in-time replay at
     # the peak must not feel the crash.
-    closes = [40.0 + i * 0.5 for i in range(200)]           # 40 -> 139.5
-    closes += [139.5 * (0.985 ** k) for k in range(1, 61)]  # crash to ~62
+    closes = [40.0 + i * 0.5 for i in range(200)]  # 40 -> 139.5
+    closes += [139.5 * (0.985**k) for k in range(1, 61)]  # crash to ~62
     _seed_path(wh, "CRSH", closes)
 
     peak = DAY0 + timedelta(days=199)
@@ -73,14 +79,14 @@ def test_persist_flag_controls_snapshot_writes(wh):
 
     score_ticker(wh, "PERS", as_of=as_of, persist=False)
     n = _snapshot_rows(
-        wh, "SELECT COUNT(*) FROM mart.m_confidence_ratings WHERE ticker = ?",
-        ["PERS"])
+        wh, "SELECT COUNT(*) FROM mart.m_confidence_ratings WHERE ticker = ?", ["PERS"]
+    )
     assert n == 0
 
     score_ticker(wh, "PERS", persist=True)
     n = _snapshot_rows(
-        wh, "SELECT COUNT(*) FROM mart.m_confidence_ratings WHERE ticker = ?",
-        ["PERS"])
+        wh, "SELECT COUNT(*) FROM mart.m_confidence_ratings WHERE ticker = ?", ["PERS"]
+    )
     assert n == 1
 
 
@@ -88,8 +94,7 @@ def test_run_backtest_forward_return_math(wh):
     closes = [40.0 + i for i in range(40)]  # deterministic +1.0/bar ramp
     _seed_path(wh, "RAMP", closes)
 
-    rows = run_backtest(wh, ["RAMP"], min_bars=10,
-                        horizons=(5,), step_days=7)
+    rows = run_backtest(wh, ["RAMP"], min_bars=10, horizons=(5,), step_days=7)
     assert rows, "expected eligible replay dates"
 
     for row in rows:
@@ -106,14 +111,21 @@ def test_run_backtest_skips_thin_history(wh):
 
 def test_summarize_directional_semantics():
     def _row(rating: str, ret: float) -> BacktestRow:
-        return BacktestRow(ticker="X", as_of=DAY0, rating=rating,
-                           confidence=60.0, volatility=40.0,
-                           category_scores={}, fwd_returns={5: ret}, fwd_vols={5: 0.01})
+        return BacktestRow(
+            ticker="X",
+            as_of=DAY0,
+            rating=rating,
+            confidence=60.0,
+            volatility=40.0,
+            category_scores={},
+            fwd_returns={5: ret},
+            fwd_vols={5: 0.01},
+        )
 
     rows = [
-        *(_row("Buy", r) for r in (0.05, 0.10, -0.02)),   # 2/3 up
+        *(_row("Buy", r) for r in (0.05, 0.10, -0.02)),  # 2/3 up
         *(_row("Sell", r) for r in (-0.05, -0.08, 0.03)),  # 2/3 down
-        *(_row("Hold", r) for r in (0.50, -0.50)),         # direction-agnostic
+        *(_row("Hold", r) for r in (0.50, -0.50)),  # direction-agnostic
     ]
     summaries = {(s.rating, s.horizon): s for s in summarize(rows, (5,))}
     buy = summaries[("Buy", 5)]
@@ -126,9 +138,16 @@ def test_summarize_directional_semantics():
 
 def test_render_smoke():
     def _row(rating: str, ret: float) -> BacktestRow:
-        return BacktestRow(ticker="X", as_of=DAY0, rating=rating,
-                           confidence=60.0, volatility=40.0,
-                           category_scores={}, fwd_returns={20: ret}, fwd_vols={20: 0.02})
+        return BacktestRow(
+            ticker="X",
+            as_of=DAY0,
+            rating=rating,
+            confidence=60.0,
+            volatility=40.0,
+            category_scores={},
+            fwd_returns={20: ret},
+            fwd_vols={20: 0.02},
+        )
 
     text = render([_row("Buy", 0.04), _row("Strong Buy", 0.09)], (20,))
     assert "replays=2" in text

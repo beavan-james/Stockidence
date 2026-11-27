@@ -3,13 +3,13 @@ path (no sensors): cooldown dedup and launch failure mapping."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from stockidence.storage import Warehouse
 
-NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture

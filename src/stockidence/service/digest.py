@@ -34,11 +34,24 @@ def _full_marks(period: str) -> dict[str, float]:
 
 
 def _empty(period: str) -> dict:
-    return {"period": period, "digest_date": None, "previous_date": None, "next_date": None,
-            "window_start": None, "window_end": None, "built_at": None, "articles": 0,
-            "routine_dropped": 0, "commentary_dropped": 0, "stories": 0, "outlets": 0,
-            "session_gap_minutes": None, "weights": _weights(), "full_marks": _full_marks(period),
-            "items": []}
+    return {
+        "period": period,
+        "digest_date": None,
+        "previous_date": None,
+        "next_date": None,
+        "window_start": None,
+        "window_end": None,
+        "built_at": None,
+        "articles": 0,
+        "routine_dropped": 0,
+        "commentary_dropped": 0,
+        "stories": 0,
+        "outlets": 0,
+        "session_gap_minutes": None,
+        "weights": _weights(),
+        "full_marks": _full_marks(period),
+        "items": [],
+    }
 
 
 def get_digest(period: str, digest_date: date | None = None) -> dict | None:
@@ -116,8 +129,12 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
     also: dict[int, list[dict]] = {}
     for rank, source, headline, url, published in coverage:
         also.setdefault(int(rank), []).append(
-            {"source": source, "headline": headline, "url": url,
-             "published_at": _utc_iso(published)}
+            {
+                "source": source,
+                "headline": headline,
+                "url": url,
+                "published_at": _utc_iso(published),
+            }
         )
     return {
         "period": period,
@@ -133,21 +150,49 @@ def _fetch(period: str, digest_date: date | None) -> dict | None:
         "stories": head[7],
         "outlets": head[8],
         "session_gap_minutes": head[9],
-        "weights": _weights(), "full_marks": _full_marks(period),
+        "weights": _weights(),
+        "full_marks": _full_marks(period),
         "items": [
             {
-                "rank": int(rank), "headline": headline, "summary": summary, "url": url,
-                "source": source, "published_at": _utc_iso(published),
-                "tickers": list(tickers or []), "categories": list(categories or []),
-                "n_articles": n_articles, "n_outlets": n_outlets,
-                "move_ticker": move_ticker, "move_return": move_return,
+                "rank": int(rank),
+                "headline": headline,
+                "summary": summary,
+                "url": url,
+                "source": source,
+                "published_at": _utc_iso(published),
+                "tickers": list(tickers or []),
+                "categories": list(categories or []),
+                "n_articles": n_articles,
+                "n_outlets": n_outlets,
+                "move_ticker": move_ticker,
+                "move_return": move_return,
                 "score": round(score, 4),
-                "components": {"coverage": round(cov, 4), "reaction": round(rea, 4),
-                               "category": round(cat, 4), "on_site": round(site, 4)},
+                "components": {
+                    "coverage": round(cov, 4),
+                    "reaction": round(rea, 4),
+                    "category": round(cat, 4),
+                    "on_site": round(site, 4),
+                },
                 "also_covered": also.get(int(rank), []),
             }
-            for (rank, headline, summary, url, source, published, tickers, categories,
-                 n_articles, n_outlets, move_ticker, move_return,
-                 cov, rea, cat, site, score) in stories
+            for (
+                rank,
+                headline,
+                summary,
+                url,
+                source,
+                published,
+                tickers,
+                categories,
+                n_articles,
+                n_outlets,
+                move_ticker,
+                move_return,
+                cov,
+                rea,
+                cat,
+                site,
+                score,
+            ) in stories
         ],
     }

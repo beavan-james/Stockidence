@@ -30,26 +30,41 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 # Not part of a word or another number: "Q3" and "v2" are labels, not figures.
 _NUMBER = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?")
 _NUMBER_WORDS = {
-    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
-    "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11", "twelve": "12",
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+    "ten": "10",
+    "eleven": "11",
+    "twelve": "12",
 }
 _WORD = re.compile(r"[a-z]+")
 _CODE = r"[A-Z][A-Z0-9]{0,5}(?:\.[A-Z]{1,2})?"
 _IN_PARENS = rf"\((?:(?:NASDAQ|NYSE|AMEX|OTC)[A-Z]*\s*:\s*)?({_CODE})\)"
 _TICKER = re.compile(rf"{_IN_PARENS}|\$({_CODE})\b")
 _PAREN_TICKER = re.compile(rf"[ \t]*{_IN_PARENS}")
-_ADVICE = re.compile("|".join((
-    r"\bshould\b",
-    r"\bought to\b",
-    r"\brecommend\w*\b",
-    r"\b(?:strong )?(?:buy|sell|hold) (?:rating|signal|recommendation|call)s?\b",
-    r"\b(?:is|as|remains|looks like) an? (?:strong )?(?:buy|sell|hold)\b",
-    r"\b(?:time|worth|consider|considering|good idea|opportunity) to (?:buy|sell|hold)\b",
-    r"\b(?:buy|sell) (?:the|this) (?:stock|dip|rally|shares|news)\b",
-    r"\bprice targets?\b|\btarget price\b",
-    r"\b(?:upgraded|downgraded|upgrades|downgrades) (?:\w+ ){0,3}to (?:buy|sell|hold|overweight|underweight|outperform|underperform)\b",
-    r"\binvestors (?:may|might|could|would) (?:want|wish|do well|consider)\b",
-)), re.IGNORECASE)
+_ADVICE = re.compile(
+    "|".join(
+        (
+            r"\bshould\b",
+            r"\bought to\b",
+            r"\brecommend\w*\b",
+            r"\b(?:strong )?(?:buy|sell|hold) (?:rating|signal|recommendation|call)s?\b",
+            r"\b(?:is|as|remains|looks like) an? (?:strong )?(?:buy|sell|hold)\b",
+            r"\b(?:time|worth|consider|considering|good idea|opportunity) to (?:buy|sell|hold)\b",
+            r"\b(?:buy|sell) (?:the|this) (?:stock|dip|rally|shares|news)\b",
+            r"\bprice targets?\b|\btarget price\b",
+            r"\b(?:upgraded|downgraded|upgrades|downgrades) (?:\w+ ){0,3}to (?:buy|sell|hold|overweight|underweight|outperform|underperform)\b",
+            r"\binvestors (?:may|might|could|would) (?:want|wish|do well|consider)\b",
+        )
+    ),
+    re.IGNORECASE,
+)
 
 
 def _normal(raw: str) -> Decimal | None:
@@ -128,16 +143,59 @@ def drop_unsupported_tickers(text: str, given: str) -> tuple[str, list[str]]:
 # Capitalized words the text may use that the prompt needn't have: day and
 # month names, titles written before a name, company suffixes and common
 # acronyms. Provisional, like the advice list.
-_FREE_NAMES = frozenset(w.lower() for w in (
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-    "January", "February", "March", "April", "May", "June", "July", "August",
-    "September", "October", "November", "December",
-    "President", "Vice", "Chair", "Chairman", "Chairwoman", "Governor", "Senator",
-    "Secretary", "Minister", "Prime", "Chief", "Executive", "Officer", "CEO", "CFO",
-    "Inc", "Corp", "Co", "Ltd", "LLC", "PLC",
-    "GDP", "CPI", "EPS", "IPO", "ETF", "AI",
-    "Wall", "Street",
-))
+_FREE_NAMES = frozenset(
+    w.lower()
+    for w in (
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+        "President",
+        "Vice",
+        "Chair",
+        "Chairman",
+        "Chairwoman",
+        "Governor",
+        "Senator",
+        "Secretary",
+        "Minister",
+        "Prime",
+        "Chief",
+        "Executive",
+        "Officer",
+        "CEO",
+        "CFO",
+        "Inc",
+        "Corp",
+        "Co",
+        "Ltd",
+        "LLC",
+        "PLC",
+        "GDP",
+        "CPI",
+        "EPS",
+        "IPO",
+        "ETF",
+        "AI",
+        "Wall",
+        "Street",
+    )
+)
 # Long forms of names the feed writes short, free when the prompt has the
 # short form: "United States" when it says "US".
 _LONG_FORMS = {
@@ -174,9 +232,14 @@ def unsupported_names(text: str, given: str) -> list[str]:
     starts_sentence = True
     for raw in text.split():
         if not starts_sentence:
-            bad += [p for p in _name_parts(raw)
-                    if len(p) > 1 and p[0].isupper() and not any(c.isdigit() for c in p)
-                    and p.lower() not in known]
+            bad += [
+                p
+                for p in _name_parts(raw)
+                if len(p) > 1
+                and p[0].isupper()
+                and not any(c.isdigit() for c in p)
+                and p.lower() not in known
+            ]
         starts_sentence = _SENTENCE_END.search(raw) is not None
     return list(dict.fromkeys(bad))
 

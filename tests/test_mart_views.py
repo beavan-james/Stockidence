@@ -30,7 +30,7 @@ def _seeded(tmp_path):
 
 def test_view_maps_rating_to_advice_contract(tmp_path):
     """Ratings are stored 'Strong Buy'; the read API is UPPER_SNAKE."""
-    wh, con = _seeded(tmp_path)
+    _wh, con = _seeded(tmp_path)
     row = con.execute(
         "SELECT ticker, advice FROM mart.confidence_ratings WHERE ticker='AAPL'"
     ).fetchone()

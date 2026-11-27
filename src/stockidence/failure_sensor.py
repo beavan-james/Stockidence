@@ -8,7 +8,7 @@ frontend health panel reads. The sensor is a catch-all: it fires for
 scheduled jobs, sensor-triggered on-demand runs, and manual launches alike.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 from dagster import (
     DefaultSensorStatus,
@@ -61,6 +61,6 @@ def pipeline_failure_sensor(context: RunFailureSensorContext) -> None:
         Warehouse(),
         run_id=context.dagster_run.run_id,
         job_name=context.dagster_run.job_name,
-        failed_at=datetime.now(timezone.utc),
+        failed_at=datetime.now(UTC),
         error_message=_error_message(context),
     )

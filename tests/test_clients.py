@@ -22,6 +22,7 @@ from stockidence.ingest.clients.twelve_data import TwelveDataClient
 
 def _mock_transport(monkeypatch, handler):
     """Route the client's httpx.request call through a fake handler."""
+
     def fake_request(method, url, **kwargs):
         kwargs.pop("timeout", None)
         kwargs["follow_redirects"] = kwargs.get("follow_redirects", False)
@@ -48,7 +49,9 @@ class TestAlphaVantage:
             assert request.url.params.get("symbol") == "GOLD"
             assert request.url.params.get("interval") == "monthly"
             assert request.url.params.get("apikey") == "test-key"
-            return httpx.Response(200, json={"name": "gold", "data": [{"date": "2026-07-01", "value": "3448.12"}]})
+            return httpx.Response(
+                200, json={"name": "gold", "data": [{"date": "2026-07-01", "value": "3448.12"}]}
+            )
 
         client = _client(monkeypatch, AlphaVantageClient, handler)
         result = client.gold()
@@ -141,8 +144,7 @@ class TestFinnhub:
 
 
 class TestSharedPacing:
-    def test_pace_file_spaces_calls_across_client_instances(
-            self, monkeypatch, tmp_path):
+    def test_pace_file_spaces_calls_across_client_instances(self, monkeypatch, tmp_path):
         """Two fresh clients (as separate Dagster runs would be) sharing a
         pace file must wait out the interval between their calls."""
         import time as time_mod
@@ -159,8 +161,11 @@ class TestSharedPacing:
         monkeypatch.setattr(time_mod, "sleep", sleeps.append)
         monkeypatch.setattr(time_mod, "time", lambda: 1_000.0)
 
-        common = {"base_url": "https://example.test",
-                  "min_interval_seconds": 60.0, "pace_file": str(pace_file)}
+        common = {
+            "base_url": "https://example.test",
+            "min_interval_seconds": 60.0,
+            "pace_file": str(pace_file),
+        }
         first = BaseClient(api_key="k", **common)
         second = BaseClient(api_key="k", **common)
 
@@ -174,8 +179,12 @@ class TestSharedPacing:
         from stockidence.ingest.clients.base import BaseClient
 
         pace_file = tmp_path / "pace"
-        client = BaseClient(api_key="k", base_url="https://example.test",
-                            min_interval_seconds=0.0, pace_file=str(pace_file))
+        client = BaseClient(
+            api_key="k",
+            base_url="https://example.test",
+            min_interval_seconds=0.0,
+            pace_file=str(pace_file),
+        )
         client._pace_shared()
         written = float(pace_file.read_text().strip())
         assert written > 1_500_000_000  # plausible epoch seconds
@@ -191,9 +200,9 @@ class TestSharedPacing:
             return httpx.Response(200, json={"ok": True})
 
         import stockidence.ingest.clients.base as base_mod
+
         monkeypatch.setattr(base_mod.time, "sleep", sleeps.append)
-        client = _client(monkeypatch, AlphaVantageClient, handler,
-                         retries=2, backoff_seconds=1.0)
+        client = _client(monkeypatch, AlphaVantageClient, handler, retries=2, backoff_seconds=1.0)
         assert client.gold()["ok"] is True
         assert calls["n"] == 2
         assert sleeps == [12.0]  # rate-limit backoff is 12x the base
@@ -221,7 +230,9 @@ class TestTwelveData:
 
     def test_error_status_raises_api_error(self, monkeypatch):
         def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"status": "error", "message": "bad symbol", "code": 400})
+            return httpx.Response(
+                200, json={"status": "error", "message": "bad symbol", "code": 400}
+            )
 
         client = _client(monkeypatch, TwelveDataClient, handler)
         with pytest.raises(APIError):
@@ -229,7 +240,9 @@ class TestTwelveData:
 
     def test_rate_limit_status_raises(self, monkeypatch):
         def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"status": "error", "message": "out of credits", "code": 429})
+            return httpx.Response(
+                200, json={"status": "error", "message": "out of credits", "code": 429}
+            )
 
         client = _client(monkeypatch, TwelveDataClient, handler)
         with pytest.raises(RateLimitError):

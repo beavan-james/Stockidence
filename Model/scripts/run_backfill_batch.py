@@ -18,10 +18,7 @@ from stockidence.ingest.engine import _PRICE_BACKFILL_DAYS, IngestEngine
 from stockidence.ingest.refresh import refresh_tickers
 from stockidence.storage import Warehouse
 
-
-BATCH_TICKERS: list[str] = [
-
-]
+BATCH_TICKERS: list[str] = []
 
 
 def main() -> None:
@@ -34,10 +31,9 @@ def main() -> None:
 
     summary = refresh_tickers(engine, BATCH_TICKERS, full_backfill=True)
 
-    print(f"\n{'='*60}", flush=True)
+    print(f"\n{'=' * 60}", flush=True)
     print(
-        f"Batch complete: {summary['api_calls']} API calls, "
-        f"{summary['rows_written']} rows",
+        f"Batch complete: {summary['api_calls']} API calls, {summary['rows_written']} rows",
         flush=True,
     )
     if summary["errors"]:

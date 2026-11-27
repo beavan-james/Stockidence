@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -111,7 +112,9 @@ class BaseClient:
         last_error: Exception | None = None
         for attempt in range(self.retries + 1):
             try:
-                return self._request_once(method, path, params=params, json_body=json_body, headers=headers)
+                return self._request_once(
+                    method, path, params=params, json_body=json_body, headers=headers
+                )
             except RateLimitError as exc:
                 # burst collisions heal with patience; a genuinely exhausted
                 # daily quota will fail all attempts and surface to Dagster
@@ -153,9 +156,7 @@ class BaseClient:
         return {"Accept": "application/json"}
 
     def _redact_url(self, url: httpx.URL) -> str:
-        params = [
-            (k, "***" if k == "api_key" else v) for k, v in url.params.multi_items()
-        ]
+        params = [(k, "***" if k == "api_key" else v) for k, v in url.params.multi_items()]
         return str(url.copy_with(params=params))
 
     def _parse(self, resp: httpx.Response) -> Any:
@@ -164,13 +165,17 @@ class BaseClient:
         try:
             return resp.json()
         except json.JSONDecodeError as exc:
-            raise InvalidResponseError(f"Non-JSON response from {self._redact_url(resp.url)}: {resp.text[:200]}") from exc
+            raise InvalidResponseError(
+                f"Non-JSON response from {self._redact_url(resp.url)}: {resp.text[:200]}"
+            ) from exc
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         if resp.status_code in (429,):
             raise RateLimitError(f"Rate limited by {self.base_url} (HTTP {resp.status_code})")
         if resp.status_code >= 400:
-            raise APIError(f"HTTP {resp.status_code} from {self._redact_url(resp.url)}: {resp.text[:300]}")
+            raise APIError(
+                f"HTTP {resp.status_code} from {self._redact_url(resp.url)}: {resp.text[:300]}"
+            )
 
     def _as_dict(self, payload: Any, *, context: str) -> dict[str, Any]:
         if not isinstance(payload, dict):

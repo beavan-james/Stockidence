@@ -44,12 +44,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # From m_technical_indicators (month-end snapshot)
 TI_FEATURES = [
-    "sma_20", "sma_50", "sma_200",
-    "ema_12", "ema_26",
-    "rsi_14", "adx_14",
+    "sma_20",
+    "sma_50",
+    "sma_200",
+    "ema_12",
+    "ema_26",
+    "rsi_14",
+    "adx_14",
     "atr_14",
     "macd_hist",
-    "stoch_k_14", "stoch_d_14",
+    "stoch_k_14",
+    "stoch_d_14",
     "cci_20",
 ]
 
@@ -62,15 +67,19 @@ AA_FEATURES = [
 # From mart.m_fred_market — market-wide regime (VIX + S&P500), joined PIT
 # as-of each period-end. vix_pctile_252 is derived below from the daily level.
 MARKET_FEATURES = [
-    "vix", "vix_pctile_252", "vix_chg_21d",
-    "spx_ret_21d", "spx_ret_63d", "spx_ret_252d",
+    "vix",
+    "vix_pctile_252",
+    "vix_chg_21d",
+    "spx_ret_21d",
+    "spx_ret_63d",
+    "spx_ret_252d",
 ]
 
 # Derived from raw_financials_reported (PIT)
 FUNDAMENTAL_FEATURES = [
-    "roe",           # net_income / equity
-    "roa",           # net_income / assets
-    "debt_equity",   # liabilities / equity
+    "roe",  # net_income / equity
+    "roa",  # net_income / assets
+    "debt_equity",  # liabilities / equity
     "current_ratio",  # current_assets / current_liabilities
     "cash_to_assets",  # cash / total_assets
     "fcf_to_assets",  # (ocf - capex) / total_assets
@@ -79,47 +88,49 @@ FUNDAMENTAL_FEATURES = [
 # ── Rolling return-distribution statistics (computed per ticker, PIT) ────────
 # Computed on the period-grain close series after assembly; each row uses only
 # closes through its own period-end (no lookahead). Window is in periods.
-ROLLING_RET_WINDOW = {"daily": 252,
-                      "weekly": 52, "monthly": 12, "quarterly": 12}
-ROLLING_BETA_WINDOW = {"daily": 504,
-                       "weekly": 104, "monthly": 24, "quarterly": 24}
+ROLLING_RET_WINDOW = {"daily": 252, "weekly": 52, "monthly": 12, "quarterly": 12}
+ROLLING_BETA_WINDOW = {"daily": 504, "weekly": 104, "monthly": 24, "quarterly": 24}
 ROLLING_FEATURES = [
-    "roll_sharpe",        # trailing mean/std of period returns (annualized)
-    "roll_skew",          # trailing skewness of period returns
-    "roll_kurt",          # trailing excess kurtosis (fat-tail regime)
+    "roll_sharpe",  # trailing mean/std of period returns (annualized)
+    "roll_skew",  # trailing skewness of period returns
+    "roll_kurt",  # trailing excess kurtosis (fat-tail regime)
     "roll_downside_dev",  # std of negative period returns (semi-deviation)
-    "roll_var95",         # 5% historical VaR of period returns (loss tail)
-    "roll_beta",          # trailing beta of name vs S&P500 period returns
+    "roll_var95",  # 5% historical VaR of period returns (loss tail)
+    "roll_beta",  # trailing beta of name vs S&P500 period returns
 ]
 
-ALL_FEATURES = TI_FEATURES + AA_FEATURES + \
-    FUNDAMENTAL_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
+ALL_FEATURES = TI_FEATURES + AA_FEATURES + FUNDAMENTAL_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
 
 # ── Quarterly-specific feature set ─────────────────────────────────────────────
 # The quarterly dataset uses macro-scale momentum + fundamental velocity instead
 # of 14-day indicators, which are a poor match for a ~3-month target window.
 QUARTERLY_TI_FEATURES = [
-    "sma_200",        # trend context for price_to_sma200
-    "atr_14",         # input to atr_pct
+    "sma_200",  # trend context for price_to_sma200
+    "atr_14",  # input to atr_pct
 ]
 QUARTERLY_AA_FEATURES = [
-    "stddev_252",         # 252-day realized vol (structural context)
-    "max_drawdown_252",   # deepest trailing drawdown
-    "max_252",            # 52-week high (input to distance_from_52wk_high)
+    "stddev_252",  # 252-day realized vol (structural context)
+    "max_drawdown_252",  # deepest trailing drawdown
+    "max_252",  # 52-week high (input to distance_from_52wk_high)
 ]
 
 # Static fundamentals + quarter-over-quarter change (velocity). Trees see
 # "ROE rose from 5% to 15%" rather than just a static level.
 CHG_FEATURES = ["roe", "roa", "fcf_to_assets", "debt_equity"]
-QUARTERLY_FUND_FEATURES = FUNDAMENTAL_FEATURES + \
-    [f"{c}_chg_qoq" for c in CHG_FEATURES]
+QUARTERLY_FUND_FEATURES = FUNDAMENTAL_FEATURES + [f"{c}_chg_qoq" for c in CHG_FEATURES]
 
 QUARTERLY_PRICE_FEATURES = [
-    "price_to_sma200", "stddev_252", "max_drawdown_252", "atr_pct",
-    "return_3m", "return_12m", "distance_from_52wk_high",
+    "price_to_sma200",
+    "stddev_252",
+    "max_drawdown_252",
+    "atr_pct",
+    "return_3m",
+    "return_12m",
+    "distance_from_52wk_high",
 ]
-QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + \
-    QUARTERLY_FUND_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
+QUARTERLY_ALL_FEATURES = (
+    QUARTERLY_PRICE_FEATURES + QUARTERLY_FUND_FEATURES + MARKET_FEATURES + ROLLING_FEATURES
+)
 
 # ── Weekly-specific feature set ────────────────────────────────────────────────
 # Friday-close snapshots for the Stocks of the Week list. The quarterly price
@@ -130,12 +141,21 @@ QUARTERLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + \
 WEEKLY_TI_FEATURES = TI_FEATURES + ["bb_upper_20", "bb_lower_20"]
 WEEKLY_AA_FEATURES = AA_FEATURES + ["max_252", "mean_252"]
 WEEKLY_SHORT_FEATURES = [
-    "return_1w", "return_4w", "rsi_14", "price_to_sma20", "price_to_sma50",
-    "stoch_k_14", "cci_20", "adx_14", "macd_hist_pct", "bb_pctb",
-    "volume_ratio_13w", "range_1w", "vol_ratio",
+    "return_1w",
+    "return_4w",
+    "rsi_14",
+    "price_to_sma20",
+    "price_to_sma50",
+    "stoch_k_14",
+    "cci_20",
+    "adx_14",
+    "macd_hist_pct",
+    "bb_pctb",
+    "volume_ratio_13w",
+    "range_1w",
+    "vol_ratio",
 ]
-WEEKLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + FUNDAMENTAL_FEATURES + \
-    WEEKLY_SHORT_FEATURES
+WEEKLY_ALL_FEATURES = QUARTERLY_PRICE_FEATURES + FUNDAMENTAL_FEATURES + WEEKLY_SHORT_FEATURES
 
 # Forward horizons (in weeks) labelled on every weekly row. Both are measured
 # from the NEXT week's open: a list published after Friday's close can first
@@ -208,6 +228,7 @@ SECTOR_MAP = {
 
 # ── Data loading helpers ────────────────────────────────────────────────────────
 
+
 def _ticker_filter(tickers: list[str] | None) -> tuple[str, list[str]]:
     """SQL WHERE fragment + params restricting a query to the training universe.
 
@@ -221,8 +242,9 @@ def _ticker_filter(tickers: list[str] | None) -> tuple[str, list[str]]:
     return f"WHERE ticker IN ({placeholders})", list(tickers)
 
 
-def _load_price(wh: Warehouse, freq: str = "monthly",
-                tickers: list[str] | None = None) -> pd.DataFrame:
+def _load_price(
+    wh: Warehouse, freq: str = "monthly", tickers: list[str] | None = None
+) -> pd.DataFrame:
     """Load anchor OHLCV bars labeled at period start (mart convention).
 
     Weekly/monthly come straight from the mart; quarterly is resampled from
@@ -236,25 +258,27 @@ def _load_price(wh: Warehouse, freq: str = "monthly",
             df = pd.read_sql(
                 f"SELECT ticker, date, open, high, low, close, volume "
                 f"FROM {table} {where} ORDER BY ticker, date",
-                con, params=params,
+                con,
+                params=params,
             )
     elif freq == "daily":
         with wh.connect(read_only=True) as con:
             df = pd.read_sql(
                 f"SELECT ticker, date, open, high, low, close, volume "
                 f"FROM staging.stg_prices_daily {where} ORDER BY ticker, date",
-                con, params=params,
+                con,
+                params=params,
             )
     elif freq == "quarterly":
         with wh.connect(read_only=True) as con:
             base = pd.read_sql(
                 f"SELECT ticker, date, open, high, low, close, volume "
                 f"FROM mart.m_prices_monthly {where} ORDER BY ticker, date",
-                con, params=params,
+                con,
+                params=params,
             )
         base["date"] = pd.to_datetime(base["date"])
-        base["label"] = base["date"].dt.to_period(
-            "Q").dt.start_time.dt.normalize()
+        base["label"] = base["date"].dt.to_period("Q").dt.start_time.dt.normalize()
         df = (
             base.groupby(["ticker", "label"], as_index=False)
             .agg(
@@ -275,8 +299,9 @@ def _load_price(wh: Warehouse, freq: str = "monthly",
     return df
 
 
-def _load_technical_indicators(wh: Warehouse, feature_cols: list[str] | None = None,
-                               tickers: list[str] | None = None) -> pd.DataFrame:
+def _load_technical_indicators(
+    wh: Warehouse, feature_cols: list[str] | None = None, tickers: list[str] | None = None
+) -> pd.DataFrame:
     """Load daily technical indicators."""
     cols = feature_cols if feature_cols is not None else TI_FEATURES
     where, params = _ticker_filter(tickers)
@@ -291,8 +316,9 @@ def _load_technical_indicators(wh: Warehouse, feature_cols: list[str] | None = N
     return df
 
 
-def _load_advanced_analytics(wh: Warehouse, feature_cols: list[str] | None = None,
-                             tickers: list[str] | None = None) -> pd.DataFrame:
+def _load_advanced_analytics(
+    wh: Warehouse, feature_cols: list[str] | None = None, tickers: list[str] | None = None
+) -> pd.DataFrame:
     """Load daily advanced analytics."""
     cols = feature_cols if feature_cols is not None else AA_FEATURES
     where, params = _ticker_filter(tickers)
@@ -366,8 +392,7 @@ def _load_financials(wh: Warehouse, tickers: list[str] | None = None) -> pd.Data
 
     records = []
     for ticker, year, quarter, payload_str in rows:
-        payload = json.loads(payload_str) if isinstance(
-            payload_str, str) else payload_str
+        payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
         report = payload.get("report", {})
 
         # Merge bs + cf + ic into one concept dict. First-seen wins, so
@@ -389,7 +414,7 @@ def _load_financials(wh: Warehouse, tickers: list[str] | None = None) -> pd.Data
         def _get(*keys: str) -> float | None:
             """First matching alias value for a metric family."""
             for key in keys:
-                v = _to_float(concepts.get(key))
+                v = _to_float(concepts.get(key))  # noqa: B023 - only called in this iteration
                 if v is not None:
                     return v
             return None
@@ -411,33 +436,40 @@ def _load_financials(wh: Warehouse, tickers: list[str] | None = None) -> pd.Data
             liabilities = total_assets - equity
 
         roe = net_income / equity if net_income and equity and equity > 0 else None
-        roa = net_income / total_assets if net_income and total_assets and total_assets > 0 else None
+        roa = (
+            net_income / total_assets if net_income and total_assets and total_assets > 0 else None
+        )
         debt_equity = liabilities / equity if liabilities and equity and equity > 0 else None
-        current_ratio = current_assets / \
-            current_liabilities if current_assets and current_liabilities and current_liabilities > 0 else None
-        cash_to_assets = cash / \
-            total_assets if cash and total_assets and total_assets > 0 else None
+        current_ratio = (
+            current_assets / current_liabilities
+            if current_assets and current_liabilities and current_liabilities > 0
+            else None
+        )
+        cash_to_assets = cash / total_assets if cash and total_assets and total_assets > 0 else None
         fcf = (ocf - capex) if ocf is not None and capex is not None else None
-        fcf_to_assets = fcf / \
-            total_assets if fcf is not None and total_assets and total_assets > 0 else None
+        fcf_to_assets = (
+            fcf / total_assets if fcf is not None and total_assets and total_assets > 0 else None
+        )
 
         # Filing date determines PIT availability
         filed_date = payload.get("filedDate", "")
         end_date = payload.get("endDate", "")
 
-        records.append({
-            "ticker": ticker,
-            "year": year,
-            "quarter": quarter,
-            "filed_date": pd.to_datetime(filed_date) if filed_date else None,
-            "end_date": pd.to_datetime(end_date) if end_date else None,
-            "roe": roe,
-            "roa": roa,
-            "debt_equity": debt_equity,
-            "current_ratio": current_ratio,
-            "cash_to_assets": cash_to_assets,
-            "fcf_to_assets": fcf_to_assets,
-        })
+        records.append(
+            {
+                "ticker": ticker,
+                "year": year,
+                "quarter": quarter,
+                "filed_date": pd.to_datetime(filed_date) if filed_date else None,
+                "end_date": pd.to_datetime(end_date) if end_date else None,
+                "roe": roe,
+                "roa": roa,
+                "debt_equity": debt_equity,
+                "current_ratio": current_ratio,
+                "cash_to_assets": cash_to_assets,
+                "fcf_to_assets": fcf_to_assets,
+            }
+        )
 
     fin = pd.DataFrame(records)
 
@@ -472,8 +504,7 @@ def _load_market(wh: Warehouse) -> pd.DataFrame:
     # rolling 252-day percentile rank of the VIX level — what regime the
     # market sits in as of that date (PIT, computed before any row join).
     m["vix_pctile_252"] = (
-        m["vix"].rolling(252, min_periods=63)
-        .apply(lambda w: (w <= w.iloc[-1]).mean(), raw=False)
+        m["vix"].rolling(252, min_periods=63).apply(lambda w: (w <= w.iloc[-1]).mean(), raw=False)
     )
     return m
 
@@ -487,7 +518,8 @@ def _merge_market(dataset: pd.DataFrame, market: pd.DataFrame, asof: pd.DataFram
     rather than being dropped — the model treats missing as unknown.
     """
     keys = asof[["ticker", "date", "asof_date"]].rename(
-        columns={"asof_date": "asof", "date": "label"})
+        columns={"asof_date": "asof", "date": "label"}
+    )
     joined = pd.merge_asof(
         keys.sort_values("asof"),
         market.sort_values("date"),
@@ -495,8 +527,7 @@ def _merge_market(dataset: pd.DataFrame, market: pd.DataFrame, asof: pd.DataFram
         right_on="date",
         direction="backward",
     )
-    joined = joined[["ticker", "label"] +
-                    MARKET_FEATURES].rename(columns={"label": "date"})
+    joined = joined[["ticker", "label"] + MARKET_FEATURES].rename(columns={"label": "date"})
     return dataset.merge(joined, on=["ticker", "date"], how="left")
 
 
@@ -519,8 +550,7 @@ def _load_company_profile(wh: Warehouse, tickers: list[str] | None = None) -> pd
 
     records = []
     for ticker, payload_str in rows:
-        payload = json.loads(payload_str) if isinstance(
-            payload_str, str) else payload_str
+        payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
         industry = payload.get("finnhubIndustry")
         records.append({"ticker": ticker, "sector": SECTOR_MAP.get(industry)})
 
@@ -528,6 +558,7 @@ def _load_company_profile(wh: Warehouse, tickers: list[str] | None = None) -> pd
 
 
 # ── PIT join logic ──────────────────────────────────────────────────────────────
+
 
 def _pit_join_fundamentals(
     monthly: pd.DataFrame,
@@ -548,8 +579,7 @@ def _pit_join_fundamentals(
     # Standardize join date precision across both DataFrames
     monthly = monthly.copy()
     monthly["date"] = pd.to_datetime(monthly["date"]).astype("datetime64[ns]")
-    financials["filed_date"] = pd.to_datetime(
-        financials["filed_date"]).astype("datetime64[ns]")
+    financials["filed_date"] = pd.to_datetime(financials["filed_date"]).astype("datetime64[ns]")
 
     # Prepare right dataframe and rename join column
     fin_cols = ["ticker", "filed_date"] + fund_cols
@@ -571,6 +601,7 @@ def _pit_join_fundamentals(
 
 # ── Feature engineering ──────────────────────────────────────────────────────────
 
+
 def _period_end_dates(daily_dates: pd.DataFrame, freq: str) -> pd.DataFrame:
     """Map each anchor label (period start) → the period's last trading day.
 
@@ -582,8 +613,7 @@ def _period_end_dates(daily_dates: pd.DataFrame, freq: str) -> pd.DataFrame:
     if freq == "daily":
         d["label"] = d["date"]
     elif freq == "weekly":
-        d["label"] = d["date"] - pd.to_timedelta(
-            d["date"].dt.weekday, unit="D")
+        d["label"] = d["date"] - pd.to_timedelta(d["date"].dt.weekday, unit="D")
     elif freq == "monthly":
         d["label"] = d["date"].dt.to_period("M").dt.start_time.dt.normalize()
     elif freq == "quarterly":
@@ -609,8 +639,7 @@ def _snapshot_daily(
     Returns rows keyed on the anchor's (ticker, date) label so the caller can
     merge straight back onto the dataset.
     """
-    keys = anchor[["ticker", asof_col, "date"]].rename(
-        columns={asof_col: "asof", "date": "label"})
+    keys = anchor[["ticker", asof_col, "date"]].rename(columns={asof_col: "asof", "date": "label"})
     res = pd.merge_asof(
         keys.sort_values("asof"),
         daily[["ticker", "date"] + feature_cols].sort_values("date"),
@@ -619,8 +648,7 @@ def _snapshot_daily(
         by="ticker",
         direction="backward",
     )
-    res = res[["ticker", "label"] +
-              feature_cols].rename(columns={"label": "date"})
+    res = res[["ticker", "label"] + feature_cols].rename(columns={"label": "date"})
     return res
 
 
@@ -638,9 +666,11 @@ def _add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     if "max_252" in df.columns and "min_252" in df.columns:
         range_52w = df["max_252"] - df["min_252"]
         df["dist_from_52w_high"] = np.where(
-            range_52w != 0, (df["close"] - df["max_252"]) / range_52w, np.nan)
+            range_52w != 0, (df["close"] - df["max_252"]) / range_52w, np.nan
+        )
         df["dist_from_52w_low"] = np.where(
-            range_52w != 0, (df["close"] - df["min_252"]) / range_52w, np.nan)
+            range_52w != 0, (df["close"] - df["min_252"]) / range_52w, np.nan
+        )
 
     # ATR normalized by price (volatility proxy)
     if "atr_14" in df.columns:
@@ -648,8 +678,7 @@ def _add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Volatility ratio (stddev / mean — normalized volatility)
     if "stddev_252" in df.columns and "mean_252" in df.columns:
-        df["vol_ratio"] = np.where(
-            df["mean_252"] != 0, df["stddev_252"] / df["mean_252"], np.nan)
+        df["vol_ratio"] = np.where(df["mean_252"] != 0, df["stddev_252"] / df["mean_252"], np.nan)
 
     return df
 
@@ -694,39 +723,37 @@ def _add_weekly_features(df: pd.DataFrame) -> pd.DataFrame:
     df["return_4w"] = g["close"].pct_change(4)
     df["return_3m"] = g["close"].pct_change(13)
     df["return_12m"] = g["close"].pct_change(52)
-    baseline = g["volume"].transform(
-        lambda s: s.shift(1).rolling(13, min_periods=8).mean())
+    baseline = g["volume"].transform(lambda s: s.shift(1).rolling(13, min_periods=8).mean())
     df["volume_ratio_13w"] = df["volume"] / baseline.replace(0, np.nan)
     return df
 
 
 # ── Rolling return-distribution statistics ─────────────────────────────────────
 
-def _rolling_sharpe(ret: pd.Series, win: int, periods_per_year: float,
-                    min_periods: int | None = None) -> pd.Series:
+
+def _rolling_sharpe(
+    ret: pd.Series, win: int, periods_per_year: float, min_periods: int | None = None
+) -> pd.Series:
     """Trailing mean/std ratio of period returns, annualized."""
     mp = min_periods or max(3, win // 2)
     m = ret.rolling(win, min_periods=mp).mean()
     s = ret.rolling(win, min_periods=mp).std(ddof=0)
-    return (m / s.replace(0, np.nan) * np.sqrt(periods_per_year))
+    return m / s.replace(0, np.nan) * np.sqrt(periods_per_year)
 
 
-def _rolling_skew(ret: pd.Series, win: int,
-                  min_periods: int | None = None) -> pd.Series:
+def _rolling_skew(ret: pd.Series, win: int, min_periods: int | None = None) -> pd.Series:
     """Trailing skewness (Fisher-Pearson, sample) of period returns."""
     mp = min_periods or max(4, win // 2)
     return ret.rolling(win, min_periods=mp).skew()
 
 
-def _rolling_kurt(ret: pd.Series, win: int,
-                  min_periods: int | None = None) -> pd.Series:
+def _rolling_kurt(ret: pd.Series, win: int, min_periods: int | None = None) -> pd.Series:
     """Trailing excess kurtosis of period returns; NaN until enough obs."""
     mp = min_periods or max(4, win // 2)
     return ret.rolling(win, min_periods=mp).kurt()
 
 
-def _rolling_downside_dev(ret: pd.Series, win: int,
-                          min_periods: int | None = None) -> pd.Series:
+def _rolling_downside_dev(ret: pd.Series, win: int, min_periods: int | None = None) -> pd.Series:
     """Semi-deviation: std of only the non-positive period returns."""
     # A window rarely holds a full `win` of non-positive returns, so keep the
     # required count modest (the stat is a tail measure, not a density estimate).
@@ -735,15 +762,15 @@ def _rolling_downside_dev(ret: pd.Series, win: int,
     return neg.rolling(win, min_periods=mp).std(ddof=0)
 
 
-def _rolling_var95(ret: pd.Series, win: int,
-                   min_periods: int | None = None) -> pd.Series:
+def _rolling_var95(ret: pd.Series, win: int, min_periods: int | None = None) -> pd.Series:
     """5% historical VaR: negative of the 5th percentile of period returns."""
     mp = min_periods or max(5, win // 2)
     return -ret.rolling(win, min_periods=mp).quantile(0.05)
 
 
-def _rolling_beta(name_ret: pd.Series, mkt_ret: pd.Series, win: int,
-                  min_periods: int | None = None) -> pd.Series:
+def _rolling_beta(
+    name_ret: pd.Series, mkt_ret: pd.Series, win: int, min_periods: int | None = None
+) -> pd.Series:
     """Trailing beta = cov(name, market)/var(market) over a rolling window."""
     mp = min_periods or max(10, win // 2)
     cov = name_ret.rolling(win, min_periods=mp).cov(mkt_ret)
@@ -765,24 +792,18 @@ def _market_period_returns(market: pd.DataFrame, freq: str) -> pd.DataFrame:
     if freq == "daily":
         s["label"] = s["date"]
     elif freq == "weekly":
-        s["label"] = (
-            s["date"] - pd.to_timedelta(s["date"].dt.weekday, unit="D"))
+        s["label"] = s["date"] - pd.to_timedelta(s["date"].dt.weekday, unit="D")
     elif freq == "monthly":
         s["label"] = s["date"].dt.to_period("M").dt.start_time.dt.normalize()
     else:  # quarterly
         s["label"] = s["date"].dt.to_period("Q").dt.start_time.dt.normalize()
 
     # period close = last trading day's spx level in the bucket
-    per = (s.groupby("label")["spx"]
-           .last()
-           .sort_index()
-           .pct_change()
-           .rename("mkt_ret"))
+    per = s.groupby("label")["spx"].last().sort_index().pct_change().rename("mkt_ret")
     return per.reset_index()
 
 
-def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame,
-                       freq: str) -> pd.DataFrame:
+def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame, freq: str) -> pd.DataFrame:
     """Compute trailing return-distribution + beta features per ticker.
 
     Runs on the per-grain close series AFTER the base/derived features are in
@@ -805,15 +826,13 @@ def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame,
     if freq == "daily":
         d["_label"] = d["date"]
     elif freq == "weekly":
-        d["_label"] = (
-            d["date"] - pd.to_timedelta(d["date"].dt.weekday, unit="D"))
+        d["_label"] = d["date"] - pd.to_timedelta(d["date"].dt.weekday, unit="D")
     elif freq == "monthly":
         d["_label"] = d["date"].dt.to_period("M").dt.start_time.dt.normalize()
     else:
         d["_label"] = d["date"].dt.to_period("Q").dt.start_time.dt.normalize()
     d = d.merge(mkt, left_on="_label", right_on="label", how="left")
 
-    out = np.full(len(d), np.nan)
     for col, fn in {
         "roll_sharpe": lambda r: _rolling_sharpe(r, win, ppy),
         "roll_skew": lambda r: _rolling_skew(r, win),
@@ -828,8 +847,7 @@ def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame,
 
     buf = np.full(len(d), np.nan)
     for _, sub in d.groupby("ticker"):
-        buf[sub.index] = _rolling_beta(
-            sub["_ret"], sub["mkt_ret"], bwin).to_numpy()
+        buf[sub.index] = _rolling_beta(sub["_ret"], sub["mkt_ret"], bwin).to_numpy()
     d["roll_beta"] = buf
 
     d = d.drop(columns=["_ret", "_label", "label", "mkt_ret"])
@@ -838,8 +856,10 @@ def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame,
 
 # ── Target variable ─────────────────────────────────────────────────────────────
 
-def _add_target(df: pd.DataFrame, freq: str = "monthly",
-                last_trade: pd.DataFrame | None = None) -> pd.DataFrame:
+
+def _add_target(
+    df: pd.DataFrame, freq: str = "monthly", last_trade: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Add next-period return as the prediction target.
 
     For the quarterly grain, a target is only valid when the *forward* quarter
@@ -858,8 +878,7 @@ def _add_target(df: pd.DataFrame, freq: str = "monthly",
         # (label is the period start: +2 quarter-ends = forward quarter end).
         fwd_end = (df["date"] + pd.offsets.QuarterEnd(2)).dt.normalize()
         lt = df[["ticker"]].merge(last_trade, on="ticker", how="left")
-        closed = pd.to_datetime(lt["last_date"]) >= (
-            fwd_end - pd.Timedelta(days=5))
+        closed = pd.to_datetime(lt["last_date"]) >= (fwd_end - pd.Timedelta(days=5))
         # ...and the next row must actually be the adjacent quarter, not a
         # later one after a data gap.
         adjacent = g["date"].shift(-1) == df["date"] + pd.DateOffset(months=3)
@@ -905,10 +924,10 @@ def _add_weekly_targets(df: pd.DataFrame, closed_through: pd.Timestamp) -> pd.Da
 
 # ── Main ────────────────────────────────────────────────────────────────────────
 
-def build_dataset(freq: str = "monthly",
-                  tickers: list[str] | None = None,
-                  keep_unlabeled: bool = False,
-                  now=None) -> pd.DataFrame:
+
+def build_dataset(
+    freq: str = "monthly", tickers: list[str] | None = None, keep_unlabeled: bool = False, now=None
+) -> pd.DataFrame:
     """Build the full training dataset for one bar frequency.
 
     `tickers` restricts every load to the curated training universe; None
@@ -930,10 +949,12 @@ def build_dataset(freq: str = "monthly",
     # signals to the 14-day indicator set; monthly/daily keep the latter.
     if freq == "quarterly":
         ti_cols, aa_cols, fund_cols = (
-            QUARTERLY_TI_FEATURES, QUARTERLY_AA_FEATURES, QUARTERLY_FUND_FEATURES)
+            QUARTERLY_TI_FEATURES,
+            QUARTERLY_AA_FEATURES,
+            QUARTERLY_FUND_FEATURES,
+        )
     elif freq == "weekly":
-        ti_cols, aa_cols, fund_cols = (
-            WEEKLY_TI_FEATURES, WEEKLY_AA_FEATURES, FUNDAMENTAL_FEATURES)
+        ti_cols, aa_cols, fund_cols = (WEEKLY_TI_FEATURES, WEEKLY_AA_FEATURES, FUNDAMENTAL_FEATURES)
     else:
         ti_cols, aa_cols, fund_cols = TI_FEATURES, AA_FEATURES, FUNDAMENTAL_FEATURES
 
@@ -951,8 +972,7 @@ def build_dataset(freq: str = "monthly",
 
     print("Loading financials...")
     fins = _load_financials(wh, tickers)
-    print(
-        f"  {len(fins)} quarterly reports, {fins['ticker'].nunique()} tickers")
+    print(f"  {len(fins)} quarterly reports, {fins['ticker'].nunique()} tickers")
 
     print("Loading company profiles (sector)...")
     profiles = _load_company_profile(wh, tickers)
@@ -961,7 +981,8 @@ def build_dataset(freq: str = "monthly",
     print("Loading market series (VIX / S&P 500)...")
     market = _load_market(wh)
     print(
-        f"  {len(market)} daily rows, {market['date'].min().date()} → {market['date'].max().date()}")
+        f"  {len(market)} daily rows, {market['date'].min().date()} → {market['date'].max().date()}"
+    )
 
     print("Computing period-end snapshot dates...")
     asof = _period_end_dates(ti, freq)
@@ -975,8 +996,7 @@ def build_dataset(freq: str = "monthly",
 
     # Merge: anchor base + TI + AA
     print("Merging features...")
-    dataset = anchor[["ticker", "date", "open",
-                      "high", "low", "close", "volume"]].copy()
+    dataset = anchor[["ticker", "date", "open", "high", "low", "close", "volume"]].copy()
     dataset = dataset.merge(ti_anchor, on=["ticker", "date"], how="left")
     dataset = dataset.merge(aa_anchor, on=["ticker", "date"], how="left")
 
@@ -989,7 +1009,9 @@ def build_dataset(freq: str = "monthly",
     dataset = dataset.merge(profiles, on="ticker", how="left")
 
     # Re-cast numeric columns (merge can introduce object dtypes)
-    for col in ["open", "high", "low", "close", "volume"] + ti_cols + aa_cols + fund_cols + MARKET_FEATURES:
+    for col in (
+        ["open", "high", "low", "close", "volume"] + ti_cols + aa_cols + fund_cols + MARKET_FEATURES
+    ):
         if col in dataset.columns:
             dataset[col] = pd.to_numeric(dataset[col], errors="coerce")
 
@@ -1019,7 +1041,9 @@ def build_dataset(freq: str = "monthly",
         with wh.connect(read_only=True) as con:
             last_trade = pd.read_sql(
                 "SELECT ticker, MAX(date) AS last_date "
-                "FROM staging.stg_prices_daily GROUP BY ticker", con)
+                "FROM staging.stg_prices_daily GROUP BY ticker",
+                con,
+            )
     else:
         last_trade = None
     if freq == "weekly":
@@ -1033,11 +1057,12 @@ def build_dataset(freq: str = "monthly",
     if not keep_unlabeled:
         dataset = dataset.dropna(subset=["target_return"])
 
-    print(
-        f"\nDataset: {len(dataset)} rows, {dataset['ticker'].nunique()} tickers")
+    print(f"\nDataset: {len(dataset)} rows, {dataset['ticker'].nunique()} tickers")
     print(f"Date range: {dataset['date'].min()} → {dataset['date'].max()}")
-    print(f"Features: {len(feat_names)} base + derived "
-          f"+ {len(CATEGORICAL_FEATURES)} categorical ({', '.join(CATEGORICAL_FEATURES)})")
+    print(
+        f"Features: {len(feat_names)} base + derived "
+        f"+ {len(CATEGORICAL_FEATURES)} categorical ({', '.join(CATEGORICAL_FEATURES)})"
+    )
     missing = dataset["sector"].isna().sum()
     if missing:
         print(f"WARNING: {missing} rows with missing sector")
@@ -1051,8 +1076,7 @@ if __name__ == "__main__":
     def _split_tickers(arg: str) -> list[str]:
         return [t.strip() for t in arg.split(",") if t.strip()]
 
-    parser = argparse.ArgumentParser(
-        description="Build the ML training dataset.")
+    parser = argparse.ArgumentParser(description="Build the ML training dataset.")
     parser.add_argument(
         "--freq",
         choices=["daily", "weekly", "monthly", "quarterly"],
@@ -1064,21 +1088,20 @@ if __name__ == "__main__":
         type=_split_tickers,
         default=None,
         help="comma-separated training universe, e.g. 'AAPL,MSFT,NVDA' "
-             "(overrides TRAIN_TICKERS constant)",
+        "(overrides TRAIN_TICKERS constant)",
     )
     parser.add_argument(
         "--tickers-file",
         type=Path,
         default=None,
         help="path to a newline- or comma-separated ticker list for the "
-             "training universe (overrides TRAIN_TICKERS constant)",
+        "training universe (overrides TRAIN_TICKERS constant)",
     )
     parser.add_argument(
         "--out",
         type=Path,
         default=None,
-        help="output parquet path (default: train_dataset[_freq].parquet in "
-             "Model/datasets/)",
+        help="output parquet path (default: train_dataset[_freq].parquet in Model/datasets/)",
     )
     args = parser.parse_args()
 
@@ -1087,8 +1110,8 @@ if __name__ == "__main__":
         parser.error("provide either --tickers or --tickers-file, not both")
     if args.tickers_file:
         tickers = [
-            t.strip() for t in args.tickers_file.read_text()
-            .replace(",", "\n").splitlines()
+            t.strip()
+            for t in args.tickers_file.read_text().replace(",", "\n").splitlines()
             if t.strip()
         ]
     elif args.tickers:
@@ -1101,7 +1124,8 @@ if __name__ == "__main__":
         "monthly": "train_dataset_monthly.parquet",
         "quarterly": "train_dataset_quarterly.parquet",
     }
-    out_path = args.out or (Path(__file__).resolve().parent.parent /
-                            "datasets" / default_names[args.freq])
+    out_path = args.out or (
+        Path(__file__).resolve().parent.parent / "datasets" / default_names[args.freq]
+    )
     dataset.to_parquet(out_path, index=False)
     print(f"\nSaved to {out_path}")
