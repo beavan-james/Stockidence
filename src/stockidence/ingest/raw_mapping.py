@@ -55,7 +55,7 @@ def primary_news_rows(articles: list[dict[str, Any]]) -> dict[str, list[dict[str
     return rows
 
 
-Normalizer = Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]
+Normalizer = Callable[[Any, str, datetime], dict[str, list[dict[str, Any]]]]
 
 
 def _single(artifact: str, rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -333,9 +333,7 @@ def normalize_peers(
     return _single("raw_peers", [{"ticker": symbol, "payload": {"peers": payload}}])
 
 
-def _macro_name(
-    indicator: str,
-) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+def _macro_name(indicator: str) -> Normalizer:
     def normalize(
         payload: dict[str, Any], symbol: str, now: datetime
     ) -> dict[str, list[dict[str, Any]]]:
@@ -349,9 +347,7 @@ def _macro_name(
     return normalize
 
 
-def _fred_series(
-    series: str,
-) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+def _fred_series(series: str) -> Normalizer:
     """FRED /fred/series/observations: one row per observation, keyed (series, date).
 
     FRED returns observations oldest-first with `value` as a string; "." is the
@@ -372,9 +368,7 @@ def _fred_series(
     return normalize
 
 
-def _commodity_name(
-    nominal: str,
-) -> Callable[[dict[str, Any], str, datetime], dict[str, list[dict[str, Any]]]]:
+def _commodity_name(nominal: str) -> Normalizer:
     def normalize(
         payload: dict[str, Any], symbol: str, now: datetime
     ) -> dict[str, list[dict[str, Any]]]:
@@ -508,7 +502,7 @@ def normalize_market_news(
 
 
 def normalize_ticker_news(
-    payload: dict[str, Any], symbol: str, now: datetime
+    payload: list[dict[str, Any]], symbol: str, now: datetime
 ) -> dict[str, list[dict[str, Any]]]:
     """Per-ticker deep-history pull: same fan-out as market_news, plus the
     one-row fetch marker that serves as the ticker_news watermark. The marker

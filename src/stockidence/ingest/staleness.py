@@ -24,7 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from ..storage import RAW_SCHEMA, Warehouse, Watermark
+from ..storage import RAW_SCHEMA, Warehouse, Watermark, one_row
 from .endpoints import (
     REGISTRY,
     Cadence,
@@ -122,13 +122,15 @@ def check_insider_sentiment(warehouse: Warehouse, dimension_key: str, now: datet
     """
     ticker = dimension_key.split("|")[0]
     with warehouse.connect(read_only=True) as con:
-        count = con.execute(
-            """
+        count = one_row(
+            con.execute(
+                """
             SELECT COUNT(*) FROM raw.raw_insider_sentiment
             WHERE ticker = ? AND year = ? AND month = ?
             """,
-            [ticker, now.year, now.month],
-        ).fetchone()[0]
+                [ticker, now.year, now.month],
+            )
+        )[0]
     return count == 0
 
 
@@ -175,8 +177,9 @@ def check_sec_balance_sheets(warehouse: Warehouse, dimension_key: str, now: date
     ticker = dimension_key.split("|")[0]
     cutoff = now.date() - timedelta(days=SEC_LOOKBACK_DAYS)
     with warehouse.connect(read_only=True) as con:
-        gaps = con.execute(
-            """
+        gaps = one_row(
+            con.execute(
+                """
             SELECT COUNT(*) FROM raw.raw_financials_reported f
             WHERE f.ticker = ?
               AND COALESCE(json_array_length(json_extract(f.payload, '$.report.bs')), 0) = 0
@@ -189,8 +192,9 @@ def check_sec_balance_sheets(warehouse: Warehouse, dimension_key: str, now: date
                   (SELECT MAX(fetched_at) FROM raw.raw_sec_balance_sheets WHERE ticker = f.ticker),
                   TIMESTAMPTZ '1970-01-01 00:00:00+00')
             """,
-            [ticker, cutoff],
-        ).fetchone()[0]
+                [ticker, cutoff],
+            )
+        )[0]
     return gaps > 0
 
 
@@ -251,11 +255,9 @@ class StalenessGate:
         cols = [name for name, _ in RAW_SCHEMA[spec.artifacts[0]]]
         prefix = cols[: len(parts)]
         conds = " AND ".join(f'"{c}" = ?' for c in prefix)
+        query = f'SELECT COUNT(*), MAX(fetched_at) FROM raw."{spec.artifacts[0]}" WHERE {conds}'
         with self.warehouse.connect(read_only=True) as con:
-            row = con.execute(
-                f'SELECT COUNT(*), MAX(fetched_at) FROM raw."{spec.artifacts[0]}" WHERE {conds}',
-                parts,
-            ).fetchone()
+            row = one_row(con.execute(query, parts))
         if row[0] == 0:
             return None
         fetched_at = row[1]

@@ -42,7 +42,7 @@ from typing import Any
 
 from dagster import (
     AssetExecutionContext,
-    AssetSelection,
+    AssetsDefinition,
     Config,
     DefaultScheduleStatus,
     Definitions,
@@ -592,7 +592,7 @@ def ticker_data(context: AssetExecutionContext) -> None:
         context.log.info(f"[{ticker}:{endpoint}] {result.reason} ({result.rows_written} rows)")
 
 
-def _derived_asset(name: str, rebuild: Any, deps: AssetSelection | list | object) -> object:
+def _derived_asset(name: str, rebuild: Any, deps: list[AssetsDefinition]) -> AssetsDefinition:
     """Declare one per-ticker derived asset (staging cleaning or mart aggregate).
 
     `name` is the asset key AND the table name it rebuilds (stg_*/m_*), so

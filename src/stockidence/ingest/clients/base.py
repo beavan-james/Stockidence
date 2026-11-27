@@ -82,10 +82,13 @@ class BaseClient:
         import fcntl
         import os
 
-        directory = os.path.dirname(self.pace_file)
+        pace_file = self.pace_file
+        if pace_file is None:
+            raise ValueError("shared pacing needs a pace_file")
+        directory = os.path.dirname(pace_file)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        with open(self.pace_file, "a+") as fh:
+        with open(pace_file, "a+") as fh:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
             try:
                 fh.seek(0)

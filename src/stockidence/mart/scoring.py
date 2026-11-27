@@ -226,7 +226,7 @@ def _num(value: Any) -> float | None:
         return None
 
 
-def _mean(values: Iterable[float]) -> float | None:
+def _mean(values: Iterable[float | None]) -> float | None:
     vals = [v for v in values if v is not None and math.isfinite(v)]
     return statistics.fmean(vals) if vals else None
 
@@ -371,8 +371,8 @@ def _forward_eps(con: Any, ticker: str) -> float | None:
     rows = _fetch_raw(
         con, "raw_earnings_calendar", "symbol = ?", [ticker], "ORDER BY year, quarter"
     )
-    est = [_num(r["payload"].get("epsEstimate")) for r in rows]
-    est = [e for e in est if e is not None and e > 0]
+    estimates = [_num(r["payload"].get("epsEstimate")) for r in rows]
+    est = [e for e in estimates if e is not None and e > 0]
     return est[-1] * 4.0 if est else None
 
 
@@ -385,11 +385,11 @@ def _eps_growth(con: Any, ticker: str, rows: list[dict[str, Any]]) -> float | No
     return None
 
 
-def _pe_of(price: float, eps: float) -> float | None:
-    return price / (eps * 4.0) if eps and eps > 0 and price > 0 else None
+def _pe_of(price: float | None, eps: float) -> float | None:
+    return price / (eps * 4.0) if eps and eps > 0 and price is not None and price > 0 else None
 
 
-def _eps_pe_history(price: float, rows: list[dict[str, Any]]) -> list[float]:
+def _eps_pe_history(price: float | None, rows: list[dict[str, Any]]) -> list[float]:
     """P/E band from quarterly actual EPS (annualized) at today's price."""
     pes: list[float] = []
     for r in rows:
@@ -415,13 +415,15 @@ def _resolve_metric(name: str) -> str:
     return _METRIC_ALIASES.get(name, name)
 
 
-def _current_ps(price: float, basic: list[dict[str, Any]]) -> float | None:
+def _current_ps(price: float | None, basic: list[dict[str, Any]]) -> float | None:
     rps = _latest_series(basic, "salesPerShareTTM")
-    return price / rps if rps and rps > 0 and price > 0 else None
+    return price / rps if rps and rps > 0 and price is not None and price > 0 else None
 
 
-def _ps_history(price: float, basic: list[dict[str, Any]]) -> list[float]:
+def _ps_history(price: float | None, basic: list[dict[str, Any]]) -> list[float]:
     out: list[float] = []
+    if price is None:
+        return out
     metric = _resolve_metric("salesPerShareTTM")
     for r in basic:
         if r["payload"].get("freq") != "quarterly" or r["payload"].get("metric") != metric:
@@ -452,14 +454,18 @@ def _latest_metric(basic: list[dict[str, Any]], key: str) -> float | None:
 
 
 def _valuation_components(
-    con: Any, ticker: str, rows: list[dict[str, Any]], price: float, fair: float | None
+    con: Any,
+    ticker: str,
+    rows: list[dict[str, Any]],
+    price: float | None,
+    fair: float | None,
 ) -> list[Component]:
     trailing = _trailing_eps(rows)
     growth = _eps_growth(con, ticker, rows)
     components: list[Component] = []
 
     # 1. discount to fair value (40%)
-    if fair is not None and price > 0:
+    if fair is not None and price is not None and price > 0:
         score = _clamp(50.0 + (1.0 - price / fair) * 100.0, 0.0, 100.0)
         components.append(Component("valuation", "discount_to_fair_value", score, 0.40, "live"))
     else:
@@ -508,11 +514,8 @@ def _valuation_components(
 
     # 5. multiple quality vs own history (10%) — P/S percentile + margin lift
     ps_hist = _ps_history(price, basic)
-    ps_pct = (
-        _percentile_of(_current_ps(price, basic), ps_hist)
-        if (ps_hist and _current_ps(price, basic) is not None)
-        else None
-    )
+    current_ps = _current_ps(price, basic)
+    ps_pct = _percentile_of(current_ps, ps_hist) if (ps_hist and current_ps is not None) else None
     margin = _latest_series(basic, "netMargin")
     margin_score = _clamp(25.0 + (margin or 0.0) * 300.0, 0.0, 95.0) if margin is not None else 50.0
     if ps_pct is not None:
@@ -792,8 +795,8 @@ def _news_components(con: Any, ticker: str, anchor: datetime | None = None) -> l
         for r in latest
         if r["payload"].get("content")
     ]
-    if tones:
-        tone = _mean(tones)
+    tone = _mean(tones)
+    if tone is not None:
         components.append(Component("sentiment", "transcript_tone", tone * 100.0, 0.15, "live"))
     else:
         components.append(Component("sentiment", "transcript_tone", 50.0, 0.15, "neutral"))
@@ -834,12 +837,12 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
     reported = _reported_rows(con, ticker)
 
     # 1. margin quality (35%) — level + stability over last 3 fiscal years
-    margins = [
+    annual_margins = [
         _num(r["payload"].get("v"))
         for r in basic
         if r["payload"].get("freq") == "annual" and r["payload"].get("metric") == "netMargin"
     ]
-    margins = [m for m in margins if m is not None]
+    margins = [m for m in annual_margins if m is not None]
     if len(margins) >= 2:
         mean_m = statistics.fmean(margins)
         cv = statistics.pstdev(margins) / abs(mean_m) if mean_m else 1.0
@@ -1097,8 +1100,8 @@ def _fair_value(
     else:
         # free-tier forward estimates aren't available: fall back to trailing
         # EPS growth annualized from /stock/earnings actuals (which we hold)
-        actuals = [_num(r["payload"].get("actual")) for r in surprise_rows]
-        actuals = [a for a in actuals if a is not None and a > 0]
+        reported_eps = [_num(r["payload"].get("actual")) for r in surprise_rows]
+        actuals = [a for a in reported_eps if a is not None and a > 0]
         if len(actuals) >= 4:
             ann = (actuals[-1] / actuals[0]) ** (4.0 / (len(actuals) - 1)) - 1.0
             g_fwd = _clamp(ann, *FAIR_VALUE["growth_clamp"])
@@ -1111,7 +1114,10 @@ def _fair_value(
 
     # ---- DCF leg: TTM owner FCF, 5y stage-1 growth, TV ----
     reported = _reported_rows(con, ticker)
-    shares = (_num(profile["payload"].get("shareOutstanding")) * 1e6) if profile else None
+    # a profile without a share count (sparse or ETF profiles) counts as no
+    # profile: the legs that need shares are skipped
+    shares_m = _num(profile["payload"].get("shareOutstanding")) if profile else None
+    shares = shares_m * 1e6 if shares_m is not None else None
     dcf_ps: float | None = None
     ocf = _reported_ttm(reported, _CF_OCF)
     capex = _reported_ttm(reported, _CF_CAPEX)

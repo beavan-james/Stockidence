@@ -15,7 +15,7 @@ flows through next run).
 
 from __future__ import annotations
 
-from ..storage import Warehouse
+from ..storage import Warehouse, one_row
 
 
 def rebuild_prices_daily(warehouse: Warehouse, ticker: str) -> int:
@@ -48,9 +48,9 @@ def rebuild_prices_daily(warehouse: Warehouse, ticker: str) -> int:
             """,
             [ticker],
         )
-        return con.execute(
-            "SELECT COUNT(*) FROM staging.stg_prices_daily WHERE ticker = ?", [ticker]
-        ).fetchone()[0]
+        return one_row(
+            con.execute("SELECT COUNT(*) FROM staging.stg_prices_daily WHERE ticker = ?", [ticker])
+        )[0]
 
 
 def rebuild_fred_market(warehouse: Warehouse) -> int:
@@ -71,7 +71,7 @@ def rebuild_fred_market(warehouse: Warehouse) -> int:
             WHERE TRY_CAST(json_extract_string(payload, '$.value') AS DOUBLE) IS NOT NULL
             """
         )
-        return con.execute("SELECT COUNT(*) FROM staging.stg_fred_market").fetchone()[0]
+        return one_row(con.execute("SELECT COUNT(*) FROM staging.stg_fred_market"))[0]
 
 
 def rebuild_financials_reported(warehouse: Warehouse, ticker: str | None = None) -> int:
@@ -122,9 +122,9 @@ def rebuild_financials_reported(warehouse: Warehouse, ticker: str | None = None)
             """,
             args,
         )
-        return con.execute(
-            f"SELECT COUNT(*) FROM staging.stg_financials_reported {where}", args
-        ).fetchone()[0]
+        return one_row(
+            con.execute(f"SELECT COUNT(*) FROM staging.stg_financials_reported {where}", args)
+        )[0]
 
 
 # Alpha Vantage tags every ticker an article mentions, each with a relevance
@@ -152,10 +152,16 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
     """
     with warehouse.connect() as con:
         # rows staged before `feed` existed are restaged in full, once
-        since = None if full else con.execute(
-            "SELECT CASE WHEN bool_or(feed IS NULL) THEN NULL ELSE MAX(fetched_at) END"
-            " FROM staging.stg_news_articles"
-        ).fetchone()[0]
+        since = (
+            None
+            if full
+            else one_row(
+                con.execute(
+                    "SELECT CASE WHEN bool_or(feed IS NULL) THEN NULL ELSE MAX(fetched_at) END"
+                    " FROM staging.stg_news_articles"
+                )
+            )[0]
+        )
         con.execute("BEGIN TRANSACTION")
         con.execute(
             """
@@ -207,7 +213,7 @@ def rebuild_news_articles(warehouse: Warehouse, *, full: bool = False) -> int:
                 " WHERE article_id IN (SELECT article_id FROM news_batch)"
             )
         con.execute("INSERT INTO staging.stg_news_articles BY NAME SELECT * FROM news_batch")
-        written = con.execute("SELECT COUNT(*) FROM news_batch").fetchone()[0]
+        written = one_row(con.execute("SELECT COUNT(*) FROM news_batch"))[0]
         con.execute("DROP TABLE news_batch")
         con.execute("COMMIT")
         return written

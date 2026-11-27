@@ -217,8 +217,10 @@ def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _format_news_time(raw: str) -> str:
+def _format_news_time(raw: str | None) -> str | None:
     """Alpha Vantage / Finnhub timestamp 'YYYYMMDDTHHMMSS' -> readable."""
+    if raw is None:
+        return None
     try:
         dt = datetime.strptime(raw, "%Y%m%dT%H%M%S")
         return dt.strftime("%b %d, %H:%M")

@@ -496,3 +496,36 @@ def test_bar_only_ticker_degrades_to_neutral(warehouse):
         .fetchall()
     )
     assert dict(comps)["valuation"] == 6  # every sub-score persisted, neutral
+
+
+def test_profile_without_share_count_skips_dcf(warehouse):
+    # A profile row with no shareOutstanding (sparse or ETF profiles) used to
+    # crash _fair_value on None * 1e6. It now counts as no share count: the
+    # DCF leg is skipped and fair value comes from the comparables leg.
+    _seed_bars(warehouse, "NOSH")
+    _seed_quotes(warehouse, "NOSH", price=319.5)
+    warehouse.land("raw_company_profile", [{"ticker": "NOSH", "name": "No Shares Corp"}])
+    _seed_fundamentals(warehouse, "NOSH")
+    _seed_sentiment(warehouse, "NOSH")
+
+    result = score_ticker(warehouse, "NOSH")
+
+    assert result.fair_value is not None
+    assert "dcf" not in result.fair_value_sources
+    assert "comps" in result.fair_value_sources
+
+
+def test_no_price_scores_price_based_valuation_neutral(warehouse):
+    # Earnings and metrics on record but no quote and no daily bar used to
+    # crash _valuation_components on None > 0. The price-based parts now
+    # score neutral 50, as they do at price 0; the rest stay live.
+    _seed_fundamentals(warehouse, "NOPX")
+
+    result = score_ticker(warehouse, "NOPX")
+
+    assert result.fair_value is None
+    by = {c.name: c for c in result.categories}
+    sources = {c.name: c.source for c in by["valuation"].components}
+    for name in ("discount_to_fair_value", "pe_percentile", "peg", "multiple_quality"):
+        assert sources[name] == "neutral", name
+    assert sources["forward_vs_trailing_pe"] == "live"

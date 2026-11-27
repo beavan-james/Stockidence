@@ -172,7 +172,8 @@ def _product_token(value: str) -> str:
     _ (so Googlebot/2.1 names googlebot), lower-cased."""
     if value.startswith("*"):
         return "*"
-    return re.match(r"[A-Za-z_-]*", value)[0].lower()
+    match = re.match(r"[A-Za-z_-]*", value)
+    return match[0].lower() if match else ""
 
 
 class Robots:
