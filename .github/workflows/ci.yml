@@ -1,12 +1,13 @@
 # CI only: the server is not reachable from GitHub's runners, so nothing here
 # deploys. The box pulls origin/master itself (scripts/auto-deploy.sh).
 #
-#   lint-python ──┬──> unit-tests ──────────┐
-#                 └──┐                      ├──> integration
+#   unit-tests ─────────────────────────────┐
+#   lint-python ─────┐                      ├──> integration
 #   lint-frontend ───┴──> build ────────────┘
 #
-# Unit tests start as soon as the Python lint passes, since they don't use the
-# images, so their result comes back before the Docker builds finish. The
+# Unit tests start right away and don't wait on lint, so a formatting error
+# can't hide a failing test; they don't use the images, so their result comes
+# back before the Docker builds finish. The
 # integration stage runs the slower pytest suite plus smoke checks against the
 # exact backend image the build stage made.
 #
@@ -115,7 +116,6 @@ jobs:
 
   unit-tests:
     name: Unit tests
-    needs: lint-python
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
