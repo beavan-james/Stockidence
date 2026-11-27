@@ -122,7 +122,7 @@ def get_ranking_detail(ticker: str) -> dict | None:
                 " WHERE ticker = ?",
                 [ticker],
             ).fetchone()
-        except Exception:  # noqa: BLE001 — name is decoration; never fail the page on it
+        except Exception:  # name is decoration; never fail the page on it
             name = None
     return _detail_payload(
         latest, ticker, name, sector, rank, n, sector_rank, sector_n, score, base, prev, features

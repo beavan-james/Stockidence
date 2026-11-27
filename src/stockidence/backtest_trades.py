@@ -127,7 +127,7 @@ def _simulate_one(ticker: str, signals: list[BacktestRow],
         # --- entry phase --- (never fill on the very last bar: no exit left)
         filled_at = None
         for k in range(sb + 1, min(sb + entry_window, len(bars) - 2) + 1):
-            d, o, h, lo, c = bars[k]
+            _d, o, h, lo, c = bars[k]
             if o <= limit:
                 filled_at = (k, o)
                 break
@@ -144,7 +144,7 @@ def _simulate_one(ticker: str, signals: list[BacktestRow],
         ek, entry = filled_at
 
         # fill-day stop check (limit filled, then kept sliding to the stop)
-        d, o, h, lo, c = bars[ek]
+        _d, o, h, lo, c = bars[ek]
         exit_px = exit_day = None
         reason = None
         if lo <= stop:
@@ -156,14 +156,14 @@ def _simulate_one(ticker: str, signals: list[BacktestRow],
         # --- holding phase ---
         if exit_day is None:
             for j in range(ek + 1, len(bars)):
-                d, o, h, lo, c = bars[j]
+                _d, o, h, lo, c = bars[j]
                 # intrabar stop beats timeout on the same bar (pessimistic)
                 if lo <= stop:
-                    exit_px = o if o < stop else stop
+                    exit_px = min(stop, o)
                     exit_day, reason = j, "stop"
                     break
                 if target is not None and h >= target:
-                    exit_px = o if o > target else target
+                    exit_px = max(target, o)
                     exit_day, reason = j, "target"
                     break
                 if j - ek >= max_hold:

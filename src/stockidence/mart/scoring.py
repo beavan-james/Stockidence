@@ -15,9 +15,11 @@ from __future__ import annotations
 import json
 import math
 import statistics
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timezone
-from typing import Any, Iterable
+from datetime import UTC, date, datetime, time
+from itertools import pairwise
+from typing import Any
 
 from ..storage import Warehouse
 
@@ -498,13 +500,13 @@ def _trend_components(con: Any, ticker: str, price: float | None,
     if len(rows) < 2:
         return neutral
     last, prev = rows[-1], rows[-2]
-    sma20, sma50, sma200 = last[0], last[1], last[2]
-    ema12, ema26 = last[3], last[4]
+    # Columns 0 (SMA20), 3-4 (EMA12/26), 9 (ATR14), 14 (%D) and 16-17
+    # (A/D, OBV) are selected but not scored.
+    sma50, sma200 = last[1], last[2]
     macd, macd_signal, hist, prev_hist = last[5], last[6], last[7], prev[7]
-    rsi14, atr14, adx14 = last[8], last[9], last[10]
+    rsi14, adx14 = last[8], last[10]
     plus_di, minus_di = last[11], last[12]
-    stoch_k, stoch_d, prev_k, cci20 = last[13], last[14], prev[13], last[15]
-    ad, obv = last[16], last[17]
+    stoch_k, prev_k, cci20 = last[13], prev[13], last[15]
     components: list[Component] = []
 
     # 1. price vs SMA50/SMA200 (30%)
@@ -615,7 +617,7 @@ def _trend_components(con: Any, ticker: str, price: float | None,
 def _news_components(con: Any, ticker: str,
                      anchor: datetime | None = None) -> list[Component]:
     components: list[Component] = []
-    cutoff = (int((anchor or datetime.now(timezone.utc)).timestamp() * 1000)
+    cutoff = (int((anchor or datetime.now(UTC)).timestamp() * 1000)
               - NEWS_WINDOW_DAYS * 86_400_000)
 
     # 1. news sentiment, last 14 days (30%)
@@ -782,8 +784,7 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
             revenues[(r["year"], r["quarter"])] = rev
     ordered = [revenues[k] for k in sorted(revenues)]
     if len(ordered) >= 4:
-        growths = [b / a - 1.0 for a,
-                   b in zip(ordered, ordered[1:]) if a and b]
+        growths = [b / a - 1.0 for a, b in pairwise(ordered) if a and b]
         if growths:
             pos = sum(1 for g in growths if g > 0)
             components.append(Component("moat", "growth_consistency",
@@ -1096,14 +1097,14 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
     snapshots) are used as-landed — an accepted approximation documented in
     backtest.py. persist=False skips the mart snapshot upserts entirely.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if isinstance(as_of, datetime):
         as_of_date = as_of.date()
-        anchor = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+        anchor = as_of if as_of.tzinfo else as_of.replace(tzinfo=UTC)
     elif as_of is not None:
         as_of_date = as_of
         # end of the replayed UTC day: news published ON as_of still counts
-        anchor = datetime.combine(as_of, time(23, 59), tzinfo=timezone.utc)
+        anchor = datetime.combine(as_of, time(23, 59), tzinfo=UTC)
     else:
         as_of_date = None
         anchor = None
@@ -1112,7 +1113,6 @@ def score_ticker(warehouse: Warehouse, ticker: str, *, now: datetime | None = No
                              "ticker = ?", [ticker])
         basic = _basic_rows(con, ticker)
         surprise_rows = _eps_surprise_rows(con, ticker)
-        trailing = _trailing_eps(surprise_rows)
 
         price: float | None = None
         q = _fetch_one(con, "raw_quotes", "ticker = ?", [ticker]) \

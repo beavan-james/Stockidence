@@ -22,7 +22,7 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -861,7 +861,7 @@ class Warehouse:
             raise KeyError(f"unknown artifact table: {artifact}")
         keys = [name for name, _ in RAW_SCHEMA[artifact]]
         pk = ", ".join(f'"{name}"' for name in keys)
-        fetched_at = fetched_at or datetime.now(timezone.utc)
+        fetched_at = fetched_at or datetime.now(UTC)
         set_cols = ", ".join(f'"{name}" = excluded."{name}"' for name in ("payload", "fetched_at"))
         match = " AND ".join(f'"{name}" = ?' for name in keys)
 
@@ -989,7 +989,7 @@ class Warehouse:
             return None
         fetched_at = row[2]
         if fetched_at.tzinfo is None:
-            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+            fetched_at = fetched_at.replace(tzinfo=UTC)
         return Watermark(endpoint=row[0], dimension_key=row[1], fetched_at=fetched_at, high_watermark=row[3])
 
     def upsert_watermark(
@@ -1000,7 +1000,7 @@ class Warehouse:
         fetched_at: datetime | None = None,
         high_watermark: str | None = None,
     ) -> None:
-        fetched_at = fetched_at or datetime.now(timezone.utc)
+        fetched_at = fetched_at or datetime.now(UTC)
         with self.connect() as con:
             con.execute(
                 """
@@ -1021,7 +1021,7 @@ class Warehouse:
         The frontend writes here (control metadata, exempt from the
         single-writer rule); the Dagster sensor consumes the queue.
         """
-        requested_at = requested_at or datetime.now(timezone.utc)
+        requested_at = requested_at or datetime.now(UTC)
         with self.connect() as con:
             con.execute(
                 """

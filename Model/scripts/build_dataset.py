@@ -389,7 +389,7 @@ def _load_financials(wh: Warehouse, tickers: list[str] | None = None) -> pd.Data
         def _get(*keys: str) -> float | None:
             """First matching alias value for a metric family."""
             for key in keys:
-                v = _to_float(concepts.get(key))
+                v = _to_float(concepts.get(key))  # noqa: B023 - only called in this iteration
                 if v is not None:
                     return v
             return None
@@ -813,7 +813,6 @@ def _add_rolling_stats(df: pd.DataFrame, market: pd.DataFrame,
         d["_label"] = d["date"].dt.to_period("Q").dt.start_time.dt.normalize()
     d = d.merge(mkt, left_on="_label", right_on="label", how="left")
 
-    out = np.full(len(d), np.nan)
     for col, fn in {
         "roll_sharpe": lambda r: _rolling_sharpe(r, win, ppy),
         "roll_skew": lambda r: _rolling_skew(r, win),

@@ -148,7 +148,7 @@ def rebuild_quarterly_dataset() -> dict:
     # the end of the following quarter, which the scored snapshot then ranks.
     return {
         "parquet": str(QUARTERLY_PARQUET),
-        "rows": int(len(dataset)),
+        "rows": len(dataset),
         "tickers": int(dataset["ticker"].nunique()),
         "first_training_snapshot": snapshot_date(dataset["date"].min()),
         "last_training_snapshot": snapshot_date(dataset["date"].max()),
@@ -172,9 +172,8 @@ def retrain_ranking_model() -> dict:
     and with src/ on PYTHONPATH so `import stockidence` resolves.
     """
     import nbformat
-    from nbclient import NotebookClient
-
     from ipykernel.kernelspec import install as install_kernel
+    from nbclient import NotebookClient
 
     install_kernel(user=True, kernel_name=KERNEL_NAME, display_name="Stockidence")
 

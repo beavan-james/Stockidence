@@ -17,6 +17,7 @@ network — so it runs instantly against cached rows (backtest.py --save).
 
 from __future__ import annotations
 
+import math
 import random
 import statistics
 from dataclasses import dataclass
@@ -87,8 +88,7 @@ def _pairs(rows: list[BacktestRow], key: str, horizon: int,
         if horizon not in r.fwd_returns:
             continue
         x = (r.volatility if key == "volatility"
-             else r.category_scores[key] if key in r.category_scores
-             else r.confidence)
+             else r.category_scores.get(key, r.confidence))
         y = r.fwd_vols[horizon] if realized else r.fwd_returns[horizon]
         xs.append(float(x))
         ys.append(float(y))
@@ -98,8 +98,8 @@ def _pairs(rows: list[BacktestRow], key: str, horizon: int,
 def quintiles(rows: list[BacktestRow], horizon: int = 60,
               bins: int = 5) -> Quintiles:
     """Mean forward return per confidence bin — is higher actually better?"""
-    pts = sorted(((r.confidence, r.fwd_returns[horizon])
-                  for r in rows if horizon in r.fwd_returns))
+    pts = sorted((r.confidence, r.fwd_returns[horizon])
+                  for r in rows if horizon in r.fwd_returns)
     n = len(pts)
     per, means, counts = n // bins, [], []
     for b in range(bins):
@@ -130,7 +130,7 @@ def date_bootstrap_ci(rows: list[BacktestRow], horizon: int = 60,
         sample = [r for d in rng.choices(dates, k=len(dates))
                   for r in by_date[d]]
         rho = spearman(*_pairs(sample, key, horizon))
-        if rho == rho:  # skip degenerate resamples (constant score)
+        if not math.isnan(rho):  # skip degenerate resamples (constant score)
             stats.append(rho)
     if not stats:
         return float("nan"), float("nan")
@@ -191,14 +191,15 @@ def diagnostics(rows: list[BacktestRow], horizon: int = 60,
 def render_diag(d: Diagnostics) -> str:
     lines = [
         f"diagnostics @ {d.horizon}d (n={d.n})",
-        f"  rho(confidence, fwd ret)   = {d.rho_confidence:+.3f} "
-        f"[{d.ci_low:+.3f}, {d.ci_high:+.3f}] "
-        f"{'excludes 0' if d.excludes_zero else 'INCLUDES 0'}",
+        (
+            f"  rho(confidence, fwd ret)   = {d.rho_confidence:+.3f} "
+            f"[{d.ci_low:+.3f}, {d.ci_high:+.3f}] "
+            f"{'excludes 0' if d.excludes_zero else 'INCLUDES 0'}"
+        ),
         f"  quintile means ({d.quintiles.counts}): "
         + " ".join(f"{m:+.2%}" for m in d.quintiles.means)
         + ("  MONOTONIC" if d.quintiles.monotonic else "  NOT monotonic"),
-        f"  split-half rho             = {d.split_first:+.3f} / "
-        f"{d.split_second:+.3f}",
+        f"  split-half rho             = {d.split_first:+.3f} / {d.split_second:+.3f}",
         f"  rho(volatility, fwd vol)   = {d.rho_volatility:+.3f}",
         "  category rho vs fwd ret:",
     ]

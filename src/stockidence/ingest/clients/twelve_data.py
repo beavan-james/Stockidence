@@ -10,8 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import APIError, BaseClient, InvalidResponseError, RateLimitError, build_query
-
+from .base import APIError, BaseClient, RateLimitError, build_query
 
 _SYMBOL_MAP: dict[str, str] = {
     "BRK-B": "BRK.B",

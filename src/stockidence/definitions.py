@@ -37,7 +37,7 @@ model ops of the digest jobs are the exception: they never open the
 warehouse, so they don't hold the slot while the model writes.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from dagster import (
@@ -105,7 +105,7 @@ WAREHOUSE_POOL = "warehouse"
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @resource
@@ -154,8 +154,8 @@ def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...
     @job(name=f"{cadence.value}_ingest")
     def cadence_job():
         ingest_cadence()
-        for op in derived_ops:
-            op()
+        for derived_op in derived_ops:
+            derived_op()
 
     return cadence_job
 
@@ -171,14 +171,14 @@ daily_job = _make_cadence_job(
 
 @schedule(job=monthly_job, cron_schedule="0 2 1 * *",
           default_status=DefaultScheduleStatus.RUNNING)
-def monthly_schedule() -> dict:  # noqa: ANN401
+def monthly_schedule() -> dict:
     """01:00 UTC on the 1st of each month: commodities, macro, symbols."""
     return {}
 
 
 @schedule(job=weekdays_job, cron_schedule="30 21 * * 1-5",
           default_status=DefaultScheduleStatus.RUNNING)
-def weekdays_schedule() -> dict:  # noqa: ANN401
+def weekdays_schedule() -> dict:
     """21:30 UTC on weekdays, after the US close (20:00 UTC in DST, 21:00 UTC
     in winter): the IPO and earnings calendars."""
     return {}
@@ -187,7 +187,7 @@ def weekdays_schedule() -> dict:  # noqa: ANN401
 @schedule(job=overnight_job, cron_schedule="30 0 * * 2-6",
           execution_timezone="America/New_York",
           default_status=DefaultScheduleStatus.RUNNING)
-def overnight_schedule() -> dict:  # noqa: ANN401
+def overnight_schedule() -> dict:
     """00:30 New York time, Tuesday to Saturday: the movers of the session
     that closed the afternoon before. Alpha Vantage's free tier publishes a
     session's list late in the evening; at 17:30 it still served the session
@@ -198,7 +198,7 @@ def overnight_schedule() -> dict:  # noqa: ANN401
 
 @schedule(job=daily_job, cron_schedule="0 1 * * *",
           default_status=DefaultScheduleStatus.RUNNING)
-def daily_schedule() -> dict:  # noqa: ANN401
+def daily_schedule() -> dict:
     """Daily market news (Finnhub) plus the FRED market indexes."""
     return {}
 
@@ -222,14 +222,14 @@ def news_job():
 
 @schedule(job=news_job, cron_schedule="0 11 * * *",
           default_status=DefaultScheduleStatus.RUNNING)
-def news_morning_schedule() -> dict:  # noqa: ANN401
+def news_morning_schedule() -> dict:
     """11:00 UTC (~7am ET): morning news pull."""
     return {}
 
 
 @schedule(job=news_job, cron_schedule="0 23 * * *",
           default_status=DefaultScheduleStatus.RUNNING)
-def news_evening_schedule() -> dict:  # noqa: ANN401
+def news_evening_schedule() -> dict:
     """23:00 UTC (~7pm ET): evening news pull."""
     return {}
 
@@ -735,7 +735,7 @@ def model_retrain_job() -> None:
     cron_schedule="0 3 1 1,4,7,10 *",
     default_status=DefaultScheduleStatus.RUNNING,
 )
-def quarterly_schedule() -> dict:  # noqa: ANN401
+def quarterly_schedule() -> dict:
     """03:00 UTC on the first day of each quarter (Jan/Apr/Jul/Oct)."""
     return {}
 
@@ -837,7 +837,7 @@ def weekly_rank_job() -> None:
     execution_timezone="America/New_York",
     default_status=DefaultScheduleStatus.RUNNING,
 )
-def weekly_schedule() -> dict:  # noqa: ANN401
+def weekly_schedule() -> dict:
     """17:30 ET every Friday, 90 minutes after the close (New York time, so
     DST never shifts it): the list is ready well before Monday's open."""
     return {}

@@ -4,7 +4,7 @@ staging, the mart build and the read API, on a temporary warehouse."""
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -56,10 +56,10 @@ def test_window_follows_standard_time():
 
 
 @pytest.mark.parametrize("now, expected", [
-    (datetime(2026, 8, 25, 10, 59, tzinfo=timezone.utc), date(2026, 8, 24)),  # 06:59 ET Tue
-    (datetime(2026, 8, 25, 11, 0, tzinfo=timezone.utc), date(2026, 8, 25)),   # 07:00 ET Tue
-    (datetime(2026, 8, 29, 15, 0, tzinfo=timezone.utc), date(2026, 8, 28)),   # Saturday
-    (datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc), date(2026, 8, 28)),   # Mon before 07:00
+    (datetime(2026, 8, 25, 10, 59, tzinfo=UTC), date(2026, 8, 24)),  # 06:59 ET Tue
+    (datetime(2026, 8, 25, 11, 0, tzinfo=UTC), date(2026, 8, 25)),   # 07:00 ET Tue
+    (datetime(2026, 8, 29, 15, 0, tzinfo=UTC), date(2026, 8, 28)),   # Saturday
+    (datetime(2026, 8, 31, 10, 0, tzinfo=UTC), date(2026, 8, 28)),   # Mon before 07:00
 ])
 def test_latest_digest_date(now, expected):
     assert latest_digest_date(now) == expected
@@ -71,10 +71,10 @@ def test_weekly_window_runs_saturday_to_saturday_07_new_york():
 
 
 @pytest.mark.parametrize("now, expected", [
-    (datetime(2026, 11, 21, 11, 59, tzinfo=timezone.utc), date(2026, 11, 13)),  # Sat 06:59 EST
-    (datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc), date(2026, 11, 20)),   # Sat 07:00 EST
-    (datetime(2026, 11, 22, 15, 0, tzinfo=timezone.utc), date(2026, 11, 20)),   # Sunday
-    (datetime(2026, 11, 20, 23, 0, tzinfo=timezone.utc), date(2026, 11, 13)),   # Friday evening
+    (datetime(2026, 11, 21, 11, 59, tzinfo=UTC), date(2026, 11, 13)),  # Sat 06:59 EST
+    (datetime(2026, 11, 21, 12, 0, tzinfo=UTC), date(2026, 11, 20)),   # Sat 07:00 EST
+    (datetime(2026, 11, 22, 15, 0, tzinfo=UTC), date(2026, 11, 20)),   # Sunday
+    (datetime(2026, 11, 20, 23, 0, tzinfo=UTC), date(2026, 11, 13)),   # Friday evening
 ])
 def test_latest_weekly_date(now, expected):
     assert latest_weekly_date(now) == expected

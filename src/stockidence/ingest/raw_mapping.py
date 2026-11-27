@@ -14,8 +14,9 @@ Design rules:
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 from ..storage import RAW_SCHEMA
 
@@ -239,7 +240,7 @@ def normalize_earnings_call_transcript(payload: dict[str, Any], symbol: str, now
         if len(dims) >= 3:
             ticker, quarter, year = dims[0], int(dims[1]), int(dims[2])
         else:
-            raise ValueError(f"earnings_call_transcript: missing quarter/year in payload or dimension")
+            raise ValueError("earnings_call_transcript: missing quarter/year in payload or dimension")
     rows = [
         {
             "ticker": ticker,
@@ -398,7 +399,7 @@ def _news_rows(items: list[dict[str, Any]], symbol: str | None = None) -> dict[s
             "payload": {
                 **item,
                 "title": item.get("headline"),
-                "time_published": datetime.fromtimestamp(published, timezone.utc).strftime("%Y%m%dT%H%M%S"),
+                "time_published": datetime.fromtimestamp(published, UTC).strftime("%Y%m%dT%H%M%S"),
                 "ticker_sentiment": [{"ticker": t} for t in tickers],
             },
         })

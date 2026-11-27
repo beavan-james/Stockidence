@@ -6,7 +6,7 @@ Validity of component math is spot-checked against hand-computable values."""
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -15,7 +15,7 @@ from stockidence.mart.scoring import score_ticker
 from stockidence.staging.staging import rebuild_financials_reported
 from stockidence.storage import Warehouse
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 NOW_MS = int(NOW.timestamp() * 1000)
 
 
@@ -246,7 +246,6 @@ def test_target_uses_trailing_eps_growth_when_no_estimate(rich_warehouse):
     With the earnings-calendar estimate removed, _eps_growth returns None —
     the old code silently scored target = fair_value x 1.0 instead of using
     the same trailing-EPS annualized growth that fair value resolved."""
-    import duckdb
 
     con = rich_warehouse.connect()
     con.execute("DELETE FROM raw.raw_earnings_calendar WHERE symbol = 'UND1'")

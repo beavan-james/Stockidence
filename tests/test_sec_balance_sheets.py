@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -14,7 +14,7 @@ from stockidence.ingest.staleness import StalenessGate
 from stockidence.staging.staging import balance_sheet_sources, rebuild_financials_reported
 from stockidence.storage import Warehouse
 
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 BS = [{"concept": "us-gaap_Assets", "unit": "usd", "label": "Total assets", "value": 100.0}]
 IC = [{"concept": "us-gaap_NetIncomeLoss", "unit": "usd", "label": "Net income", "value": 5.0}]
@@ -142,14 +142,14 @@ def test_sec_normalizer_keeps_each_filings_own_balance_sheet_date():
 # --- gap check ---
 
 def test_no_sec_call_when_finnhub_filings_are_complete(setup):
-    wh, eng, _, sec = setup
+    _wh, eng, _, sec = setup
     eng.ingest_on_demand("financials_reported", "DKNG", now=NOW, force=True)
     result = eng.ingest_on_demand("sec_balance_sheets", "DKNG", now=NOW)
     assert not result.fetched and sec.calls == []
 
 
 def test_sec_fills_a_gap_once(setup):
-    wh, eng, fh, sec = setup
+    _wh, eng, fh, sec = setup
     fh.response = {"symbol": "DKNG", "data": [Q1, Q2_EMPTY]}
     eng.ingest_on_demand("financials_reported", "DKNG", now=NOW, force=True)
 
@@ -161,7 +161,7 @@ def test_sec_fills_a_gap_once(setup):
 
 
 def test_gap_sec_doesnt_have_waits_for_the_next_finnhub_delivery(setup):
-    wh, eng, fh, sec = setup
+    wh, eng, fh, _sec = setup
     missing = filing("0001883685-26-000030", 2026, 3, "2026-10-30", "2026-09-30", [])
     fh.response = {"symbol": "DKNG", "data": [Q1, Q2_EMPTY, missing]}
     eng.ingest_on_demand("financials_reported", "DKNG", now=NOW, force=True)

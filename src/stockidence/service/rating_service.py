@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from . import dagster_client, demo, warehouse
 
@@ -22,8 +22,8 @@ def _stale_snapshot(rating) -> bool:
     if computed_at is None:
         return True
     if computed_at.tzinfo is None:
-        computed_at = computed_at.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - computed_at >= REFRESH_AFTER
+        computed_at = computed_at.replace(tzinfo=UTC)
+    return datetime.now(UTC) - computed_at >= REFRESH_AFTER
 
 
 def get_rating(ticker: str) -> dict:

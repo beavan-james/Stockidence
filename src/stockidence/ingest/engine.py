@@ -18,9 +18,10 @@ holds no per-endpoint response logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ..storage import Warehouse
 from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
 from .clients.fred import FredClient
@@ -28,8 +29,7 @@ from .clients.sec_edgar import SecEdgarClient
 from .clients.twelve_data import TwelveDataClient
 from .endpoints import EndpointSpec, Provider, get_endpoint
 from .raw_mapping import MERGERS, normalize_for
-from .staleness import FetchDecision, StalenessGate
-from ..storage import Warehouse
+from .staleness import StalenessGate
 
 _PROVIDER_CLIENTS = {
     Provider.FINNHUB: FinnhubClient,
@@ -67,9 +67,9 @@ class IngestResult:
 
 def _utc(now: datetime | None) -> datetime:
     if now is None:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
     if now.tzinfo is None:
-        return now.replace(tzinfo=timezone.utc)
+        return now.replace(tzinfo=UTC)
     return now
 
 

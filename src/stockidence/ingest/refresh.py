@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from .endpoints import on_demand_endpoints
-from .engine import IngestEngine
 from ..mart.mart import rebuild_all_for_ticker
 from ..mart.scoring import score_ticker
 from ..storage import Warehouse
+from .endpoints import on_demand_endpoints
+from .engine import IngestEngine
 
 # ticker_news is skipped: the ML feature set doesn't use news, and the
 # scheduled market_news pulls keep the news page fresh. The hot-path quote
@@ -45,7 +45,7 @@ RETRY_BACKOFF_SECONDS = 5.0
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def refresh_tickers(
@@ -110,7 +110,7 @@ def refresh_tickers(
                         ep.name, ticker, now=now, force=ep.name in force_endpoints)
                     last_error = None
                     break
-                except Exception as exc:  # noqa: BLE001 — record and retry
+                except Exception as exc:  # record and retry
                     last_error = str(exc)
                     emit(f"  {ep.name:30s} attempt {attempt}/{max_attempts} failed: {last_error[:100]}")
                     if attempt < max_attempts:

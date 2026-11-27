@@ -22,7 +22,7 @@ from __future__ import annotations
 import argparse
 import statistics
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from .mart.scoring import score_ticker
@@ -106,7 +106,7 @@ def run_backtest(
                 result = score_ticker(warehouse, ticker, as_of=as_of,
                                       now=datetime(as_of.year, as_of.month,
                                                    as_of.day,
-                                                   tzinfo=timezone.utc),
+                                                   tzinfo=UTC),
                                       persist=False)
                 fwd = {}
                 fvol = {}

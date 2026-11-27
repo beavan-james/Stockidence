@@ -23,8 +23,6 @@ Split of labor:
 
 from __future__ import annotations
 
-from typing import Any
-
 from ..staging.staging import rebuild_financials_reported, rebuild_prices_daily
 from ..storage import Warehouse
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from stockidence.failure_sensor import record_failure
 from stockidence.storage import Warehouse
@@ -30,7 +30,7 @@ def test_init_schema_creates_pipeline_failures(tmp_path):
 
 def test_record_failure_inserts_and_dedups_on_run_id(tmp_path):
     wh = _make_wh(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     record_failure(wh, "run-1", "daily_ingest", now, "boom")
     # re-fire for the same run (e.g. sensor re-evaluation) must not duplicate
@@ -44,7 +44,7 @@ def test_record_failure_inserts_and_dedups_on_run_id(tmp_path):
 
 def test_record_failure_prunes_past_retention(tmp_path):
     wh = _make_wh(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     record_failure(wh, "old", "daily_ingest", now - timedelta(days=31))
     record_failure(wh, "fresh", "weekdays_ingest", now - timedelta(days=2))

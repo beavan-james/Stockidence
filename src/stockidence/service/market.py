@@ -8,7 +8,7 @@ has nothing, so the UI never hard-fails during build-out. Every getter is
 self-contained: one bad section degrades to demo, never to a page error.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .warehouse import _resilient
 
@@ -85,7 +85,7 @@ def get_quote(ticker: str) -> dict | None:
     ts = None
     if t:
         try:
-            ts = datetime.fromtimestamp(int(t), tz=timezone.utc).isoformat()
+            ts = datetime.fromtimestamp(int(t), tz=UTC).isoformat()
         except (ValueError, OSError):
             ts = None
     if hasattr(fetched_at, "isoformat"):
@@ -193,7 +193,7 @@ def get_technicals(ticker: str) -> dict | None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _format_news_time(raw: str) -> str:

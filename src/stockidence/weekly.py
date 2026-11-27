@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 from typing import TYPE_CHECKING
 
 from .config import repo_root
@@ -92,7 +93,7 @@ def snapshot_date(label) -> str:
     return str((pd.Timestamp(label) + pd.Timedelta(days=4)).date())
 
 
-def week_label(as_of) -> "pd.Timestamp":
+def week_label(as_of) -> pd.Timestamp:
     """Inverse of snapshot_date: Friday as_of -> the Monday row label."""
     import pandas as pd
 
@@ -156,7 +157,7 @@ def rebuild_weekly_dataset(now=None) -> dict:
     labeled.to_parquet(TRAIN_PARQUET, index=False)
     score.to_parquet(SCORE_PARQUET, index=False)
     return {
-        "rows": int(len(labeled)),
+        "rows": len(labeled),
         "tickers": int(labeled["ticker"].nunique()),
         "first_week": snapshot_date(labeled["date"].min()),
         "last_week": snapshot_date(labeled["date"].max()),
@@ -254,7 +255,7 @@ def validation_summary(weeks: pd.DataFrame) -> dict:
     excess = weeks["top10"] - weeks["universe"]
     vs_spx = (weeks["top10"] - weeks["spx"]).dropna()
     return {
-        "weeks": int(len(weeks)),
+        "weeks": len(weeks),
         "test_rows": int(weeks["n"].sum()),
         "rank_ic": float(weeks["ic"].mean()),
         "top10_excess": float(excess.mean()),
@@ -300,7 +301,10 @@ def feature_importance(bst: xgb.Booster, cohort: pd.DataFrame) -> dict[str, floa
 
 def _clean(v):
     """NaN -> None for DuckDB parameters."""
-    return None if v is None or v != v else float(v)
+    if v is None:
+        return None
+    f = float(v)
+    return None if math.isnan(f) else f
 
 
 def export_weekly(
@@ -403,7 +407,7 @@ def train_and_rank() -> dict:
     importance = feature_importance(bst, cohort)
     as_of = snapshot_date(cohort["date"].iloc[0])
     validation |= {
-        "train_rows": int(len(md)),
+        "train_rows": len(md),
         "train_tickers": int(md["ticker"].nunique()),
         "train_first": snapshot_date(md["date"].min()),
         "train_last": snapshot_date(md["date"].max()),

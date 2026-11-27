@@ -20,20 +20,20 @@ endpoint metadata stays declarative and the policies stay unit-testable.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from typing import Callable
+from datetime import UTC, date, datetime, timedelta
 
+from ..storage import RAW_SCHEMA, Warehouse, Watermark
 from .endpoints import (
+    REGISTRY,
     Cadence,
     EndpointSpec,
     Provider,
-    REGISTRY,
     Trigger,
     get_endpoint,
 )
 from .raw_mapping import SEC_LOOKBACK_DAYS
-from ..storage import RAW_SCHEMA, Warehouse, Watermark
 
 # Filing-report grace: how long after a fiscal period ends we expect the
 # report to exist before we consider our copy behind. 10-Qs are due 40-45
@@ -209,9 +209,9 @@ class StalenessGate:
     def _now_utc(self, now: datetime | None) -> datetime:
         if now is not None:
             if now.tzinfo is None:
-                return now.replace(tzinfo=timezone.utc)
+                return now.replace(tzinfo=UTC)
             return now
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     def _should_fetch(
         self,
@@ -258,7 +258,7 @@ class StalenessGate:
             return None
         fetched_at = row[1]
         if fetched_at is None or fetched_at.tzinfo is None:
-            fetched_at = (fetched_at or datetime.now(timezone.utc)).replace(tzinfo=timezone.utc)
+            fetched_at = (fetched_at or datetime.now(UTC)).replace(tzinfo=UTC)
         return Watermark(spec.name, dimension_key, fetched_at)
 
     def should_fetch(self, endpoint_name: str, dimension_key: str, now: datetime | None = None) -> FetchDecision:

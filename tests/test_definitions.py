@@ -128,9 +128,15 @@ def test_full_ticker_run_executes_green_for_partition(tmp_path):
     """Sensor RunRequests launch the full per-ticker asset graph. Materialize
     it end-to-end against a seeded warehouse (fake engine = no network) and
     require success plus a persisted confidence rating."""
-    from dagster import ResourceDefinition, materialize
+    from dagster import materialize
+    from test_scoring import (
+        _seed_bars,
+        _seed_fundamentals,
+        _seed_profile,
+        _seed_quotes,
+        _seed_sentiment,
+    )
 
-    from stockidence.ingest.engine import IngestEngine
     from stockidence.definitions import (
         m_advanced_analytics,
         m_prices_monthly,
@@ -141,7 +147,6 @@ def test_full_ticker_run_executes_green_for_partition(tmp_path):
         ticker_score,
     )
     from stockidence.storage import Warehouse
-    from test_scoring import _seed_bars, _seed_fundamentals, _seed_profile, _seed_quotes, _seed_sentiment
 
     wh = Warehouse(tmp_path / "test.duckdb")
     wh.init_schema()

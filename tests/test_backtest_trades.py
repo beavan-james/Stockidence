@@ -4,7 +4,7 @@ computed expected fill/exit so the pessimism assumptions stay pinned."""
 from datetime import date, timedelta
 
 from stockidence.backtest import BacktestRow
-from stockidence.backtest_trades import Trade, _simulate_one
+from stockidence.backtest_trades import _simulate_one
 
 D = date(2026, 1, 1)
 
@@ -107,8 +107,8 @@ def test_unfilled_limit_recorded():
 
 
 def test_apply_plan_params_rebuilds_geometry():
-    from stockidence.mart.scoring import BUY_PLAN
     from stockidence.backtest_trades import PlanParams, apply_plan_params
+    from stockidence.mart.scoring import BUY_PLAN
     row = _signal(1)
     row.plan.update({"signal_price": 100.0, "atr_14": 4.0,
                      "fair_value": 130.0})

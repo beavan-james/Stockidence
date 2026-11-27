@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .models import (
     Advice,
@@ -154,7 +154,7 @@ def generate_rating(ticker: str) -> Rating:
     return Rating(
         ticker=ticker,
         company_name=company,
-        as_of=datetime.now(timezone.utc),
+        as_of=datetime.now(UTC),
         confidence_score=confidence,
         advice=advice,
         volatility_score=volatility,

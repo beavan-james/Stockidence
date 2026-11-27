@@ -53,7 +53,7 @@ class Settings:
     sec_user_agent: str = ""
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         _load_env()
         return cls(
             finnhub_api_key=os.environ.get("FINNHUB_API_KEY", "")

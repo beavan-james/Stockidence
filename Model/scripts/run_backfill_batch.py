@@ -18,7 +18,6 @@ from stockidence.ingest.engine import _PRICE_BACKFILL_DAYS, IngestEngine
 from stockidence.ingest.refresh import refresh_tickers
 from stockidence.storage import Warehouse
 
-
 BATCH_TICKERS: list[str] = [
 
 ]
