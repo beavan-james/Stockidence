@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import statistics
 from dataclasses import dataclass
+from typing import Any, TypeGuard
 
 from .backtest import BacktestRow, load_rows
 from .mart.scoring import BUY_PLAN
@@ -56,7 +57,7 @@ def apply_plan_params(rows: list[BacktestRow], p: PlanParams) -> list[BacktestRo
     out: list[BacktestRow] = []
     for r in rows:
         src = r.plan
-        if not _plan_ok(r):
+        if not _plan_ok(src):
             out.append(r)
             continue
         price, fv = src["signal_price"], src.get("fair_value")
@@ -129,10 +130,10 @@ def _simulate_one(
         if sb < i:  # signal already passed while we were positioned
             s += 1
             continue
-        if sig.rating not in entry_ratings or not _plan_ok(sig):
+        plan = sig.plan
+        if sig.rating not in entry_ratings or not _plan_ok(plan):
             s += 1
             continue
-        plan = sig.plan
         limit, stop = plan["buy_price"], plan["stop_loss"]
         target = plan.get("target_price")
 
@@ -196,6 +197,10 @@ def _simulate_one(
                 if j == len(bars) - 1:
                     exit_px, exit_day, reason = c, j, "eod"
                     break
+        # entries fill no later than the second-last bar, so the loop above
+        # always reaches an exit
+        if exit_day is None or reason is None:
+            raise RuntimeError(f"{ticker}: trade from {sig.as_of} never exited")
 
         gross = exit_px / entry - 1.0
         net = gross - cost_bps / 10_000.0
@@ -218,9 +223,8 @@ def _simulate_one(
     return trades
 
 
-def _plan_ok(row: BacktestRow) -> bool:
-    p = row.plan
-    return bool(p and p.get("buy_price") and p.get("stop_loss"))
+def _plan_ok(plan: dict[str, Any] | None) -> TypeGuard[dict[str, Any]]:
+    return bool(plan and plan.get("buy_price") and plan.get("stop_loss"))
 
 
 def simulate(
@@ -273,7 +277,7 @@ def render_trades(trades: list[Trade]) -> str:
     if not filled:
         lines.append("no filled trades")
         return "\n".join(lines)
-    rets = [t.net_return for t in filled]
+    rets = [t.net_return for t in filled if t.net_return is not None]
     wins = sum(r > 0 for r in rets)
     reasons: dict[str, int] = {}
     for t in filled:
@@ -281,6 +285,7 @@ def render_trades(trades: list[Trade]) -> str:
     compounded = 1.0
     for r in rets:
         compounded *= 1 + r
+    days_held = [t.days_held for t in filled if t.days_held is not None]
     lines.append(
         f"trades={len(filled)} win_rate={wins / len(filled):.0%} "
         f"avg={statistics.fmean(rets):+.2%} median={statistics.median(rets):+.2%} "
@@ -288,12 +293,12 @@ def render_trades(trades: list[Trade]) -> str:
     )
     lines.append(
         f"compounded x{compounded:.3f} "
-        f"avg_days_held={statistics.fmean(t.days_held for t in filled):.0f} "
+        f"avg_days_held={statistics.fmean(days_held):.0f} "
         f"exits={reasons} cost_bps_round_trip_deducted"
     )
     lines.append("per-ticker:")
     for tkr in sorted({t.ticker for t in filled}):
-        rs = [t.net_return for t in filled if t.ticker == tkr]
+        rs = [t.net_return for t in filled if t.ticker == tkr and t.net_return is not None]
         lines.append(
             f"  {tkr:<6} n={len(rs):>2} avg={statistics.fmean(rs):+.2%} "
             f"wins={sum(r > 0 for r in rs)}/{len(rs)}"

@@ -148,18 +148,19 @@ class ArticleFetcher:
         key = f"{scheme}://{host}"
         if key in self._robots:
             return self._robots[key]
-        parser: urllib.robotparser.RobotFileParser | None = urllib.robotparser.RobotFileParser()
+        rules = urllib.robotparser.RobotFileParser()
+        parser: urllib.robotparser.RobotFileParser | None = rules
         self._wait(host)
         try:
             resp = self.client.get(f"{key}/robots.txt")
             if resp.status_code in (401, 403):
-                parser.disallow_all = True
+                rules.disallow_all = True  # type: ignore[attr-defined]  # not in typeshed
             elif 400 <= resp.status_code < 500:
-                parser.allow_all = True
+                rules.allow_all = True  # type: ignore[attr-defined]  # not in typeshed
             elif resp.status_code != 200:
                 parser = None
             else:
-                parser.parse(resp.text.splitlines())
+                rules.parse(resp.text.splitlines())
         except httpx.HTTPError:
             parser = None
         finally:

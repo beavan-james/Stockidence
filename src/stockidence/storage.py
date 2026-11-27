@@ -145,6 +145,15 @@ class Watermark:
     high_watermark: str | None = None
 
 
+def one_row(cursor: duckdb.DuckDBPyConnection) -> tuple[Any, ...]:
+    """The row of a query that always returns exactly one: an aggregate with
+    no GROUP BY (COUNT, MAX) or an INSERT's row count."""
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("expected one row, the query returned none")
+    return row
+
+
 def make_dimension_key(values: dict[str, Any], order: tuple[str, ...]) -> str:
     """Join watermark fields into a stable string key, e.g. ('AAPL',)."""
     return "|".join(str(values[k]) for k in order)
@@ -671,7 +680,7 @@ class Warehouse:
                 )
                 """
             )
-            if con.execute("SELECT COUNT(*) FROM mart.model_rankings").fetchone()[0] == 0:
+            if one_row(con.execute("SELECT COUNT(*) FROM mart.model_rankings"))[0] == 0:
                 snapshot = _REPO_ROOT / "Model" / "artifacts" / "latest_rankings.json"
                 if snapshot.exists():
                     payload = json.loads(snapshot.read_text())
@@ -1004,14 +1013,16 @@ class Warehouse:
                 else:
                     select = f'SELECT ?, ticker, MAX(fetched_at), NULL FROM raw."{artifact}" GROUP BY ticker'
                     update = "fetched_at = excluded.fetched_at"
-                total += con.execute(
-                    f"""
+                total += one_row(
+                    con.execute(
+                        f"""
                     INSERT INTO control.watermarks (endpoint, dimension_key, fetched_at, high_watermark)
                     {select}
                     ON CONFLICT (endpoint, dimension_key) DO UPDATE SET {update}
                     """,
-                    [f"raw.{artifact}"],
-                ).fetchone()[0]
+                        [f"raw.{artifact}"],
+                    )
+                )[0]
             # The old high watermarks were other tickers' latest bars, and an
             # incremental fetch starts at the high watermark, so earlier
             # refreshes could skip weeks of a ticker's history. Drop the price

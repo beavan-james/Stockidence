@@ -21,6 +21,7 @@ import math
 import random
 import statistics
 from dataclasses import dataclass
+from datetime import date
 
 from .backtest import BacktestRow
 
@@ -120,7 +121,7 @@ def date_bootstrap_ci(
 ) -> tuple[float, float]:
     """Percentile CI for a score's Spearman vs forward return, resampling
     whole replay dates so cross-ticker overlap doesn't fake significance."""
-    by_date: dict[object, list[BacktestRow]] = {}
+    by_date: dict[date, list[BacktestRow]] = {}
     for r in rows:
         if horizon in r.fwd_returns:
             by_date.setdefault(r.as_of, []).append(r)

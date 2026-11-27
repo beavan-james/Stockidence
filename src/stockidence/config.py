@@ -46,7 +46,7 @@ class Settings:
     twelve_data_api_key: str
     alpha_vantage_api_key: str
     fred_api_key: str
-    min_interval_seconds: dict[str, float] = None
+    min_interval_seconds: dict[str, float]
     alpha_vantage_pace_file: str = ""
     dagster_web_url: str = "http://localhost:3000"
     # SEC asks every caller to name itself and give a contact email

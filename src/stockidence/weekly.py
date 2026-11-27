@@ -139,13 +139,13 @@ def rebuild_weekly_dataset(now=None) -> dict:
     """
     import pandas as pd
 
-    from .storage import Warehouse
+    from .storage import Warehouse, one_row
 
     bd = _build_dataset_module()
     full = bd.build_dataset(freq="weekly", keep_unlabeled=True, now=now)
 
     with Warehouse().connect(read_only=True) as con:
-        newest = con.execute("SELECT MAX(date) FROM staging.stg_prices_daily").fetchone()[0]
+        newest = one_row(con.execute("SELECT MAX(date) FROM staging.stg_prices_daily"))[0]
         week = bd.last_closed_week(newest, now)
         closes = dict(
             con.execute(

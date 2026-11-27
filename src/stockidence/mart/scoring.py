@@ -226,7 +226,7 @@ def _num(value: Any) -> float | None:
         return None
 
 
-def _mean(values: Iterable[float]) -> float | None:
+def _mean(values: Iterable[float | None]) -> float | None:
     vals = [v for v in values if v is not None and math.isfinite(v)]
     return statistics.fmean(vals) if vals else None
 
@@ -371,8 +371,8 @@ def _forward_eps(con: Any, ticker: str) -> float | None:
     rows = _fetch_raw(
         con, "raw_earnings_calendar", "symbol = ?", [ticker], "ORDER BY year, quarter"
     )
-    est = [_num(r["payload"].get("epsEstimate")) for r in rows]
-    est = [e for e in est if e is not None and e > 0]
+    estimates = [_num(r["payload"].get("epsEstimate")) for r in rows]
+    est = [e for e in estimates if e is not None and e > 0]
     return est[-1] * 4.0 if est else None
 
 
@@ -508,11 +508,8 @@ def _valuation_components(
 
     # 5. multiple quality vs own history (10%) — P/S percentile + margin lift
     ps_hist = _ps_history(price, basic)
-    ps_pct = (
-        _percentile_of(_current_ps(price, basic), ps_hist)
-        if (ps_hist and _current_ps(price, basic) is not None)
-        else None
-    )
+    current_ps = _current_ps(price, basic)
+    ps_pct = _percentile_of(current_ps, ps_hist) if (ps_hist and current_ps is not None) else None
     margin = _latest_series(basic, "netMargin")
     margin_score = _clamp(25.0 + (margin or 0.0) * 300.0, 0.0, 95.0) if margin is not None else 50.0
     if ps_pct is not None:
@@ -792,8 +789,8 @@ def _news_components(con: Any, ticker: str, anchor: datetime | None = None) -> l
         for r in latest
         if r["payload"].get("content")
     ]
-    if tones:
-        tone = _mean(tones)
+    tone = _mean(tones)
+    if tone is not None:
         components.append(Component("sentiment", "transcript_tone", tone * 100.0, 0.15, "live"))
     else:
         components.append(Component("sentiment", "transcript_tone", 50.0, 0.15, "neutral"))
@@ -834,12 +831,12 @@ def _moat_components(con: Any, ticker: str) -> list[Component]:
     reported = _reported_rows(con, ticker)
 
     # 1. margin quality (35%) — level + stability over last 3 fiscal years
-    margins = [
+    annual_margins = [
         _num(r["payload"].get("v"))
         for r in basic
         if r["payload"].get("freq") == "annual" and r["payload"].get("metric") == "netMargin"
     ]
-    margins = [m for m in margins if m is not None]
+    margins = [m for m in annual_margins if m is not None]
     if len(margins) >= 2:
         mean_m = statistics.fmean(margins)
         cv = statistics.pstdev(margins) / abs(mean_m) if mean_m else 1.0
@@ -1097,8 +1094,8 @@ def _fair_value(
     else:
         # free-tier forward estimates aren't available: fall back to trailing
         # EPS growth annualized from /stock/earnings actuals (which we hold)
-        actuals = [_num(r["payload"].get("actual")) for r in surprise_rows]
-        actuals = [a for a in actuals if a is not None and a > 0]
+        reported_eps = [_num(r["payload"].get("actual")) for r in surprise_rows]
+        actuals = [a for a in reported_eps if a is not None and a > 0]
         if len(actuals) >= 4:
             ann = (actuals[-1] / actuals[0]) ** (4.0 / (len(actuals) - 1)) - 1.0
             g_fwd = _clamp(ann, *FAIR_VALUE["growth_clamp"])
