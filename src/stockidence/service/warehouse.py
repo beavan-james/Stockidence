@@ -345,6 +345,32 @@ def _check_ticker(ticker: str) -> bool:
         return row is not None
 
 
+def tickers_outside_coverage(tickers: list[str]) -> list[str] | None:
+    """The tickers ticker_exists would refuse, checked in one query. None
+    when the symbol list can't be read, so callers skip the check."""
+    try:
+        return _missing_tickers(tickers)
+    except Exception:
+        return None
+
+
+@_resilient
+def _missing_tickers(tickers: list[str]) -> list[str]:
+    """Run the batched coverage query; raises on failure (retried by decorator)."""
+    with read_connect() as con:
+        found = {
+            row[0]
+            for row in con.execute(
+                """
+                SELECT DISTINCT symbol FROM raw.raw_stock_symbols
+                WHERE list_contains(?, symbol) AND mic IN ('XNYS', 'XNAS', 'ARCX', 'XASE')
+                """,
+                [[t.upper() for t in tickers]],
+            ).fetchall()
+        }
+    return [t for t in tickers if t.upper() not in found]
+
+
 def get_recent_failures(days: int = 7, limit: int = 5) -> list[dict]:
     """Recent failed pipeline runs from control.pipeline_failures.
 

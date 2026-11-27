@@ -71,7 +71,7 @@ flowchart TD
         QUART["quarterly_model_refresh<br/>universe refresh → dataset rebuild → retrain"]
         WEEK["weekly_model_refresh · Fri 17:30 ET<br/>universe refresh → weekly dataset → refit + rank"]
         DIGEST["daily_digest · weekdays 07:30 ET<br/>weekly_digest · Sat 07:30 ET<br/>news pull → 8-Ks + agency releases → stage<br/>→ group + rank stories → article pages → text → cards → summaries"]
-        PUSH["refresh_tickers job<br/>frontend-triggered via POST /api/pipeline/refresh"]
+        PUSH["refresh_tickers job<br/>launched by a ticker lookup, or the admin route for bulk runs"]
         RUN["Per-ticker run<br/>ticker_data → staging → mart → score"]
         GATE{{"Staleness gate<br/>watermarks + per-endpoint TTL"}}
         TI["Derivation assets<br/>staging clean → mart aggregates"]
@@ -103,7 +103,7 @@ flowchart TD
     DIGEST -->|"top stories"| M_NEWS
     DIGEST <-->|"cards and prose, one call at a time"| LLM
     DIGEST -->|"checked cards and summaries"| M_SUM
-    UI -->|"POST /api/pipeline/refresh<br/>when no/fresh snapshot"| PUSH
+    UI -->|"GET /api/rating/{ticker}<br/>when no/stale snapshot"| PUSH
     PUSH -->|"ingest + derived + score"| RUN
     RUN <--> GATE
     GATE -->|"stale → fetch"| AV
@@ -147,10 +147,14 @@ flowchart TD
 >   snapshot is still served (source="refreshing" in the UI) while a refresh
 >   job is launched; a ticker with no snapshot launches a job and reports
 >   source="pending" until the mart snapshot lands.
-> - Push model, no sensors: compute requests launch the `refresh_tickers` job
->   directly over GraphQL (`POST /api/pipeline/refresh`, per-ticker cooldown
->   dedups the UI's poll loop). The legacy `control.ticker_requests` queue
->   tables still exist but nothing consumes them.
+> - Push model, no sensors: a rating lookup launches the `refresh_tickers` job
+>   directly over GraphQL (a per-ticker cooldown dedups the UI's poll loop).
+>   `POST /api/pipeline/refresh` and `POST /api/quotes/refresh` launch runs
+>   for any list of tickers, so they're admin routes: they need an
+>   `X-Admin-Token` header matching `STOCKIDENCE_ADMIN_TOKEN` and stay shut
+>   while it's unset. The site itself sends no POSTs. The legacy
+>   `control.ticker_requests` queue tables still exist but nothing consumes
+>   them.
 > - Scheduled jobs and on-demand runs are independent: schedules warm the
 >   persistent universe (news, calendars, movers, macro); on-demand runs
 >   compute per-ticker ratings. The quarterly `quarterly_model_refresh` job

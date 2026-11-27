@@ -6,7 +6,8 @@ This is the single implementation behind bulk refreshes. Callers:
   so the staleness gate only fetches what's new since last quarter)
 * the weekly Dagster job — whole universe every Friday after the close, with
   daily prices forced past the gate so every ticker lands Friday's close
-* the frontend-triggered ``refresh_tickers`` job — a few tickers, incremental
+* the ``refresh_tickers`` job — launched by a ticker lookup (one ticker) or
+  the admin route (bulk runs such as backfills), incremental
   as well: with no watermark on record the gate pulls full history
   automatically, so no special-casing is needed for new tickers
 * ``Model/scripts/run_backfill*.py`` — thin CLI wrappers over this module
@@ -67,7 +68,7 @@ def refresh_tickers(
     1-day price TTL would otherwise keep a ticker someone viewed during
     Friday's session from fetching Friday's close.
     ``score`` also persists a fresh confidence rating per ticker (the
-    frontend-triggered mode, so the rating appears without a second pass).
+    lookup-triggered mode, so the rating appears without a second pass).
     """
     warehouse: Warehouse = engine.warehouse
     endpoints = [ep for ep in on_demand_endpoints() if ep.name not in SKIP_ENDPOINTS]

@@ -51,6 +51,9 @@ class Settings:
     dagster_web_url: str = "http://localhost:3000"
     # SEC asks every caller to name itself and give a contact email
     sec_user_agent: str = ""
+    # X-Admin-Token for the POST routes that launch pipeline runs; empty
+    # keeps them shut (api/auth.py)
+    admin_token: str = ""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -75,6 +78,7 @@ class Settings:
             },
             dagster_web_url=os.environ.get("DAGSTER_WEB_URL", "http://localhost:3000"),
             sec_user_agent=os.environ.get("SEC_USER_AGENT", ""),
+            admin_token=os.environ.get("STOCKIDENCE_ADMIN_TOKEN", ""),
         )
 
 

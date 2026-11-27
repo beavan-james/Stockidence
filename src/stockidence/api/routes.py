@@ -12,7 +12,7 @@ Contracts carried over from the Reflex read path:
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..service import (
@@ -26,6 +26,8 @@ from ..service import (
     warehouse,
     weekly,
 )
+from ..service.rating_service import TICKER_RE, normalize_ticker
+from .auth import require_admin
 
 rating_router = APIRouter(prefix="/api", tags=["rating"])
 market_router = APIRouter(prefix="/api", tags=["market"])
@@ -36,16 +38,40 @@ class RefreshRequest(BaseModel):
     tickers: list[str]
 
 
-@rating_router.post("/pipeline/refresh", status_code=202)
+# Bounds what one request can spend, token or not: a backfill of 100
+# tickers is 100 of Twelve Data's 800 daily calls.
+MAX_REFRESH_TICKERS = 100
+
+
+def _checked_tickers(raw: list[str], limit: int) -> list[str]:
+    """Normalized and deduplicated, refusing an empty or oversized list and
+    any ticker outside the landed symbol list (the check a lookup gets,
+    skipped when the symbol list can't be read)."""
+    tickers = list(dict.fromkeys(normalize_ticker(t) for t in raw if t.strip()))
+    if not tickers:
+        raise HTTPException(status_code=422, detail="no tickers to refresh")
+    if len(tickers) > limit:
+        raise HTTPException(
+            status_code=422, detail=f"at most {limit} tickers per request, got {len(tickers)}"
+        )
+    unknown = [t for t in tickers if not TICKER_RE.match(t)]
+    unknown += warehouse.tickers_outside_coverage([t for t in tickers if t not in unknown]) or []
+    if unknown:
+        raise HTTPException(
+            status_code=422, detail=f"not in the coverage universe: {', '.join(unknown)}"
+        )
+    return tickers
+
+
+@rating_router.post("/pipeline/refresh", status_code=202, dependencies=[Depends(require_admin)])
 def trigger_refresh(body: RefreshRequest) -> dict:
     """Launch the refresh_tickers Dagster job for the given tickers.
 
-    This is the push path the frontend uses instead of the old sensor queue:
-    returns the Dagster run id, or 503 when the webserver is unreachable.
+    Admin route (X-Admin-Token) for bulk runs such as backfills; the site's
+    own refreshes start from GET /api/rating/{ticker}. Returns the Dagster
+    run id, or 503 when the webserver is unreachable.
     """
-    tickers = [t.strip().upper() for t in body.tickers if t.strip()]
-    if not tickers:
-        raise HTTPException(status_code=422, detail="no tickers to refresh")
+    tickers = _checked_tickers(body.tickers, MAX_REFRESH_TICKERS)
     try:
         run_id = dagster_client.submit_refresh_run(tickers)
     except (ValueError, RuntimeError) as exc:
@@ -77,18 +103,16 @@ def get_quote(ticker: str) -> dict | None:
     return market.get_quote(ticker)
 
 
-@market_router.post("/quotes/refresh", status_code=202)
+@market_router.post("/quotes/refresh", status_code=202, dependencies=[Depends(require_admin)])
 def trigger_quotes_refresh(body: RefreshRequest) -> dict:
     """Launch the quote-only refresh_quotes Dagster job for the given tickers.
 
-    Manual path behind the portfolio Refresh button: one staleness-gated
-    Finnhub call per ticker, no derived rebuilds. Returns the run id —
-    callers poll GET /api/quote/{ticker} until `as_of` moves past the
-    button press. 503 when the Dagster webserver is unreachable.
+    Admin route (X-Admin-Token): one staleness-gated Finnhub call per
+    ticker, no derived rebuilds. Returns the run id; callers poll
+    GET /api/quote/{ticker} until `as_of` moves past the request. 503 when
+    the Dagster webserver is unreachable.
     """
-    tickers = [t.strip().upper() for t in body.tickers if t.strip()]
-    if not tickers:
-        raise HTTPException(status_code=422, detail="no tickers to refresh")
+    tickers = _checked_tickers(body.tickers, dagster_client.MAX_QUOTES_REFRESH)
     try:
         run_id = dagster_client.submit_quotes_run(tickers)
     except (ValueError, RuntimeError) as exc:

@@ -1079,11 +1079,15 @@ from `mart.m_prices_weekly`. Empty list when the ticker has no bars.
 
 ### Pipeline trigger (push model)
 
-`POST /api/pipeline/refresh` with `{"tickers": ["AAPL"]}` — launches the
-`refresh_tickers` Dagster job over GraphQL. Returns `202` with the run id,
-`503` when the Dagster webserver is unreachable. Rating lookups call this
-fire-and-forget (per-ticker cooldown) instead of queueing for a sensor —
-there are no sensors; see `ARCHITECTURE.md`.
+`POST /api/pipeline/refresh` with `{"tickers": ["AAPL"]}` and an
+`X-Admin-Token` header — launches the `refresh_tickers` Dagster job over
+GraphQL, for bulk runs such as backfills. Up to 100 tickers, each in the
+landed symbol list. Returns `202` with the run id; `401` without the right
+token, `403` when `STOCKIDENCE_ADMIN_TOKEN` isn't set on the server, `422`
+for an empty, oversized or unknown list, `503` when the Dagster webserver is
+unreachable. The site doesn't call it: a rating lookup launches the same job
+itself (per-ticker cooldown) instead of queueing for a sensor. There are no
+sensors; see `ARCHITECTURE.md`.
 
 ```json
 {"run_id": "c09c66b8-b0f7-4c68-b8eb-4fe7248ea208", "tickers": ["AAPL"]}
@@ -1097,9 +1101,10 @@ there are no sensors; see `ARCHITECTURE.md`.
 
 `POST /api/quotes/refresh` with `{"tickers": ["AAPL", "MSFT"]}` — launches
 the quote-only `refresh_quotes` job (one staleness-gated Finnhub call per
-ticker, 1-minute TTL, no derived rebuilds). Manual path behind the
-portfolio Refresh button; callers poll `GET /api/quote/{ticker}` until
-`fetched_at` moves past the button press. Capped at 25 tickers per call.
+ticker, 1-minute TTL, no derived rebuilds). Admin route, with the same
+`X-Admin-Token` header and checks as the pipeline trigger; callers poll
+`GET /api/quote/{ticker}` until `fetched_at` moves past the request. Up to
+25 tickers per call.
 
 ### News (filtered paging)
 

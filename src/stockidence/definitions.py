@@ -6,9 +6,10 @@ functions (ingest/staging/mart); Dagster objects are thin wrappers.
 
     dagster dev -f src/stockidence/definitions.py
 
-Triggering model (push, no sensors): the frontend calls
-POST /api/pipeline/refresh, which launches ``refresh_tickers`` directly
-via GraphQL. Nothing polls.
+Triggering model (push, no sensors): a ticker lookup
+(GET /api/rating/{ticker}) launches ``refresh_tickers`` directly via
+GraphQL. Bulk runs such as backfills go through the admin route
+POST /api/pipeline/refresh (X-Admin-Token). Nothing polls.
 
 Exposes:
   - monthly_ingest / weekdays_ingest / overnight_ingest / daily_ingest jobs
@@ -18,10 +19,10 @@ Exposes:
   - weekly_model_refresh job (schedule-bound, Fridays after the close):
     universe refresh -> weekly dataset rebuild -> refit + Stocks of the
     Week export; weekly_rank re-runs the last two steps alone
-  - refresh_tickers job (frontend-triggered): on-demand per-ticker
-    ingest + derived rebuilds + scoring
-  - refresh_quotes job (frontend-triggered): quote-only pull for explicit
-    user refresh (portfolio button) — no rebuilds, no scoring
+  - refresh_tickers job (launched by ticker lookups, or by the admin route
+    for bulk runs): on-demand per-ticker ingest + derived rebuilds + scoring
+  - refresh_quotes job (admin route): quote-only pull, no rebuilds, no
+    scoring
   - daily_digest job (schedule-bound, weekdays 07:30 New York): news pull
     -> news staging -> the day's news digest -> the picked stories' article
     pages -> their text -> story cards -> the daily paragraph (local model)
@@ -573,9 +574,8 @@ def weekly_digest_schedule() -> dict:
 def ticker_data(context: AssetExecutionContext) -> None:
     """On-demand per-ticker fetch (manual materialization path).
 
-    The staleness gate decides which endpoints need a call; the
-    frontend-triggered path runs the same logic through the
-    ``refresh_tickers`` job instead.
+    The staleness gate decides which endpoints need a call; ticker lookups
+    run the same logic through the ``refresh_tickers`` job instead.
     """
     ticker = context.partition_key
     engine = context.resources.engine
@@ -692,7 +692,8 @@ def refresh_tickers_op(context: OpExecutionContext, config: RefreshTickersConfig
 
 @job(name="refresh_tickers")
 def refresh_tickers_job() -> None:
-    """On-demand job launched by the frontend via POST /api/pipeline/refresh."""
+    """On-demand job launched by ticker lookups (GET /api/rating/{ticker}) and
+    by the admin route POST /api/pipeline/refresh."""
     refresh_tickers_op()
 
 
@@ -704,7 +705,7 @@ class RefreshQuotesConfig(Config):
 
 @op(required_resource_keys={"engine"})
 def refresh_quotes_op(context: OpExecutionContext, config: RefreshQuotesConfig) -> dict:
-    """Quote-only refresh for explicit user action (portfolio Refresh button).
+    """Quote-only refresh, launched through the admin route.
 
     One staleness-gated Finnhub call per ticker (1-minute TTL) — no derived
     rebuilds, no scoring, so it stays cheap enough to run on demand for a
@@ -723,7 +724,7 @@ def refresh_quotes_op(context: OpExecutionContext, config: RefreshQuotesConfig) 
 
 @job(name="refresh_quotes")
 def refresh_quotes_job() -> None:
-    """Quote-only pull launched by the frontend via POST /api/quotes/refresh."""
+    """Quote-only pull launched through the admin route POST /api/quotes/refresh."""
     refresh_quotes_op()
 
 

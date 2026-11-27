@@ -95,7 +95,7 @@ def last_launch_error(ticker: str) -> str | None:
 def submit_quotes_run(tickers: list[str]) -> str:
     """Launch the quote-only refresh_quotes job. Returns the run id.
 
-    Explicit user action (portfolio Refresh button), so no cooldown — the
+    Admin route only (POST /api/quotes/refresh), so no cooldown — the
     1-minute quote TTL gate makes repeat runs cheap no-ops. Raises
     RuntimeError when Dagster is unreachable or rejects the launch.
     """
