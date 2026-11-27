@@ -32,6 +32,8 @@ class Provider(StrEnum):
     SEC_EDGAR = "sec_edgar"
     # government release feeds (Fed, BLS, SEC press releases, FTC): RSS
     AGENCIES = "agencies"
+    # fja05680/sp500 on GitHub: S&P 500 membership history, a keyless CSV
+    SP500_HISTORY = "sp500_history"
     # publisher web pages, not an API: ingest.articles fetches them
     PUBLISHERS = "publishers"
     DERIVED = "derived"
@@ -88,6 +90,20 @@ class EndpointSpec:
 
 _REGISTRY: list[EndpointSpec] = [
     # --- persistent: monthly ---
+    # first, so a failed Alpha Vantage call later in the job can't skip it
+    EndpointSpec(
+        name="sp500_membership",
+        provider=Provider.SP500_HISTORY,
+        method="membership",
+        trigger=Trigger.SCHEDULED,
+        cadence=Cadence.MONTHLY,
+        watermark=("index_name", "ticker", "start_date"),
+        artifacts=("raw_sp500_membership",),
+        ttl=timedelta(days=31),
+        notes="every S&P 500 membership spell since 1996 (one row per spell; a blank "
+        "end_date is a current member). The index changes a few times a quarter; "
+        "the models' training and backtests read it point in time",
+    ),
     EndpointSpec(
         name="commodities.gold",
         provider=Provider.ALPHA_VANTAGE,

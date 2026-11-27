@@ -397,6 +397,25 @@ def normalize_stock_symbols(
     return _single("raw_stock_symbols", rows)
 
 
+def normalize_sp500_membership(
+    payload: list[dict[str, str]], symbol: str, now: datetime
+) -> dict[str, list[dict[str, Any]]]:
+    """fja05680/sp500 membership: one row per spell, keyed (index_name,
+    ticker, start_date). The ticker is upper-cased; renames stay as listed
+    (staging resolves them)."""
+    rows = [
+        {
+            "index_name": "SP500",
+            "ticker": entry["ticker"].upper(),
+            "start_date": _as_date(entry["start_date"]),
+            "payload": entry,
+        }
+        for entry in payload
+        if entry.get("ticker") and entry.get("start_date")
+    ]
+    return _single("raw_sp500_membership", rows)
+
+
 def normalize_gainers_losers(
     payload: dict[str, Any], symbol: str, now: datetime
 ) -> dict[str, list[dict[str, Any]]]:
@@ -557,6 +576,7 @@ NORMALIZERS: dict[str, Normalizer] = {
     "macro.natural_gas": _macro_name("natural_gas"),
     "macro.real_gdp_per_capita": _macro_name("real_gdp_per_capita"),
     "stock_symbols": normalize_stock_symbols,
+    "sp500_membership": normalize_sp500_membership,
     "top_gainers_losers": normalize_gainers_losers,
     "ipo_calendar": normalize_ipo_calendar,
     "earnings_calendar": normalize_earnings_calendar,

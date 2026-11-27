@@ -48,7 +48,10 @@ from dagster import (
     Definitions,
     DynamicPartitionsDefinition,
     Failure,
+    In,
+    Nothing,
     OpExecutionContext,
+    Out,
     asset,
     in_process_executor,
     job,
@@ -81,6 +84,7 @@ from .mart.news_digest import (
 )
 from .mart.scoring import score_ticker
 from .staging.article_text import rebuild_article_text
+from .staging.sp500_membership import rebuild_sp500_membership
 from .staging.staging import (
     balance_sheet_sources,
     rebuild_financials_reported,
@@ -124,49 +128,63 @@ def llm_resource() -> Ollama:
     return Ollama.from_env()
 
 
+def _derive_op(cadence: Cadence, label: str, rebuild: Any):
+    """One post-ingest rebuild step; `after` orders it behind the step before."""
+
+    @op(
+        name=f"{cadence.value}_{label}_op",
+        required_resource_keys={"engine"},
+        pool=WAREHOUSE_POOL,
+        ins={"after": In(Nothing)},
+        out=Out(Nothing),
+    )
+    def derive_cadence(context) -> None:
+        rows = rebuild(context.resources.engine.warehouse)
+        context.log.info(f"[derived:{label}] rebuilt {rows} rows")
+
+    return derive_cadence
+
+
 def _make_cadence_job(cadence: Cadence, post_derived: tuple[tuple[str, Any], ...] = ()):
     """Build a scheduled ingestion job for one cadence group.
 
     `post_derived` is a sequence of (label, rebuild_fn) market-wide derivations
-    that run AFTER the raw lands — used by the daily job to rebuild FRED
-    staging + mart from the freshly fetched index series. Unlike the per-ticker
-    derived assets, these have no API calls and no ticker partition.
+    that run AFTER the raw lands, in order — used by the daily job to rebuild
+    FRED staging then mart from the freshly fetched index series. Unlike the
+    per-ticker derived assets, these have no API calls and no ticker
+    partition. Each step waits on the one before (a Nothing dependency):
+    unlinked ops run in step-name order, which put the rebuilds first.
     """
     names = [spec.name for spec in scheduled_endpoints() if spec.cadence == cadence]
     if not names:
         return None
 
-    @op(name=f"ingest_{cadence.value}_op", required_resource_keys={"engine"}, pool=WAREHOUSE_POOL)
+    @op(
+        name=f"ingest_{cadence.value}_op",
+        required_resource_keys={"engine"},
+        pool=WAREHOUSE_POOL,
+        out=Out(Nothing),
+    )
     def ingest_cadence(context) -> None:
         engine = context.resources.engine
         for name in names:
             result = engine.ingest_scheduled(name, now=_now())
             context.log.info(f"[scheduled:{name}] {result.reason} ({result.rows_written} rows)")
 
-    derived_ops: list[Any] = []
-    for i, (label, rebuild) in enumerate(post_derived):
-
-        @op(
-            name=f"{cadence.value}_{label}_op",
-            required_resource_keys={"engine"},
-            pool=WAREHOUSE_POOL,
-        )
-        def derive_cadence(context, _rebuild: Any = rebuild, _label: str = label) -> None:
-            rows = _rebuild(context.resources.engine.warehouse)
-            context.log.info(f"[derived:{_label}] rebuilt {rows} rows")
-
-        derived_ops.append(derive_cadence)
+    derived_ops = [_derive_op(cadence, label, rebuild) for label, rebuild in post_derived]
 
     @job(name=f"{cadence.value}_ingest")
     def cadence_job():
-        ingest_cadence()
+        done = ingest_cadence()
         for derived_op in derived_ops:
-            derived_op()
+            done = derived_op(after=done)
 
     return cadence_job
 
 
-monthly_job = _make_cadence_job(Cadence.MONTHLY)
+monthly_job = _make_cadence_job(
+    Cadence.MONTHLY, post_derived=(("sp500_membership", rebuild_sp500_membership),)
+)
 weekdays_job = _make_cadence_job(Cadence.WEEKDAYS)
 overnight_job = _make_cadence_job(Cadence.OVERNIGHT)
 daily_job = _make_cadence_job(
@@ -754,11 +772,27 @@ def _restage_filings(context: OpExecutionContext, tag: str) -> None:
         )
 
 
+def _restage_membership(context: OpExecutionContext, tag: str) -> None:
+    """Re-stage the S&P 500 membership list before a dataset build, so the
+    build reads the current rename table even between monthly fetches."""
+    warehouse = Warehouse()
+    warehouse.init_schema()
+    spells = rebuild_sp500_membership(warehouse)
+    if spells:
+        context.log.info(f"[{tag}] staged {spells} S&P 500 membership spells")
+    else:
+        context.log.warning(
+            f"[{tag}] no S&P 500 membership landed yet (monthly_ingest fetches it): "
+            "training and backtests fall back to every ticker, survivors included"
+        )
+
+
 def _rebuild_dataset(context: OpExecutionContext) -> dict:
     """Rebuild train_dataset_quarterly.parquet (+ scoring cohort) from the mart."""
     from .quarterly import rebuild_quarterly_dataset
 
     _restage_filings(context, "dataset")
+    _restage_membership(context, "dataset")
     info = rebuild_quarterly_dataset()
     context.log.info(
         f"[dataset] {info['rows']} rows, {info['tickers']} tickers; training snapshots "
@@ -859,6 +893,7 @@ def _rebuild_weekly_dataset(context: OpExecutionContext) -> dict:
     from .weekly import rebuild_weekly_dataset
 
     _restage_filings(context, "weekly dataset")
+    _restage_membership(context, "weekly dataset")
     info = rebuild_weekly_dataset()
     context.log.info(
         f"[weekly dataset] {info['rows']} rows, {info['tickers']} tickers; weeks "

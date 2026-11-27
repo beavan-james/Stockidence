@@ -6,6 +6,10 @@ For each (ticker, period label), assembles:
   - Rolling analytics from m_advanced_analytics (same snapshot semantics)
   - PIT fundamentals from raw_financials_reported (latest available quarterly report)
   - Static sector label from raw_company_profile
+  - S&P 500 membership (stg_sp500_membership): `in_index` says the company
+    was in the index on the snapshot day, `sp500_status` where it stands on
+    today's list. Training and backtests keep in_index rows only, so a stock
+    counts only while it was in the index, not because it is in it today
   - Target: next-period return (anchor close-to-close); weekly instead labels
     next-week and next-13-week returns entered at the next week's open
 
@@ -35,6 +39,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from stockidence.staging.sp500_membership import RENAMES
 from stockidence.storage import Warehouse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -557,7 +562,109 @@ def _load_company_profile(wh: Warehouse, tickers: list[str] | None = None) -> pd
     return pd.DataFrame(records)
 
 
+def _load_sp500_membership(wh: Warehouse) -> pd.DataFrame:
+    """S&P 500 membership spells, tagged with each company's ticker today.
+    Empty when the list hasn't landed yet (or the table predates it)."""
+    cols = ["listed_ticker", "start_date", "end_date", "ticker"]
+    with wh.connect(read_only=True) as con:
+        exists = con.execute(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema = 'staging' AND table_name = 'stg_sp500_membership'"
+        ).fetchone()[0]
+        if not exists:
+            return pd.DataFrame(columns=cols)
+        m = con.execute(f"SELECT {', '.join(cols)} FROM staging.stg_sp500_membership").df()
+    m["start_date"] = pd.to_datetime(m["start_date"])
+    m["end_date"] = pd.to_datetime(m["end_date"])
+    return m
+
+
 # ── PIT join logic ──────────────────────────────────────────────────────────────
+
+
+def _ticker_key(ticker: str) -> str:
+    """One spelling per share class: the warehouse has BF-B, the list BF.B."""
+    return str(ticker).upper().replace("-", ".")
+
+
+def _standing_tickers(
+    tickers: list[str], membership: pd.DataFrame, renames=RENAMES
+) -> pd.DataFrame:
+    """Which company each warehouse ticker stands for, and whether it is the
+    one ticker that does.
+
+    A ticker stands for the company its latest spell on the list belongs to
+    (MMC's spells are Marsh McLennan's, now MRSH), or the company a rename
+    took it to when the list never had it (SQ -> XYZ), else itself. When the
+    warehouse holds two tickers for one company (MMC and MRSH carry the same
+    price history), the company's ticker today wins; failing that, the one
+    listed most recently. The others are duplicates and never count.
+    """
+    listed = membership.assign(key=membership["listed_ticker"].map(_ticker_key))
+    latest = listed.sort_values("start_date").groupby("key").last()
+    company = latest["ticker"].map(_ticker_key).to_dict()
+    renamed = {_ticker_key(old): _ticker_key(new) for old, _, new in renames}
+
+    out = pd.DataFrame({"ticker": list(tickers)})
+    out["key"] = out["ticker"].map(_ticker_key)
+    out["company"] = [company.get(k, renamed.get(k, k)) for k in out["key"]]
+    out["listed_since"] = out["key"].map(latest["start_date"])
+    out["is_company"] = out["key"] == out["company"]
+    pick = out.sort_values(
+        ["is_company", "listed_since", "ticker"], ascending=[False, False, True], na_position="last"
+    )
+    chosen = set(pick.drop_duplicates("company")["ticker"])
+    out["standing"] = out["ticker"].isin(chosen)
+    return out[["ticker", "company", "standing"]]
+
+
+def _index_membership(
+    rows: pd.DataFrame, membership: pd.DataFrame, renames=RENAMES
+) -> pd.DataFrame:
+    """Point-in-time S&P 500 membership for (ticker, snapshot day) rows.
+
+    `in_index`: the ticker stands for its company and the company was in the
+    index on `asof`, its snapshot day (a spell runs from start_date up to,
+    not including, end_date). `sp500_status`, per ticker, from today's list:
+    "current", "former", "never" (not on the list since 1996) or "duplicate"
+    (another warehouse ticker stands for the company). With no list landed,
+    every row counts ("unknown"), as before the filter existed.
+    """
+    if membership.empty:
+        return pd.DataFrame({"in_index": True, "sp500_status": "unknown"}, index=rows.index)
+
+    standing = _standing_tickers(rows["ticker"].unique().tolist(), membership, renames)
+    spells = membership.assign(company=membership["ticker"].map(_ticker_key))
+    by_company = spells.groupby("company")["end_date"]
+    status = standing["company"].map(
+        lambda c: (
+            "never"
+            if c not in by_company.groups
+            else "current"
+            if by_company.get_group(c).isna().any()
+            else "former"
+        )
+    )
+    status = status.where(standing["standing"], "duplicate")
+    standing = standing.assign(sp500_status=status.values)
+
+    keyed = rows[["ticker", "asof"]].reset_index(names="row").merge(standing, on="ticker")
+    hits = keyed[keyed["standing"]].merge(
+        spells[["company", "start_date", "end_date"]], on="company"
+    )
+    covered = (hits["start_date"] <= hits["asof"]) & (
+        hits["end_date"].isna() | (hits["asof"] < hits["end_date"])
+    )
+    in_rows = set(hits.loc[covered, "row"])
+
+    keyed = keyed.set_index("row").reindex(rows.index)
+    return pd.DataFrame(
+        {
+            "in_index": rows.index.isin(list(in_rows)),
+            "sp500_status": keyed["sp500_status"].values,
+        },
+        index=rows.index,
+    )
 
 
 def _pit_join_fundamentals(
@@ -1034,6 +1141,22 @@ def build_dataset(
     # Rolling return-distribution statistics + beta (PIT, per ticker)
     print("Computing rolling stats & beta...")
     dataset = _add_rolling_stats(dataset, market, freq)
+
+    # S&P 500 membership on each snapshot day (point in time)
+    print("Flagging S&P 500 membership (point in time)...")
+    membership = _load_sp500_membership(wh)
+    snap = dataset[["ticker", "date"]].merge(asof, on=["ticker", "date"], how="left")
+    snap["asof"] = pd.to_datetime(snap["asof_date"]).fillna(snap["date"])
+    flags = _index_membership(snap.set_index(dataset.index), membership)
+    dataset[["in_index", "sp500_status"]] = flags[["in_index", "sp500_status"]]
+    if membership.empty:
+        print("  WARNING: no S&P 500 membership staged; every row counts (survivors included)")
+    else:
+        statuses = dataset.drop_duplicates("ticker")["sp500_status"].value_counts().to_dict()
+        print(
+            f"  {int(dataset['in_index'].sum())} of {len(dataset)} rows in the index; "
+            f"tickers by status {statuses}"
+        )
 
     # Target
     print("Adding target variable...")

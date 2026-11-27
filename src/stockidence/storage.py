@@ -91,6 +91,14 @@ RAW_SCHEMA: dict[str, list[tuple[str, str]]] = {
     # SEC's ticker -> CIK list (files/company_tickers.json), one row per
     # ticker; a snapshot, so a landing bumps one watermark
     "raw_sec_company_tickers": [("ticker", "VARCHAR")],
+    # index membership spells, keyed like the source list: a ticker re-added
+    # after a removal gets a second row. index_name leads so one fetch bumps
+    # one watermark ("SP500"), not one per ticker.
+    "raw_sp500_membership": [
+        ("index_name", "VARCHAR"),
+        ("ticker", "VARCHAR"),
+        ("start_date", "DATE"),
+    ],
 }
 
 
@@ -201,6 +209,16 @@ STAGING_SCHEMA: dict[str, list[tuple[str, str]]] = {
         ("series", "VARCHAR"),
         ("date", "DATE"),
         ("value", "DOUBLE"),
+    ],
+    # S&P 500 membership spells: one per spell the source list holds, split
+    # where a ticker changed companies. `ticker` is the company's ticker
+    # today; end_date is the first day out (NULL for a current member). The
+    # PK is the source grain, (listed_ticker, start_date).
+    "stg_sp500_membership": [
+        ("listed_ticker", "VARCHAR"),
+        ("start_date", "DATE"),
+        ("end_date", "DATE"),
+        ("ticker", "VARCHAR"),
     ],
     # one row per Finnhub filing, its empty balance sheet filled from SEC
     # (bs_source says which). The PK is (ticker, accession_number).

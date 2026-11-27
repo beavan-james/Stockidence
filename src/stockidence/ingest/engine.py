@@ -27,6 +27,7 @@ from .clients.alpha_vantage import AlphaVantageClient
 from .clients.finnhub import FinnhubClient
 from .clients.fred import FredClient
 from .clients.sec_edgar import SecEdgarClient
+from .clients.sp500_history import Sp500HistoryClient
 from .clients.twelve_data import TwelveDataClient
 from .endpoints import EndpointSpec, Provider, get_endpoint
 from .raw_mapping import MERGERS, normalize_for
@@ -39,6 +40,7 @@ _PROVIDER_CLIENTS = {
     Provider.FRED: FredClient,
     Provider.SEC_EDGAR: SecEdgarClient,
     Provider.AGENCIES: AgencyFeedClient,
+    Provider.SP500_HISTORY: Sp500HistoryClient,
 }
 
 # Snapshot tables: a landing replaces the whole list, so it bumps one

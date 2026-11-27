@@ -5,6 +5,7 @@
 
 - **Commodities** — one table, key `(nominal, date)` — gold/silver spot prices (monthly)
 - **Market indexes** — `raw_fred_market`, key `(series, date)` — CBOE VIX (`VIXCLS`, full history) and S&P 500 price index (`SP500`, ~10y daily per S&P licensing), landed daily from FRED; typed in `stg_fred_market`, aggregated into `m_fred_market` (levels + close-to-close momentum over 5/21/63/126/252d). Serves the ML model datasets as point-in-time market-regime features (daily)
+- **S&P 500 membership** — `raw_sp500_membership`, key `(index_name, ticker, start_date)` — every spell a ticker spent in the S&P 500 since 1996 (fja05680/sp500 on GitHub, a keyless CSV), one row per spell, landed monthly. The list is keyed by ticker, so `stg_sp500_membership` tags each spell with the company's ticker today: MMC's years belong to MRSH, and IR's before 2020-03-03 to TT (Trane), since the ticker then passed to Ingersoll Rand. The model datasets read it point in time: training and backtests use a stock only for the snapshots it was in the index, and the live lists leave out former members (monthly)
 - **Macro indicators** — one table, key `(indicator, date)` — CPI, unemployment, fed funds, natural gas, inflation, real GDP (one row per indicator/date rather than a separate table per series) (monthly)
 - **Top Gainers/Losers** — own table, key `(ticker, date, bucket)`; `date` is the session the list describes (Alpha Vantage's `last_updated`), never the fetch date (overnight: 00:30 ET Tue–Sat, since the free tier publishes a session late that evening)
 - **IPO Calendar** — own table, key `(symbol, date)` (weekdays)
@@ -41,7 +42,7 @@
 ### API Calling
 `Push Advanced Analytics and Technical Indicators to be pipelined derivations rather than API calls.`
 
-Monthly: Commodities (AV), Macro indicators (AV), Stock Symbol (FH)
+Monthly: S&P 500 membership (GitHub), Commodities (AV), Macro indicators (AV), Stock Symbol (FH)
 Weekly: n/a
 Weekdays: IPO Calendar (FH), Earnings Calendar (FH), Top Gainers/Losers (AV)
 Daily: Market News (FH), Market Indexes (FRED)
@@ -61,6 +62,7 @@ flowchart TD
     FRED(["FRED"])
     SEC(["SEC EDGAR"])
     GOV(["Fed · BLS · SEC · FTC<br/>release feeds"])
+    SPX(["fja05680/sp500<br/>S&P 500 membership"])
     PUB(["Publisher pages"])
     LLM(["Local model<br/>Qwen3.5-4B on Ollama"])
 
@@ -88,6 +90,7 @@ flowchart TD
 
     UI["FastAPI + React SPA<br/>reads mart/raw · launches jobs (no sensors)"]
 
+    SPX -->|"monthly"| SCHED
     SCHED -->|"ingest_scheduled<br/>market-wide"| RAW
     QUART -->|"incremental refresh<br/>retrain + export"| RAW
     QUART -->|"ranking snapshot"| M_RANK

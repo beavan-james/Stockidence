@@ -818,6 +818,32 @@ deterministic scorer.
 > FRED hands the key over the query string (`api_key`) rather than a header;
 > the client redacts it from error messages.
 
+### S&P 500 Membership History (fja05680/sp500, GitHub)
+
+`GET https://raw.githubusercontent.com/fja05680/sp500/master/sp500_ticker_start_end.csv`.
+Free, no key, about 30 KB: the whole history in one call, fetched monthly.
+S&P's own constituent history is a paid product; this community-maintained
+list rebuilds it from the index's published changes.
+
+One row per spell a ticker spent in the index since 1996. Landed to
+`raw_sp500_membership` keyed `(index_name, ticker, start_date)` (`index_name`
+is `SP500`, so one fetch bumps one watermark). A rename ends one ticker's
+spell and starts the next, and a re-added stock gets a second row.
+`stg_sp500_membership` resolves renames to today's ticker (see
+`src/stockidence/staging/sp500_membership.py`).
+
+- `ticker` — As listed then; share classes use a dot (`BF.B`, the warehouse's `BF-B`).
+- `start_date` — First day in the index.
+- `end_date` — First day out; blank for a current member.
+
+```csv
+ticker,start_date,end_date
+MMC,1996-01-02,2026-01-14
+MRSH,2026-01-14,
+TSLA,2020-12-21,
+CAG,1996-01-02,2026-06-30
+```
+
 ### News & Sentiments (Alpha Vantage)
 
 ```json

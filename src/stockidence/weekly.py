@@ -69,6 +69,10 @@ FEATURES = [
 BENCHMARK = "VOO"
 # Sparse/unusable history (same list as the quarterly model) + the benchmark.
 EXCLUDED = frozenset({"AMBP", "BE", "BRK.B", "CRM", "FI", "NBIS", BENCHMARK})
+# sp500_status values a live list ranks: today's S&P 500 plus stocks never
+# in it that users looked up. Former members and a renamed company's old
+# ticker stay off ("unknown": no membership list landed yet).
+LIVE_STATUSES = frozenset({"current", "never", "unknown"})
 
 PARAMS = {
     "objective": "rank:ndcg",
@@ -194,8 +198,12 @@ def rebuild_weekly_dataset(now=None) -> dict:
 def training_frame(
     df: pd.DataFrame, target: str = TARGET, features: list[str] = FEATURES
 ) -> pd.DataFrame:
-    """Rows the ranker can learn from: known target, every feature present,
-    and a real cohort each week (MIN_COHORT tickers)."""
+    """Rows the ranker can learn from: in the S&P 500 that week (point in
+    time, so a stock counts only while it was in the index), known target,
+    every feature present, and a real cohort each week (MIN_COHORT tickers).
+    The walk-forward backtest tests on these rows too."""
+    if "in_index" in df.columns:
+        df = df[df["in_index"].astype(bool)]
     md = df[~df["ticker"].isin(EXCLUDED)].dropna(subset=features + [target])
     sizes = md.groupby("date")["ticker"].transform("nunique")
     return md[sizes >= MIN_COHORT].reset_index(drop=True)
@@ -299,7 +307,10 @@ def validation_summary(weeks: pd.DataFrame) -> dict:
 
 
 def _rankable(cohort: pd.DataFrame) -> pd.DataFrame:
-    """The stocks a list can hold: not excluded, every input present."""
+    """The stocks a list can hold: not excluded, not a former S&P 500
+    member or a duplicate ticker, every input present."""
+    if "sp500_status" in cohort.columns:
+        cohort = cohort[cohort["sp500_status"].isin(LIVE_STATUSES)]
     return cohort[~cohort["ticker"].isin(EXCLUDED)].dropna(subset=FEATURES)
 
 
